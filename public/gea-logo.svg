@@ -1,0 +1,126 @@
+<svg viewBox="0 0 340 220" xmlns="http://www.w3.org/2000/svg" fill="none">
+  <defs>
+    <!-- Shading for left face of pyramid -->
+    <linearGradient id="pyrLeftGrad" x1="40" y1="180" x2="100" y2="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#8A826F" />
+      <stop offset="60%" stop-color="#A8A18F" />
+      <stop offset="100%" stop-color="#C4BDB0" />
+    </linearGradient>
+
+    <!-- Shading for right face of pyramid -->
+    <linearGradient id="pyrRightGrad" x1="100" y1="90" x2="160" y2="190" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F5F2E8" />
+      <stop offset="50%" stop-color="#DFDAC9" />
+      <stop offset="100%" stop-color="#BDB6A4" />
+    </linearGradient>
+
+    <!-- Blue Orbit Gradient -->
+    <linearGradient id="blueOrbit" x1="20" y1="120" x2="110" y2="150" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#003D73" />
+      <stop offset="50%" stop-color="#005696" />
+      <stop offset="100%" stop-color="#0072BA" />
+    </linearGradient>
+
+    <!-- Green Orbit Gradient -->
+    <linearGradient id="greenOrbit" x1="70" y1="80" x2="135" y2="110" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#007532" />
+      <stop offset="50%" stop-color="#008A3B" />
+      <stop offset="100%" stop-color="#10B981" />
+    </linearGradient>
+
+    <!-- Red Orbit Gradient -->
+    <linearGradient id="redOrbit" x1="40" y1="190" x2="145" y2="155" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#C00438" />
+      <stop offset="50%" stop-color="#E20649" />
+      <stop offset="100%" stop-color="#F43F5E" />
+    </linearGradient>
+  </defs>
+
+  <!-- 1. BACK PORTION OF BLUE ORBIT -->
+  <path
+    d="M 28 140 C 22 130, 40 108, 78 102 C 86 100, 94 100, 102 102"
+    stroke="url(#blueOrbit)"
+    stroke-width="7"
+    stroke-linecap="round"
+    opacity="0.8"
+  />
+
+  <!-- 2. BACK PORTION OF GREEN ORBIT -->
+  <path
+    d="M 65 92 C 78 84, 98 84, 114 88"
+    stroke="url(#greenOrbit)"
+    stroke-width="7"
+    stroke-linecap="round"
+  />
+
+  <!-- 3. PYRAMID BASE & 3D FACES -->
+  <polygon
+    points="80,88 28,172 74,180"
+    fill="url(#pyrLeftGrad)"
+  />
+
+  <polygon
+    points="80,88 74,180 144,166"
+    fill="url(#pyrRightGrad)"
+  />
+
+  <line
+    x1="80"
+    y1="88"
+    x2="74"
+    y2="180"
+    stroke="#FAF7EF"
+    stroke-width="1.5"
+    opacity="0.8"
+  />
+
+  <!-- 4. FOREGROUND BLUE ORBIT -->
+  <path
+    d="M 22 144 C 18 136, 26 122, 45 116 C 68 108, 92 118, 108 130"
+    stroke="url(#blueOrbit)"
+    stroke-width="7"
+    stroke-linecap="round"
+  />
+
+  <!-- 5. FOREGROUND GREEN ORBIT -->
+  <path
+    d="M 72 90 C 92 84, 118 84, 130 94 C 138 102, 134 116, 116 124 C 98 132, 70 128, 62 126"
+    stroke="url(#greenOrbit)"
+    stroke-width="7"
+    stroke-linecap="round"
+  />
+
+  <!-- 6. FOREGROUND RED ORBIT -->
+  <path
+    d="M 45 178 C 55 186, 80 190, 110 178 C 132 168, 142 150, 136 138 C 132 130, 118 126, 106 130"
+    stroke="url(#redOrbit)"
+    stroke-width="7.5"
+    stroke-linecap="round"
+  />
+
+  <!-- 7. TYPOGRAPHY: GEA Perú -->
+  <g transform="translate(150, 74)">
+    <text
+      x="0"
+      y="70"
+      font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+      font-size="82"
+      font-weight="900"
+      letter-spacing="-2px"
+      fill="#004B87"
+    >
+      GEA
+    </text>
+    <text
+      x="6"
+      y="102"
+      font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+      font-size="30"
+      font-weight="700"
+      letter-spacing="2px"
+      fill="#004B87"
+    >
+      Perú
+    </text>
+  </g>
+</svg>

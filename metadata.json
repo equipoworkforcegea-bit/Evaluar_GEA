@@ -1,0 +1,6 @@
+{
+  "name": "TalentoPerú - Plataforma de Evaluación de Candidatos",
+  "description": "Sistema de evaluación de postulantes de alta concurrencia con panel de selección, examen cronometrado con sincronización resiliente y auditoría de integridad.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

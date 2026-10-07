@@ -1,0 +1,253 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Plus Jakarta Sans", sans-serif;
+
+  --color-gea-navy: #1F2A5E;
+  --color-gea-navy-hover: #182348;
+  --color-gea-blue: #2F5BA8;
+  --color-gea-blue-hover: #254A8A;
+  --color-gea-blue-soft: #5B8AE0;
+  --color-gea-green: #2FA58B;
+  --color-gea-orange: #F28C28;
+  --color-gea-coral: #E4572E;
+  --color-gea-bg: #E9EDF6;
+  --color-gea-card: #FFFFFF;
+  --color-gea-border: #DDE2EF;
+  --color-gea-text: #161C3A;
+  --color-gea-muted: #6B7494;
+  --color-gea-dark: #0F1530;
+  --color-gea-dark-card: #182044;
+  --color-gea-dark-border: #2A3563;
+}
+
+:root {
+  font-family: var(--font-sans);
+  color-scheme: light dark;
+
+  /* GEA Perú Color Tokens */
+  --color-primary: #1F2A5E;        /* Azul marino: botones primarios, títulos, ítems activos, sidebar */
+  --color-primary-hover: #182348;
+  --color-secondary: #2F5BA8;      /* Azul medio: acentos, links, nombres de perfiles/procesos, botón secundario */
+  --color-secondary-hover: #254A8A;
+  --color-success: #2FA58B;        /* Verde: estados positivos: finalizado, activo, promotores, deseado */
+  --color-warning: #F28C28;        /* Naranja: en progreso, neutros, en duda, nivel medio */
+  --color-danger: #E4572E;         /* Rojo/coral: descalificados, detractores, no deseado, pendiente */
+
+  /* Surfaces & Typography (Light Mode) */
+  --bg-page: #E9EDF6;              /* Fondo general de la página (gris azulado claro) */
+  --bg-card: #FFFFFF;              /* Tarjetas: blanco */
+  --border-card: #DDE2EF;          /* Borde de tarjetas */
+  --text-primary: #161C3A;         /* Texto principal */
+  --text-secondary: #6B7494;       /* Texto secundario */
+
+  /* Analytics Sidebar */
+  --sidebar-bg: #1F2A5E;
+  --sidebar-text: #FFFFFF;
+  --sidebar-text-muted: rgba(255, 255, 255, 0.72);
+  --sidebar-active-bg: rgba(255, 255, 255, 0.16);
+  --sidebar-hover-bg: rgba(255, 255, 255, 0.08);
+
+  /* Gradients */
+  --gradient-super-admin: linear-gradient(90deg, #F28C28 0%, #E4572E 100%);
+  --gradient-header-line: linear-gradient(90deg, #1F2A5E 0%, #2F5BA8 25%, #2FA58B 50%, #F28C28 75%, #E4572E 100%);
+}
+
+.dark {
+  /* Surfaces & Typography (Dark Mode) */
+  --bg-page: #0F1530;              /* Fondo modo oscuro */
+  --bg-card: #182044;              /* Tarjetas modo oscuro */
+  --border-card: #2A3563;          /* Bordes modo oscuro */
+  --text-primary: #F0F4FF;         /* Texto principal oscuro */
+  --text-secondary: #9AA5C4;       /* Texto secundario oscuro */
+
+  /* Analytics Sidebar (Dark Mode) */
+  --sidebar-bg: #151D3F;
+  --sidebar-text: #FFFFFF;
+  --sidebar-text-muted: rgba(255, 255, 255, 0.7);
+  --sidebar-active-bg: rgba(255, 255, 255, 0.15);
+  --sidebar-hover-bg: rgba(255, 255, 255, 0.08);
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: var(--bg-page);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Card utility */
+.gea-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-card);
+}
+
+/* Gradient line under navbar */
+.gea-gradient-line {
+  background: var(--gradient-header-line);
+  height: 3px;
+  width: 100%;
+}
+
+/* Super Admin Badge */
+.gea-badge-superadmin {
+  background: var(--gradient-super-admin);
+  color: #FFFFFF;
+}
+
+/* Glassmorphism & Modern Enterprise Surfaces */
+.glass-surface {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.dark .glass-surface {
+  background: rgba(24, 32, 68, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-surface-subtle {
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.dark .glass-surface-subtle {
+  background: rgba(20, 27, 56, 0.55);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Premium Gradient Backgrounds */
+.bg-mesh-gradient {
+  background-color: #1F2A5E;
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(47, 91, 168, 0.8) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(228, 87, 46, 0.35) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(47, 165, 139, 0.6) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, rgba(15, 21, 48, 0.9) 0px, transparent 50%);
+}
+
+@keyframes float-gentle {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-12px) rotate(1.2deg);
+  }
+}
+
+@keyframes float-reverse {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(10px) rotate(-1deg);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.28;
+    transform: scale(1);
+    filter: drop-shadow(0 0 25px rgba(47, 91, 168, 0.3));
+  }
+  50% {
+    opacity: 0.48;
+    transform: scale(1.04);
+    filter: drop-shadow(0 0 45px rgba(47, 91, 168, 0.6));
+  }
+}
+
+.animate-float-gentle {
+  animation: float-gentle 7s ease-in-out infinite;
+}
+
+.animate-float-reverse {
+  animation: float-reverse 9s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 6s ease-in-out infinite;
+}
+
+/* Accessible focus ring across all interactive elements */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--color-secondary);
+  outline-offset: 2px;
+}
+
+/* Custom smooth scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #2A3563;
+}
+
+/* Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Mobile & Touch Optimizations */
+html {
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+body {
+  overflow-x: hidden;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 640px) {
+  input[type="text"],
+  input[type="password"],
+  input[type="email"],
+  input[type="number"],
+  input[type="tel"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+.touch-target-mobile {
+  min-height: 48px;
+  min-width: 48px;
+}
