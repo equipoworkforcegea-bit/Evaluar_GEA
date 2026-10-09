@@ -16,7 +16,8 @@ import { serverInstance, ClientSyncWorker } from '../../services/serverSync';
 import { 
   CandidateDataService, 
   generateDefaultReportForCandidate,
-  calculateScoresFromAnswers
+  calculateScoresFromAnswers,
+  getAnswersFromSupabase
 } from '../../services/candidateDataService';
 
 interface ExamContainerProps {
@@ -386,6 +387,29 @@ export const ExamContainer: React.FC<ExamContainerProps> = ({
       console.warn('[ExamContainer] Error leyendo respuestas locales:', e);
     }
 
+    // 1b. Si IndexedDB está vacío, intentar obtener respuestas desde el servidor en memoria (misma sesión)
+    if (Object.keys(localAnswers).length === 0 && attemptId) {
+      try {
+        const serverAnswers = serverInstance.getAnswersForAttempt(attemptId);
+        if (Object.keys(serverAnswers).length > 0) {
+          console.info('[ExamContainer] Usando respuestas del servidor en memoria:', Object.keys(serverAnswers).length);
+          localAnswers = serverAnswers;
+        }
+      } catch (e) {
+        console.warn('[ExamContainer] Error leyendo respuestas del servidor:', e);
+      }
+    }
+
+    // 1c. Si aún está vacío, intentar obtener respuestas desde Supabase como fallback final
+    if (Object.keys(localAnswers).length === 0) {
+      try {
+        console.info('[ExamContainer] IndexedDB y servidor vacíos, cargando respuestas desde Supabase...');
+        localAnswers = await getAnswersFromSupabase(candidate.id);
+      } catch (e) {
+        console.warn('[ExamContainer] Error leyendo respuestas desde Supabase:', e);
+      }
+    }
+
     // 2. Calcular puntuaciones reales basadas en pesos de opciones elegidas
     const finalScores = calculateScoresFromAnswers(localAnswers, {
       id: candidate.id,
@@ -398,11 +422,16 @@ export const ExamContainer: React.FC<ExamContainerProps> = ({
       finalScores
     );
 
+    // Calcular duración real del examen
+    const realDuration = candidate.startedAt
+      ? Math.round((Date.now() - new Date(candidate.startedAt).getTime()) / 1000)
+      : (candidate.totalDurationSeconds || 0);
+
     const updated: Candidate = {
       ...candidate,
       status: 'SCORED',
       completedAt: new Date().toISOString(),
-      totalDurationSeconds: candidate.totalDurationSeconds || 2380,
+      totalDurationSeconds: realDuration > 0 ? realDuration : (candidate.totalDurationSeconds || 0),
       scores: finalScores,
       detailedReport: finalReport
     };

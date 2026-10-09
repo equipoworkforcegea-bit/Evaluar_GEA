@@ -143,6 +143,25 @@ class AuthoritativeExamServer {
   public getAuditEventsForCandidate(candidateId: string): AuditEvent[] {
     return this.auditEvents.filter(e => e.candidateId === candidateId);
   }
+
+  /**
+   * Retorna todas las respuestas en memoria para un attemptId dado (todas las etapas combinadas).
+   * Retorna un mapa questionId → { selectedOptionId, stageId }
+   */
+  public getAnswersForAttempt(attemptId: string): Record<string, { selectedOptionId: string; stageId: string }> {
+    const result: Record<string, { selectedOptionId: string; stageId: string }> = {};
+    for (const [key, stage] of this.stages) {
+      if (stage.attemptId === attemptId) {
+        for (const [questionId, ans] of stage.answers) {
+          result[questionId] = {
+            selectedOptionId: ans.optionId,
+            stageId: stage.stageId
+          };
+        }
+      }
+    }
+    return result;
+  }
 }
 
 export const serverInstance = new AuthoritativeExamServer();

@@ -103,6 +103,47 @@ export function calculateScoresFromAnswers(
 }
 
 /**
+ * Obtiene las respuestas del candidato directamente desde Supabase (fallback cuando IndexedDB está vacío).
+ * Mapea pregunta_id → selectedOptionId para poder calcular puntajes.
+ */
+export async function getAnswersFromSupabase(candidateId: string): Promise<Record<string, any>> {
+  try {
+    // Buscar el intento más reciente del candidato
+    const { data: intento } = await supabase
+      .from('intentos_examen')
+      .select('id')
+      .eq('candidato_id', candidateId)
+      .order('creado_en', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!intento?.id) return {};
+
+    // Obtener todas sus respuestas confirmadas
+    const { data: rows } = await supabase
+      .from('respuestas_candidato')
+      .select('pregunta_id, opcion_seleccionada_id, etapa_id')
+      .eq('intento_id', intento.id);
+
+    if (!rows || rows.length === 0) return {};
+
+    const map: Record<string, any> = {};
+    for (const r of rows) {
+      if (r.pregunta_id) {
+        map[r.pregunta_id] = {
+          questionId: r.pregunta_id,
+          selectedOptionId: r.opcion_seleccionada_id,
+          stageId: r.etapa_id
+        };
+      }
+    }
+    return map;
+  } catch {
+    return {};
+  }
+}
+
+/**
  * Generador de informe psicológico y competencias detalladas a partir de puntajes reales
  */
 export function generateDefaultReportForCandidate(
@@ -242,7 +283,14 @@ function mapSupabaseToCandidate(row: any): Candidate {
     } catch {}
   }
 
-  const isCompletedOrEvaluated = (status === 'SCORED' || status === 'FINALIST' || Boolean(row.completado_en)) && status !== 'INVITED' && status !== 'IN_PROGRESS';
+  // Considera completado/evaluado si: el estado lo indica, hay fecha de completado, o hay notas reales en la DB
+  const hasRealScoreInDb = notasRow && notasRow.puntaje != null && Number(notasRow.puntaje) > 0;
+  const isCompletedOrEvaluated = (
+    status === 'SCORED' ||
+    status === 'FINALIST' ||
+    Boolean(row.completado_en) ||
+    hasRealScoreInDb
+  ) && status !== 'IN_PROGRESS';
   if (isCompletedOrEvaluated) {
     if (notasRow && Array.isArray(notasRow.notas) && notasRow.notas.length >= 3) {
       scores = {
@@ -302,7 +350,7 @@ function mapSupabaseToCandidate(row: any): Candidate {
     currentStage,
     startedAt: row.iniciado_en || row.started_at,
     completedAt: row.completado_en || row.completed_at,
-    totalDurationSeconds: row.duracion_total_segundos || row.total_duration_seconds || (isCompletedOrEvaluated ? 2380 : 0),
+    totalDurationSeconds: row.duracion_total_segundos || row.total_duration_seconds || 0,
     scores,
     detailedReport,
     auditEventCount: row.audit_event_count || 0,
