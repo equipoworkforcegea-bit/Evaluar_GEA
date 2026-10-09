@@ -261,6 +261,51 @@ export const ProcessDataService = {
   /**
    * Guarda un nuevo proceso en la base de datos Supabase (`procesos_evaluacion`)
    */
+  /**
+   * Actualiza el estado (estado / activo) de un proceso en Supabase
+   */
+  async updateProcessStatus(
+    processId: string,
+    newStatus: 'LANZADO' | 'EN_PROCESO' | 'CERRADO' | 'BORRADOR'
+  ): Promise<void> {
+    try {
+      const isActive = newStatus === 'LANZADO' || newStatus === 'EN_PROCESO';
+      const { error } = await supabase
+        .from('procesos_evaluacion')
+        .update({
+          estado: newStatus,
+          activo: isActive,
+          actualizado_en: new Date().toISOString()
+        })
+        .eq('id', processId);
+      if (error) {
+        console.error('[ProcessDataService] Error actualizando estado del proceso:', error.message);
+      }
+    } catch (err) {
+      console.error('[ProcessDataService] Excepción al actualizar estado del proceso:', err);
+    }
+  },
+
+  /**
+   * Elimina permanentemente un proceso de Supabase
+   */
+  async deleteProcess(processId: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('procesos_evaluacion')
+        .delete()
+        .eq('id', processId);
+      if (error) {
+        console.error('[ProcessDataService] Error eliminando proceso:', error.message);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.error('[ProcessDataService] Excepción al eliminar proceso:', err);
+      return false;
+    }
+  },
+
   async createProcess(process: EvaluationTest, profileId?: string): Promise<EvaluationTest | null> {
     try {
       const uuid = ensureUuid(process.id);

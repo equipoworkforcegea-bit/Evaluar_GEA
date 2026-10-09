@@ -3,6 +3,7 @@ import { Candidate, AuditEvent } from '../../types';
 import { CandidateDataService } from '../../services/candidateDataService';
 import { STAGES_CONFIG, VALIDATION_DISCLAIMER } from '../../data/questionBank';
 import { PrintableCandidateReport } from './PrintableCandidateReport';
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import { 
   X, 
   Send, 
@@ -39,6 +40,8 @@ export const CandidateDetailModal: React.FC<CandidateDetailModalProps> = ({
   onPromoteToFinalist,
   onResendInvitation
 }) => {
+  useBodyScrollLock();
+
   const [activeTab, setActiveTab] = useState<'SCORES' | 'INTERVIEW' | 'AUDIT' | 'NOTES'>('SCORES');
   const [recruiterNoteText, setRecruiterNoteText] = useState(candidate.recruiterNotes || '');
   const [copiedLink, setCopiedLink] = useState(false);

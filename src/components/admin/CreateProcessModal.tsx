@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 
 import { InvitationService } from '../../services/invitationService';
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 
 interface CreateProcessModalProps {
   tests: EvaluationTest[];
@@ -56,6 +57,8 @@ export const CreateProcessModal: React.FC<CreateProcessModalProps> = ({
   onClose,
   onLaunchProcess
 }) => {
+  useBodyScrollLock();
+
   // Step 1: Profile Selection
   const defaultProfileId = preselectedProfileId || tests[0]?.id || '';
   const [selectedProfileId, setSelectedProfileId] = useState<string>(defaultProfileId);

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Candidate } from '../../types';
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import { 
   Printer, 
   X, 
@@ -24,6 +25,8 @@ export const PrintableCandidateReport: React.FC<PrintableCandidateReportProps> =
   candidate,
   onClose
 }) => {
+  useBodyScrollLock();
+
   const report = candidate.detailedReport;
   const printDate = new Date().toLocaleDateString('es-PE', {
     day: 'numeric',

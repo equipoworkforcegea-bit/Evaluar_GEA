@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { EvaluationTest, Candidate } from '../../types';
 import { CandidateDataService } from '../../services/candidateDataService';
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import { 
   X, 
   Activity, 
@@ -89,6 +90,8 @@ export const ProcessCandidateActivityModal: React.FC<ProcessCandidateActivityMod
   onViewCandidateDetail,
   onSwitchToCandidateExam
 }) => {
+  useBodyScrollLock();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'IN_PROGRESS' | 'SCORED' | 'INVITED' | 'WITH_ALERTS'>('ALL');
   const [liveCandidates, setLiveCandidates] = useState<Candidate[]>(candidates);
@@ -151,10 +154,16 @@ export const ProcessCandidateActivityModal: React.FC<ProcessCandidateActivityMod
   const completedCount = processCandidates.filter(c => getCandidateStatusFlags(c).isScored).length;
   const invitedCount = processCandidates.filter(c => getCandidateStatusFlags(c).isInvited).length;
   
-  const scoredList = processCandidates.filter(c => c.scores?.overall);
-  const avgScore = scoredList.length > 0
-    ? Math.round(scoredList.reduce((acc, c) => acc + (c.scores?.overall || 0), 0) / scoredList.length)
-    : 85;
+  // Postulantes evaluados / completados con porcentaje de ajuste
+  const scoredList = processCandidates.filter(c => {
+    const flags = getCandidateStatusFlags(c);
+    if (!flags.isScored) return false;
+    const val = c.detailedReport?.jobFitPercentage ?? c.scores?.overall;
+    return typeof val === 'number' && !isNaN(val) && val > 0;
+  });
+  const avgScore = (completedCount > 0 && scoredList.length > 0)
+    ? Math.round(scoredList.reduce((acc, c) => acc + (c.detailedReport?.jobFitPercentage ?? c.scores?.overall ?? 0), 0) / scoredList.length)
+    : null;
 
   const totalAlerts = processCandidates.reduce((acc, c) => acc + (c.criticalFlags || 0) + (c.auditEventCount || 0), 0);
 
@@ -289,9 +298,11 @@ export const ProcessCandidateActivityModal: React.FC<ProcessCandidateActivityMod
               <TrendingUp className="w-4 h-4 text-[#1F2A5E]" />
             </div>
             <div className="text-xl font-black text-[#1F2A5E] dark:text-blue-300">
-              {avgScore}%
+              {avgScore !== null ? `${avgScore}%` : '—'}
             </div>
-            <span className="text-[10px] text-blue-700/80 dark:text-blue-400/80">Idoneidad global</span>
+            <span className="text-[10px] text-blue-700/80 dark:text-blue-400/80">
+              {scoredList.length > 0 ? `${scoredList.length} evaluado${scoredList.length > 1 ? 's' : ''}` : 'Sin evaluaciones'}
+            </span>
           </div>
 
           {/* Card 5: Alertas de Foco */}
@@ -508,7 +519,10 @@ export const ProcessCandidateActivityModal: React.FC<ProcessCandidateActivityMod
                       <div className="text-center p-2 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-700/60 min-w-[70px]">
                         <span className="text-[10px] text-zinc-400 uppercase font-bold block">Ajuste</span>
                         <span className="font-extrabold text-sm text-emerald-600 dark:text-emerald-400">
-                          {(isScored && cand.detailedReport?.jobFitPercentage != null) ? `${cand.detailedReport.jobFitPercentage}%` : '—'}
+                          {(() => {
+                            const fitVal = cand.detailedReport?.jobFitPercentage ?? cand.scores?.overall;
+                            return (isScored && fitVal != null) ? `${fitVal}%` : '—';
+                          })()}
                         </span>
                       </div>
 

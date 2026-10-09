@@ -195,6 +195,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     showToast(`✓ Nueva convocatoria "${testToUse.title}" guardada en la base de datos.`);
   };
 
+  const handleUpdateProcessStatus = async (
+    testId: string,
+    newStatus: 'LANZADO' | 'EN_PROCESO' | 'CERRADO' | 'BORRADOR'
+  ) => {
+    setProcesses(prev => prev.map(t =>
+      t.id === testId
+        ? { ...t, processStatus: newStatus, isActive: newStatus === 'LANZADO' || newStatus === 'EN_PROCESO' }
+        : t
+    ));
+    try {
+      await ProcessDataService.updateProcessStatus(testId, newStatus);
+      showToast(`✓ Estado del proceso actualizado a "${newStatus}".`);
+    } catch {
+      showToast(`⚠️ No se pudo actualizar el estado en la base de datos.`);
+    }
+  };
+
+  const handleDeleteProcess = async (testId: string) => {
+    const proc = processes.find(t => t.id === testId);
+    const ok = await ProcessDataService.deleteProcess(testId);
+    if (ok) {
+      setProcesses(prev => prev.filter(t => t.id !== testId));
+      showToast(`✓ Proceso "${proc?.title}" eliminado correctamente.`);
+    } else {
+      showToast(`⚠️ No se pudo eliminar el proceso.`);
+    }
+  };
+
   const handleCreateProfile = async (newProfile: EvaluationTest) => {
     try {
       const saved = await ProcessDataService.createProfile(newProfile);
@@ -311,6 +339,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             setActiveTab('ANALITICA');
           }}
           onCreateTest={handleCreateTest}
+          onUpdateProcessStatus={handleUpdateProcessStatus}
+          onDeleteProcess={handleDeleteProcess}
           onViewCandidateDetail={(cand) => setSelectedCandidate(cand)}
           onSwitchToCandidateExam={onSwitchToCandidateView}
           onViewAssignedCandidates={() => setActiveTab('POSTULANTES')}

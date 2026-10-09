@@ -20,16 +20,8 @@ import {
   ChevronDown,
   SlidersHorizontal,
   Sliders,
-  Building2,
-  Tag,
-  Contact,
-  MessageSquare,
-  BookOpen,
-  Settings,
-  Network,
   RefreshCw,
   IdCard,
-  BarChart2,
   PieChart as PieIcon
 } from 'lucide-react';
 
@@ -48,9 +40,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   onSelectCandidate,
   onViewProcess
 }) => {
-  // Sidebar active item
-  const [activeSidebarItem, setActiveSidebarItem] = useState('Analítica');
-
   // Filter states for the top bar (exact pills from image 1)
   const [dateRangeFilter, setDateRangeFilter] = useState<'Todos' | '7D' | '30D' | 'MES' | 'ANIO'>('Todos');
   const [sourceFilter, setSourceFilter] = useState<string>('Todos');
@@ -214,73 +203,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const closedPct = Math.round((closedProcessesCount / totalProcesses) * 100);
   const draftPct = Math.round((draftProcessesCount / totalProcesses) * 100);
 
-  // Sidebar items without "Créditos" (user specifically requested omitting it)
-  const sidebarItems = [
-    { id: 'empresa', label: 'Mi Empresa', icon: Building2 },
-    { id: 'analitica', label: 'Analítica', icon: BarChart2, hasSubmenu: true },
-    { id: 'informes', label: 'Informes', icon: FileText },
-    { id: 'etiquetas', label: 'Etiquetas', icon: Tag },
-    { id: 'usuarios', label: 'Usuarios', icon: Users },
-    { id: 'contratados', label: 'Contratados', icon: Contact },
-    { id: 'comunicacion', label: 'Comunicación', icon: MessageSquare },
-    { id: 'conocimiento', label: 'Conocimiento', icon: BookOpen },
-    { id: 'filtros', label: 'Filtros personalizados', icon: SlidersHorizontal },
-    { id: 'no_deseados', label: 'No deseados', icon: UserX },
-    { id: 'ajustes', label: 'Ajustes tablero', icon: Settings },
-    { id: 'asignacion', label: 'Asignación de empresas', icon: Network },
-  ];
-
   return (
-    <div className="flex flex-col lg:flex-row gap-6 font-sans text-[#161C3A] dark:text-[#F0F4FF] animate-in fade-in">
-
-      {/* ========================================================================= */}
-      {/* 1. LEFT SIDEBAR: EXACT EVALUAR DESIGN (WITHOUT "CRÉDITOS")                 */}
-      {/* ========================================================================= */}
-      <aside className="w-full lg:w-60 xl:w-64 shrink-0 space-y-4">
-        <div className="bg-[var(--sidebar-bg)] text-[var(--sidebar-text)] rounded-2xl p-4 shadow-2xs border border-[var(--sidebar-bg)]">
-
-          {/* Header pill: GEA INTERNACIONAL PERÚ */}
-          <div className="p-3 mb-3 text-center border-b border-white/15">
-            <span className="text-xs font-black tracking-wider text-white uppercase block">
-              GEA INTERNACIONAL PERÚ
-            </span>
-          </div>
-
-          {/* Navigation Menu */}
-          <nav className="space-y-0.5 text-xs font-medium">
-            {sidebarItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeSidebarItem === item.label;
-
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setActiveSidebarItem(item.label)}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer ${isActive
-                      ? 'bg-white/16 font-bold text-white shadow-2xs'
-                      : 'text-white/75 hover:text-white hover:bg-white/10'
-                    }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-white/70'}`} />
-                    <span>{item.label}</span>
-                  </div>
-                  {item.hasSubmenu && (
-                    <ChevronDown className="w-3.5 h-3.5 text-white/70" />
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-
-        </div>
-      </aside>
-
-      {/* ========================================================================= */}
-      {/* 2. RIGHT MAIN CONTENT: ANALÍTICA - PROCESOS DASHBOARD                     */}
-      {/* ========================================================================= */}
-      <main className="flex-1 space-y-5 min-w-0">
+    <div className="font-sans text-[#161C3A] dark:text-[#F0F4FF] animate-in fade-in">
+      <main className="w-full space-y-5 min-w-0">
 
         {/* Title & Filter Pills */}
         <div className="space-y-3">
@@ -955,7 +880,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                   <tr key={idx} className="hover:bg-[#E9EDF6]/40 dark:hover:bg-white/5 transition-colors">
                     <td
                       className="py-3.5 px-2 font-semibold text-[#2F5BA8] hover:underline cursor-pointer"
-                      onClick={() => onViewProcess?.(tests[idx])}
+                      onClick={() => onViewProcess?.(p.test)}
                     >
                       {p.name}
                     </td>
@@ -968,7 +893,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                     <td className="py-3.5 px-2 text-right">
                       <button
                         type="button"
-                        onClick={() => onViewProcess?.(tests[idx])}
+                        onClick={() => onViewProcess?.(p.test)}
                         className="p-1 rounded-lg text-[#2F5BA8] hover:bg-[#2F5BA8]/10 cursor-pointer transition-colors"
                         title="Ver detalle del proceso"
                       >

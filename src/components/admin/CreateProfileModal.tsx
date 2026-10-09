@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { EvaluationTest, TestStageConfig } from '../../types';
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import { 
   X, 
   User, 
@@ -121,6 +122,8 @@ export const CreateProfileModal: React.FC<CreateProfileModalProps> = ({
   onClose,
   onCreateProfile
 }) => {
+  useBodyScrollLock();
+
   // Basic Profile Info
   const [profileName, setProfileName] = useState('');
   const [targetPosition, setTargetPosition] = useState('');

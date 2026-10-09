@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { Candidate, EvaluationTest } from '../../types';
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import { 
   X, 
   UserPlus, 
@@ -72,6 +73,8 @@ export const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
   onClose,
   onAddCandidates
 }) => {
+  useBodyScrollLock();
+
   // Pestañas: 'RAPIDO' (Pegar texto masivo) | 'EXCEL' (Subir .xlsx/.csv) | 'MANUAL' (Formulario individual)
   const [activeTab, setActiveTab] = useState<'RAPIDO' | 'EXCEL' | 'MANUAL'>('RAPIDO');
   const [selectedTestId, setSelectedTestId] = useState<string>(activeTestId || tests[0]?.id || 'test-gea-001');
