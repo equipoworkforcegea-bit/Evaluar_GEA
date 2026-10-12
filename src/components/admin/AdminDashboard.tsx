@@ -112,6 +112,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [profiles, setProfiles] = useState<EvaluationTest[]>([]);
   const [activeTestId, setActiveTestId] = useState<string>('');
   const [selectedProcessForControl, setSelectedProcessForControl] = useState<EvaluationTest | null>(null);
+  const [controlInitialTab, setControlInitialTab] = useState<'CANDIDATOS' | 'COMPARADOR' | 'PRESELECCIONADOS' | 'TABLERO' | 'NO_DESEADOS' | 'DASHBOARD' | 'NOTIFICACIONES'>('CANDIDATOS');
 
   // Cargar procesos y perfiles reales desde Supabase al iniciar
   useEffect(() => {
@@ -161,6 +162,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleOpenProcessDetail = (test: EvaluationTest) => {
     setSelectedProcessForControl(test);
     setActiveTestId(test.id);
+    setControlInitialTab('CANDIDATOS');
     onSelectProcess?.(test.id);
   };
 
@@ -380,13 +382,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <CandidateFullReportView
             candidate={selectedCandidate}
             process={selectedProcessForControl || processes.find(p => p.id === selectedCandidate.testId) || processes[0]}
+            allProcesses={processes}
             onBack={() => setSelectedCandidate(null)}
             onHireCandidate={handlePromoteCandidate}
+            onNavigateToTab={(tab) => {
+              setSelectedCandidate(null);
+              setControlInitialTab(tab);
+            }}
+            onMoveToNoDeseados={(candidateId) => {
+              const cand = candidates.find(c => c.id === candidateId);
+              if (cand) {
+                const updated: Candidate = { ...cand, status: 'DISQUALIFIED' };
+                onUpdateCandidate(updated);
+              }
+            }}
+            onInviteToProcess={(candidateId, targetProcessId) => {
+              const targetProc = processes.find(p => p.id === targetProcessId);
+              const cand = candidates.find(c => c.id === candidateId);
+              showToast(`✓ Invitación despachada a ${cand?.fullName || 'candidato'} para el proceso "${targetProc?.title || targetProcessId}"`);
+            }}
           />
         ) : selectedProcessForControl ? (
           <ProcessDetailControlView
             process={selectedProcessForControl}
             candidates={candidates}
+            initialTab={controlInitialTab}
             onBack={handleBackFromProcessDetail}
             onViewCandidateDetail={(cand) => setSelectedCandidate(cand)}
             onOpenInviteModal={() => {

@@ -33,6 +33,15 @@ import {
   UserPlus
 } from 'lucide-react';
 
+export type ControlTab = 
+  | 'CANDIDATOS' 
+  | 'COMPARADOR' 
+  | 'PRESELECCIONADOS' 
+  | 'TABLERO' 
+  | 'NO_DESEADOS' 
+  | 'DASHBOARD' 
+  | 'NOTIFICACIONES';
+
 interface ProcessDetailControlViewProps {
   process: EvaluationTest;
   candidates: Candidate[];
@@ -41,16 +50,8 @@ interface ProcessDetailControlViewProps {
   onOpenInviteModal: () => void;
   onSwitchToCandidateExam?: (candidateId: string) => void;
   onUpdateCandidate?: (candidate: Candidate) => void;
+  initialTab?: ControlTab;
 }
-
-type ControlTab = 
-  | 'CANDIDATOS' 
-  | 'COMPARADOR' 
-  | 'PRESELECCIONADOS' 
-  | 'TABLERO' 
-  | 'NO_DESEADOS' 
-  | 'DASHBOARD' 
-  | 'NOTIFICACIONES';
 
 type StatusPillFilter = 'FINALIZADOS' | 'EN_PROGRESO' | 'DESCALIFICADOS' | 'SIN_INICIAR' | 'TODOS';
 
@@ -230,9 +231,16 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
   onViewCandidateDetail,
   onOpenInviteModal,
   onSwitchToCandidateExam,
-  onUpdateCandidate
+  onUpdateCandidate,
+  initialTab
 }) => {
-  const [activeTab, setActiveTab] = useState<ControlTab>('CANDIDATOS');
+  const [activeTab, setActiveTab] = useState<ControlTab>(initialTab || 'CANDIDATOS');
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
   const [statusFilter, setStatusFilter] = useState<StatusPillFilter>('FINALIZADOS');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'ranking' | 'nombre' | 'fecha'>('ranking');
@@ -333,7 +341,7 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
     return processCandidates.filter(c => {
       if (noDeseadosCandidateIds.has(c.id)) return true;
       const s = String(c.status || '').toUpperCase();
-      return s === 'REJECTED' || s === 'RECHAZADO' || s === 'DESCALIFICADO';
+      return s === 'REJECTED' || s === 'RECHAZADO' || s === 'DESCALIFICADO' || s === 'DISQUALIFIED' || s === 'NO_DESEADOS';
     });
   }, [processCandidates, noDeseadosCandidateIds]);
 

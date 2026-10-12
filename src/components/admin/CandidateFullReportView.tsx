@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Candidate, EvaluationTest } from '../../types';
+import { PrintableCandidateReport } from './PrintableCandidateReport';
 import { 
   ArrowLeft, 
   Plus, 
@@ -17,28 +18,62 @@ import {
   UserCheck,
   Check,
   Smile,
-  Target
+  Target,
+  FileDown,
+  ArrowLeftRight,
+  Shield,
+  ShieldCheck,
+  UserX,
+  LayoutKanban,
+  Building,
+  RotateCw
 } from 'lucide-react';
 
 interface CandidateFullReportViewProps {
   candidate: Candidate;
   process?: EvaluationTest;
+  allProcesses?: EvaluationTest[];
   onBack: () => void;
   onHireCandidate?: (candidateId: string) => void;
+  onNavigateToTab?: (tab: 'COMPARADOR' | 'TABLERO' | 'NO_DESEADOS') => void;
+  onMoveToNoDeseados?: (candidateId: string) => void;
+  onInviteToProcess?: (candidateId: string, targetProcessId: string) => void;
 }
 
 export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = ({
   candidate,
   process,
+  allProcesses = [],
   onBack,
-  onHireCandidate
+  onHireCandidate,
+  onNavigateToTab,
+  onMoveToNoDeseados,
+  onInviteToProcess
 }) => {
   const [activeMainTab, setActiveMainTab] = useState<'DISC' | 'COMPETENCIAS'>('DISC');
   const [activeDiscSubTab, setActiveDiscSubTab] = useState<'ARQUETIPO' | 'PERFIL_DISC'>('ARQUETIPO');
+  const [candidateMenuOpen, setCandidateMenuOpen] = useState<boolean>(false);
   const [showProfileComparisonDrawer, setShowProfileComparisonDrawer] = useState<boolean>(false);
   const [showCommentsDrawer, setShowCommentsDrawer] = useState<boolean>(false);
+  const [showPrintModal, setShowPrintModal] = useState<boolean>(false);
+  const [showInviteOtherProcessModal, setShowInviteOtherProcessModal] = useState<boolean>(false);
+  const [showTrustModal, setShowTrustModal] = useState<boolean>(false);
+  const [showSaferModal, setShowSaferModal] = useState<boolean>(false);
+  const [showNoDeseadosModal, setShowNoDeseadosModal] = useState<boolean>(false);
+  const [noDeseadosReason, setNoDeseadosReason] = useState<string>('Perfil no ajustado al arquetipo requerido');
+  const [inviteViaEmail, setInviteViaEmail] = useState<boolean>(true);
+  const [inviteViaWhatsApp, setInviteViaWhatsApp] = useState<boolean>(true);
+  const [selectedTargetProcessId, setSelectedTargetProcessId] = useState<string>('');
   const [openAccordions, setOpenAccordions] = useState<Set<number>>(new Set([0, 1])); // Primero y segundo abiertos por defecto
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const availableProcesses = (allProcesses && allProcesses.length > 0) ? allProcesses : [
+    { id: 'proc-gea-01', title: 'POSTPAGO CHILE PRUEBA 2026 09 28' } as EvaluationTest,
+    { id: 'proc-gea-02', title: 'ASESOR DE VENTAS BANCO RIPLEY' } as EvaluationTest,
+    { id: 'proc-gea-03', title: 'ATENCIÓN AL CLIENTE CLARO PERÚ' } as EvaluationTest,
+    { id: 'proc-gea-04', title: 'CALL CENTER RETENCIONES ENTEL' } as EvaluationTest,
+    { id: 'proc-gea-05', title: 'TELEOPERADOR COBRANZAS TEMPRANAS INTERBANK' } as EvaluationTest
+  ];
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -61,7 +96,15 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
 
   const scoreVal = candidate.scores?.overall || 87;
 
-  // Preguntas del acordeón de descripción (las 9 preguntas exactas de la captura de Evaluar)
+  // Lista de procesos disponibles para invitar a otro proceso
+  const availableProcesses = allProcesses.length > 0 ? allProcesses : [
+    { id: 'proc-01', title: 'ASESOR POSTPAGO CLARO CHILE', code: 'CLARO-POST-01', targetPosition: 'Asesor de Ventas Postpago' },
+    { id: 'proc-02', title: 'SUPERVISOR DE OPERACIONES CALL CENTER', code: 'SUP-OPS-02', targetPosition: 'Supervisor de Atención y Retención' },
+    { id: 'proc-03', title: 'ASESOR DE RETENCIÓN Y FIDELIZACIÓN', code: 'RET-03', targetPosition: 'Asesor de Retención Telefónica' },
+    { id: 'proc-04', title: 'ANALISTA DE CALIDAD Y MONITOREO', code: 'QA-04', targetPosition: 'Analista QA Operativo' }
+  ];
+
+  // Preguntas del acordeón de descripción (las 10 preguntas exactas de la captura de Evaluar)
   const ACCORDION_QUESTIONS = [
     {
       q: '¿Cuáles son sus características principales?',
@@ -168,6 +211,436 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
         </div>
       )}
 
+      {/* Printable Report Modal si se pulsa "Descargar informe" */}
+      {showPrintModal && (
+        <PrintableCandidateReport
+          candidate={candidate}
+          onClose={() => setShowPrintModal(false)}
+        />
+      )}
+
+      {/* Modal 3: Invitar a otro proceso */}
+      {showInviteOtherProcessModal && (
+        <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-[#182044] rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] shadow-2xl max-w-lg w-full p-6 space-y-5 animate-in zoom-in-95">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#6355DE]/10 text-[#6355DE] flex items-center justify-center">
+                  <Send className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-[#161C3A] dark:text-white">
+                    Invitar a otro proceso
+                  </h3>
+                  <p className="text-xs text-[#6B7494] dark:text-[#9AA5C4]">
+                    Transfiere o postula al candidato en una convocatoria activa adicional
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowInviteOtherProcessModal(false)}
+                className="p-1.5 rounded-lg text-[#6B7494] hover:text-[#161C3A] hover:bg-slate-100 dark:hover:bg-white/5 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Candidate Card Summary */}
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#151D3F] border border-slate-200/80 dark:border-[#2A3563] flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-[#1F2A5E] text-white font-black text-sm flex items-center justify-center">
+                {initials || 'JA'}
+              </div>
+              <div className="min-w-0 flex-1">
+                <h4 className="text-sm font-bold text-[#161C3A] dark:text-white truncate">
+                  {candidate.fullName}
+                </h4>
+                <p className="text-xs text-[#6B7494] truncate">
+                  {candidate.email} • {candidate.phone || '+51 984 561 230'}
+                </p>
+              </div>
+            </div>
+
+            {/* Process Selector */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-[#161C3A] dark:text-white">
+                Proceso de destino:
+              </label>
+              <select
+                value={selectedTargetProcessId || (availableProcesses[0]?.id || '')}
+                onChange={(e) => setSelectedTargetProcessId(e.target.value)}
+                className="w-full px-3 py-2.5 text-xs rounded-xl border border-[#DDE2EF] dark:border-[#2A3563] bg-white dark:bg-[#151D3F] text-[#161C3A] dark:text-white font-medium outline-none focus:border-[#6355DE]"
+              >
+                {availableProcesses.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Delivery Channels */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-[#161C3A] dark:text-white">
+                Canales de notificación:
+              </label>
+              <div className="space-y-1.5 text-xs text-[#6B7494] dark:text-[#9AA5C4]">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={inviteViaEmail}
+                    onChange={(e) => setInviteViaEmail(e.target.checked)}
+                    className="rounded border-[#DDE2EF] text-[#6355DE] focus:ring-0"
+                  />
+                  <span>Enviar invitación con enlace único al correo ({candidate.email})</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={inviteViaWhatsApp}
+                    onChange={(e) => setInviteViaWhatsApp(e.target.checked)}
+                    className="rounded border-[#DDE2EF] text-[#6355DE] focus:ring-0"
+                  />
+                  <span>Enviar recordatorio y enlace por WhatsApp ({candidate.phone || '+51 984 561 230'})</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="pt-2 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowInviteOtherProcessModal(false)}
+                className="px-4 py-2.5 rounded-xl border border-[#DDE2EF] dark:border-[#2A3563] text-xs font-bold text-[#6B7494] hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const targetProcId = selectedTargetProcessId || availableProcesses[0]?.id || 'proc-gea-01';
+                  const procObj = availableProcesses.find(p => p.id === targetProcId);
+                  if (onInviteToProcess) {
+                    onInviteToProcess(candidate.id, targetProcId);
+                  }
+                  showToast(`✓ Invitación despachada a ${candidate.fullName} para "${procObj?.title || 'nuevo proceso'}"`);
+                  setShowInviteOtherProcessModal(false);
+                }}
+                className="px-5 py-2.5 rounded-xl bg-[#6355DE] hover:bg-[#5244CD] text-white text-xs font-bold shadow-xs cursor-pointer transition-colors"
+              >
+                Enviar invitación
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 4: Invitar a prueba Trust */}
+      {showTrustModal && (
+        <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-[#182044] rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] shadow-2xl max-w-lg w-full p-6 space-y-5 animate-in zoom-in-95">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#6355DE] text-white flex items-center justify-center shadow-xs">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 11l-1.5-1.5a2 2 0 0 0-2.8 0L12 11" />
+                    <path d="M10 9l-2-2a2 2 0 0 0-2.8 0L2 10.2a2 2 0 0 0 0 2.8l4 4a2 2 0 0 0 2.8 0l3.2-3.2" />
+                    <path d="M14 13l2.8 2.8a2 2 0 0 0 2.8 0l2.4-2.4a2 2 0 0 0 0-2.8l-4-4" />
+                    <path d="M7 15l2 2" />
+                    <path d="M15 9l2 2" />
+                  </svg>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-extrabold text-[#161C3A] dark:text-white">
+                      Invitar a prueba Trust
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full bg-[#6355DE]/10 text-[#6355DE] text-[10px] font-black flex items-center gap-1">
+                      <Sparkles className="w-3 h-3" /> Especial
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#6B7494] dark:text-[#9AA5C4]">
+                    Evaluación de Confianza, Lealtad y Veracidad Conductual
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowTrustModal(false)}
+                className="p-1.5 rounded-lg text-[#6B7494] hover:text-[#161C3A] hover:bg-slate-100 dark:hover:bg-white/5 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Description */}
+            <p className="text-xs text-[#6B7494] dark:text-[#9AA5C4] leading-relaxed">
+              El módulo <strong>Trust</strong> aplica 40 reactivos situacionales calibrados para detectar propensión a deshonestidad, fraude interno o inconsistencia en campañas de atención y cobranza.
+            </p>
+
+            {/* Target candidate card */}
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#151D3F] border border-slate-200/80 dark:border-[#2A3563] space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-[#161C3A] dark:text-white">{candidate.fullName}</span>
+                <span className="text-[11px] font-bold text-[#6355DE]">Ranking 1°</span>
+              </div>
+              <p className="text-xs text-[#6B7494]">{candidate.email} • {candidate.phone || '+51 984 561 230'}</p>
+            </div>
+
+            {/* Test details grid */}
+            <div className="grid grid-cols-3 gap-2.5 text-center text-xs">
+              <div className="p-2.5 rounded-xl bg-[#F8FAFC] dark:bg-[#151D3F] border border-slate-100 dark:border-[#2A3563]">
+                <span className="text-[10px] text-[#6B7494] block">Duración</span>
+                <strong className="text-[#161C3A] dark:text-white">20 min</strong>
+              </div>
+              <div className="p-2.5 rounded-xl bg-[#F8FAFC] dark:bg-[#151D3F] border border-slate-100 dark:border-[#2A3563]">
+                <span className="text-[10px] text-[#6B7494] block">Reactivos</span>
+                <strong className="text-[#161C3A] dark:text-white">40 casos</strong>
+              </div>
+              <div className="p-2.5 rounded-xl bg-[#F8FAFC] dark:bg-[#151D3F] border border-slate-100 dark:border-[#2A3563]">
+                <span className="text-[10px] text-[#6B7494] block">Validez</span>
+                <strong className="text-[#6355DE]">48 horas</strong>
+              </div>
+            </div>
+
+            {/* Delivery Channels */}
+            <div className="space-y-1.5 text-xs text-[#6B7494] dark:text-[#9AA5C4]">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={inviteViaEmail}
+                  onChange={(e) => setInviteViaEmail(e.target.checked)}
+                  className="rounded border-[#DDE2EF] text-[#6355DE] focus:ring-0"
+                />
+                <span>Notificar por Correo Electrónico ({candidate.email})</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={inviteViaWhatsApp}
+                  onChange={(e) => setInviteViaWhatsApp(e.target.checked)}
+                  className="rounded border-[#DDE2EF] text-[#6355DE] focus:ring-0"
+                />
+                <span>Notificar por WhatsApp ({candidate.phone || '+51 984 561 230'})</span>
+              </label>
+            </div>
+
+            {/* Footer */}
+            <div className="pt-2 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowTrustModal(false)}
+                className="px-4 py-2.5 rounded-xl border border-[#DDE2EF] dark:border-[#2A3563] text-xs font-bold text-[#6B7494] hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  showToast(`✓ Invitación a prueba Trust despachada exitosamente a ${candidate.email}`);
+                  setShowTrustModal(false);
+                }}
+                className="px-5 py-2.5 rounded-xl bg-[#6355DE] hover:bg-[#5244CD] text-white text-xs font-bold shadow-xs cursor-pointer flex items-center gap-2 transition-colors"
+              >
+                <span>Despachar prueba Trust</span>
+                <Sparkles className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 5: Invitar a prueba Safer */}
+      {showSaferModal && (
+        <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-[#182044] rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] shadow-2xl max-w-lg w-full p-6 space-y-5 animate-in zoom-in-95">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#6355DE] text-white flex items-center justify-center shadow-xs">
+                  <Shield className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-extrabold text-[#161C3A] dark:text-white">
+                      Invitar a prueba Safer
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full bg-[#6355DE]/10 text-[#6355DE] text-[10px] font-black flex items-center gap-1">
+                      <Sparkles className="w-3 h-3" /> Especial
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#6B7494] dark:text-[#9AA5C4]">
+                    Evaluación de Integridad y Prevención de Riesgos Operativos
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSaferModal(false)}
+                className="p-1.5 rounded-lg text-[#6B7494] hover:text-[#161C3A] hover:bg-slate-100 dark:hover:bg-white/5 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Description */}
+            <p className="text-xs text-[#6B7494] dark:text-[#9AA5C4] leading-relaxed">
+              El módulo <strong>Safer</strong> evalúa el compromiso con la seguridad de la información corporativa, el manejo de datos de clientes y el cumplimiento estricto de políticas contra incidentes.
+            </p>
+
+            {/* Target candidate card */}
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#151D3F] border border-slate-200/80 dark:border-[#2A3563] space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-[#161C3A] dark:text-white">{candidate.fullName}</span>
+                <span className="text-[11px] font-bold text-[#6355DE]">Ranking 1°</span>
+              </div>
+              <p className="text-xs text-[#6B7494]">{candidate.email} • {candidate.phone || '+51 984 561 230'}</p>
+            </div>
+
+            {/* Test details grid */}
+            <div className="grid grid-cols-3 gap-2.5 text-center text-xs">
+              <div className="p-2.5 rounded-xl bg-[#F8FAFC] dark:bg-[#151D3F] border border-slate-100 dark:border-[#2A3563]">
+                <span className="text-[10px] text-[#6B7494] block">Duración</span>
+                <strong className="text-[#161C3A] dark:text-white">18 min</strong>
+              </div>
+              <div className="p-2.5 rounded-xl bg-[#F8FAFC] dark:bg-[#151D3F] border border-slate-100 dark:border-[#2A3563]">
+                <span className="text-[10px] text-[#6B7494] block">Reactivos</span>
+                <strong className="text-[#161C3A] dark:text-white">35 casos</strong>
+              </div>
+              <div className="p-2.5 rounded-xl bg-[#F8FAFC] dark:bg-[#151D3F] border border-slate-100 dark:border-[#2A3563]">
+                <span className="text-[10px] text-[#6B7494] block">Validez</span>
+                <strong className="text-[#6355DE]">48 horas</strong>
+              </div>
+            </div>
+
+            {/* Delivery Channels */}
+            <div className="space-y-1.5 text-xs text-[#6B7494] dark:text-[#9AA5C4]">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={inviteViaEmail}
+                  onChange={(e) => setInviteViaEmail(e.target.checked)}
+                  className="rounded border-[#DDE2EF] text-[#6355DE] focus:ring-0"
+                />
+                <span>Notificar por Correo Electrónico ({candidate.email})</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={inviteViaWhatsApp}
+                  onChange={(e) => setInviteViaWhatsApp(e.target.checked)}
+                  className="rounded border-[#DDE2EF] text-[#6355DE] focus:ring-0"
+                />
+                <span>Notificar por WhatsApp ({candidate.phone || '+51 984 561 230'})</span>
+              </label>
+            </div>
+
+            {/* Footer */}
+            <div className="pt-2 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowSaferModal(false)}
+                className="px-4 py-2.5 rounded-xl border border-[#DDE2EF] dark:border-[#2A3563] text-xs font-bold text-[#6B7494] hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  showToast(`✓ Invitación a prueba Safer despachada exitosamente a ${candidate.email}`);
+                  setShowSaferModal(false);
+                }}
+                className="px-5 py-2.5 rounded-xl bg-[#6355DE] hover:bg-[#5244CD] text-white text-xs font-bold shadow-xs cursor-pointer flex items-center gap-2 transition-colors"
+              >
+                <span>Despachar prueba Safer</span>
+                <Sparkles className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 6: Enviar a no deseados */}
+      {showNoDeseadosModal && (
+        <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-[#182044] rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] shadow-2xl max-w-md w-full p-6 space-y-4 animate-in zoom-in-95">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/30 text-rose-600 flex items-center justify-center">
+                  <UserX className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-[#161C3A] dark:text-white">
+                    Enviar a "No deseados"
+                  </h3>
+                  <p className="text-xs text-[#6B7494] dark:text-[#9AA5C4]">
+                    Descalificar candidato del proceso
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowNoDeseadosModal(false)}
+                className="p-1.5 rounded-lg text-[#6B7494] hover:text-[#161C3A] hover:bg-slate-100 dark:hover:bg-white/5 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Description */}
+            <p className="text-xs text-[#6B7494] dark:text-[#9AA5C4] leading-relaxed">
+              ¿Estás seguro de mover a <strong>{candidate.fullName}</strong> a la bandeja de No Deseados? El candidato será descalificado de la convocatoria activa <strong>{process?.title || 'POSTPAGO CHILE PRUEBA'}</strong>.
+            </p>
+
+            {/* Motivo selector */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-[#161C3A] dark:text-white">
+                Motivo de descarte:
+              </label>
+              <select
+                value={noDeseadosReason}
+                onChange={(e) => setNoDeseadosReason(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-xl border border-[#DDE2EF] dark:border-[#2A3563] bg-white dark:bg-[#151D3F] text-[#161C3A] dark:text-white outline-none focus:border-rose-500"
+              >
+                <option value="Perfil no ajustado al arquetipo requerido">Perfil no ajustado al arquetipo requerido</option>
+                <option value="Puntaje psicométrico DISC insuficiente">Puntaje psicométrico DISC fuera de rango esperado</option>
+                <option value="Incompatibilidad de horarios o disponibilidad">Incompatibilidad de horarios / disponibilidad</option>
+                <option value="Inconsistencia en respuestas situacionales">Inconsistencia en respuestas situacionales</option>
+                <option value="Descarte administrativo general">Descarte administrativo general</option>
+              </select>
+            </div>
+
+            {/* Footer */}
+            <div className="pt-2 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowNoDeseadosModal(false)}
+                className="px-4 py-2.5 rounded-xl border border-[#DDE2EF] dark:border-[#2A3563] text-xs font-bold text-[#6B7494] hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onMoveToNoDeseados) {
+                    onMoveToNoDeseados(candidate.id);
+                  }
+                  if (onNavigateToTab) {
+                    onNavigateToTab('NO_DESEADOS');
+                  } else {
+                    onBack();
+                  }
+                  showToast(`Candidato ${candidate.fullName} movido a la bandeja No Deseados`);
+                  setShowNoDeseadosModal(false);
+                }}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors"
+              >
+                Confirmar y Descalificar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 1. TOP PROCESS HEADER (IDÉNTICO A LA CAPTURA) */}
       <div className="bg-white dark:bg-[#182044] rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] p-4 sm:p-5 shadow-2xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -207,6 +680,7 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={() => showToast('Opciones avanzadas del proceso')}
               className="p-2.5 rounded-xl border border-[#DDE2EF] dark:border-[#2A3563] text-[#6B7494] hover:text-[#161C3A] cursor-pointer"
             >
               <MoreVertical className="w-4 h-4" />
@@ -220,11 +694,11 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         
         {/* ========================================================================= */}
-        {/* COLUMNA IZQUIERDA: TARJETA DEL CANDIDATO (EXACTA A CAPTURAS 2 Y 3) */}
+        {/* COLUMNA IZQUIERDA: TARJETA DEL CANDIDATO (EXACTA A CAPTURAS DE EVALUAR) */}
         {/* ========================================================================= */}
-        <div className="lg:col-span-4 bg-white dark:bg-[#182044] rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] p-5 shadow-2xs space-y-5 sticky top-4">
+        <div className="lg:col-span-4 bg-white dark:bg-[#182044] rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] p-5 shadow-2xs space-y-5 sticky top-4 relative">
           
-          {/* Header del Candidato: Avatar, Nombre, Ranking y Acciones */}
+          {/* Header del Candidato: Avatar, Nombre, Ranking y Menú Contextual Exacto */}
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
               {/* Avatar con emoji superpuesto */}
@@ -248,20 +722,162 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
               </div>
             </div>
 
-            <div className="flex items-center gap-1">
+            {/* Menú de 3 puntos y WhatsApp (Exacto a las capturas del usuario) */}
+            <div className="flex flex-col items-end gap-2 relative">
+              <button
+                type="button"
+                onClick={() => setCandidateMenuOpen(!candidateMenuOpen)}
+                className="w-8 h-8 rounded-xl border border-[#DDE2EF] dark:border-[#2A3563] text-[#6B7494] hover:text-[#161C3A] hover:bg-slate-50 dark:hover:bg-white/5 flex items-center justify-center cursor-pointer shadow-2xs transition-colors"
+                title="Opciones del candidato"
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
+
               <a
                 href={candidate.phone ? `https://wa.me/${candidate.phone.replace(/\D/g, '')}` : '#'}
                 target="_blank"
                 rel="noreferrer"
-                className="p-1.5 rounded-full hover:bg-emerald-50 text-emerald-600 cursor-pointer"
-                title="WhatsApp"
+                className="p-1 rounded-full text-emerald-600 hover:text-emerald-700 cursor-pointer"
+                title="Contactar por WhatsApp"
               >
                 <MessageCircle className="w-4 h-4" />
               </a>
 
-              <button type="button" className="p-1.5 text-[#6B7494] hover:text-[#161C3A]">
-                <MoreVertical className="w-4 h-4" />
-              </button>
+              {/* ========================================================================= */}
+              {/* MENÚ DESPLEGABLE CON LAS 7 OPCIONES FUNCIONALES (CAPTURA 2 DEL USUARIO) */}
+              {/* ========================================================================= */}
+              {candidateMenuOpen && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setCandidateMenuOpen(false)} 
+                  />
+                  <div 
+                    className="absolute right-0 top-10 z-50 bg-white dark:bg-[#182044] border border-[#DDE2EF] dark:border-[#2A3563] rounded-2xl shadow-2xl p-2 min-w-[250px] space-y-1 text-xs animate-in zoom-in-95"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    
+                    {/* 1. Descargar informe */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCandidateMenuOpen(false);
+                        setShowPrintModal(true);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[#6B7494] hover:text-[#161C3A] dark:hover:text-white hover:bg-slate-50 dark:hover:bg-white/5 font-medium transition-colors text-left cursor-pointer"
+                    >
+                      <FileDown className="w-4 h-4 text-[#6B7494] shrink-0" />
+                      <span>Descargar informe</span>
+                    </button>
+
+                    {/* 2. Comparar candidato */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCandidateMenuOpen(false);
+                        if (onNavigateToTab) {
+                          onNavigateToTab('COMPARADOR');
+                        } else {
+                          onBack();
+                        }
+                        showToast(`✓ Redirigiendo al comparador con ${candidate.fullName}`);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[#6B7494] hover:text-[#161C3A] dark:hover:text-white hover:bg-slate-50 dark:hover:bg-white/5 font-medium transition-colors text-left cursor-pointer"
+                    >
+                      <ArrowLeftRight className="w-4 h-4 text-[#6B7494] shrink-0" />
+                      <span>Comparar candidato</span>
+                    </button>
+
+                    {/* 3. Invitar a otro proceso */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCandidateMenuOpen(false);
+                        setShowInviteOtherProcessModal(true);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[#6B7494] hover:text-[#161C3A] dark:hover:text-white hover:bg-slate-50 dark:hover:bg-white/5 font-medium transition-colors text-left cursor-pointer"
+                    >
+                      <Send className="w-4 h-4 text-[#6B7494] shrink-0" />
+                      <span>Invitar a otro proceso</span>
+                    </button>
+
+                    {/* 4. Invitar a prueba Trust (Píldora Púrpura Destacada con Estrella) */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCandidateMenuOpen(false);
+                        setShowTrustModal(true);
+                      }}
+                      className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#6355DE] hover:bg-[#5244CD] text-white font-semibold transition-colors text-left shadow-xs cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <svg className="w-4 h-4 text-white shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M18 11l-1.5-1.5a2 2 0 0 0-2.8 0L12 11" />
+                          <path d="M10 9l-2-2a2 2 0 0 0-2.8 0L2 10.2a2 2 0 0 0 0 2.8l4 4a2 2 0 0 0 2.8 0l3.2-3.2" />
+                          <path d="M14 13l2.8 2.8a2 2 0 0 0 2.8 0l2.4-2.4a2 2 0 0 0 0-2.8l-4-4" />
+                          <path d="M7 15l2 2" />
+                          <path d="M15 9l2 2" />
+                        </svg>
+                        <span>Invitar a prueba Trust</span>
+                      </div>
+                      <Sparkles className="w-3.5 h-3.5 text-white/90 shrink-0" />
+                    </button>
+
+                    {/* 5. Invitar a prueba Safer (Píldora Púrpura Destacada con Estrella) */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCandidateMenuOpen(false);
+                        setShowSaferModal(true);
+                      }}
+                      className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#6355DE] hover:bg-[#5244CD] text-white font-semibold transition-colors text-left shadow-xs cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Shield className="w-4 h-4 text-white shrink-0" />
+                        <span>Invitar a prueba Safer</span>
+                      </div>
+                      <Sparkles className="w-3.5 h-3.5 text-white/90 shrink-0" />
+                    </button>
+
+                    {/* 6. Enviar a "no deseados" */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCandidateMenuOpen(false);
+                        setShowNoDeseadosModal(true);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[#6B7494] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 font-medium transition-colors text-left cursor-pointer"
+                    >
+                      <UserX className="w-4 h-4 text-[#6B7494] hover:text-rose-600 shrink-0" />
+                      <span>Enviar a "no deseados"</span>
+                    </button>
+
+                    {/* 7. Enviar a Tablero */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCandidateMenuOpen(false);
+                        if (onNavigateToTab) {
+                          onNavigateToTab('TABLERO');
+                        } else {
+                          onBack();
+                        }
+                        showToast(`✓ Candidato ${candidate.fullName} transferido al Tablero Kanban`);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[#6B7494] hover:text-[#161C3A] dark:hover:text-white hover:bg-slate-50 dark:hover:bg-white/5 font-medium transition-colors text-left cursor-pointer"
+                    >
+                      <svg className="w-4 h-4 text-[#6B7494] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <rect width="18" height="18" x="3" y="3" rx="2" />
+                        <path d="M3 9h18" />
+                        <path d="M3 15h18" />
+                        <path d="M9 9v12" />
+                      </svg>
+                      <span>Enviar a Tablero</span>
+                    </button>
+
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -353,7 +969,7 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
         </div>
 
         {/* ========================================================================= */}
-        {/* COLUMNA DERECHA: INFORME PSICOMÉTRICO DISC (EXACTA A CAPTURAS 2, 3, 4, 5) */}
+        {/* COLUMNA DERECHA: INFORME PSICOMÉTRICO DISC (EXACTA A CAPTURAS DE EVALUAR) */}
         {/* ========================================================================= */}
         <div className="lg:col-span-8 bg-white dark:bg-[#182044] rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] p-6 shadow-2xs space-y-6">
           
@@ -450,32 +1066,32 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
               <div className="py-6 flex flex-col items-center justify-center">
                 <div className="relative w-80 h-80 sm:w-96 sm:h-96 flex items-center justify-center">
                   
-                  {/* Etiquetas de los Ejes Cardinales */}
+                  {/* Ejes Cardinales */}
                   <span className="absolute top-0 text-xs font-bold text-[#6B7494]">Extrovertido</span>
                   <span className="absolute bottom-0 text-xs font-bold text-[#6B7494]">Introvertido</span>
                   <span className="absolute left-0 text-xs font-bold text-[#6B7494]">Tareas</span>
                   <span className="absolute right-0 text-xs font-bold text-[#6B7494]">Personas</span>
 
-                  {/* Etiquetas de los Vértices */}
+                  {/* Vértices */}
                   <span className="absolute top-6 left-6 text-[11px] font-semibold text-[#9AA5C4] -rotate-45">Dominante</span>
                   <span className="absolute top-6 right-6 text-[11px] font-semibold text-[#9AA5C4] rotate-45">Influyente</span>
                   <span className="absolute bottom-6 right-6 text-[11px] font-semibold text-[#9AA5C4] -rotate-45">Servicial</span>
                   <span className="absolute bottom-6 left-6 text-[11px] font-semibold text-[#9AA5C4] rotate-45">Cumplido</span>
 
-                  {/* SVG de la Rueda Circular de 16 Segmentos DISC */}
+                  {/* SVG Rueda Circular DISC */}
                   <svg viewBox="0 0 300 300" className="w-64 h-64 sm:w-72 sm:h-72">
                     <defs>
-                      <filter id="shadowDisc" x="-10%" y="-10%" width="120%" height="120%">
+                      <filter id="shadowDisc2" x="-10%" y="-10%" width="120%" height="120%">
                         <feDropShadow dx="0" dy="1" stdDeviation="1.5" floodOpacity="0.1" />
                       </filter>
                     </defs>
 
-                    {/* Círculo base concéntrico */}
+                    {/* Círculos base */}
                     <circle cx="150" cy="150" r="130" fill="#FAFAFA" stroke="#E2E8F0" strokeWidth="1.5" />
                     <circle cx="150" cy="150" r="85" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1" />
                     <circle cx="150" cy="150" r="40" fill="#FAFAFA" stroke="#E2E8F0" strokeWidth="1" />
 
-                    {/* Líneas divisorias de los 16 sectores */}
+                    {/* 16 Líneas divisorias */}
                     {Array.from({ length: 16 }).map((_, i) => {
                       const angle = (i * 360) / 16;
                       const rad = (angle * Math.PI) / 180;
@@ -494,25 +1110,21 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                       );
                     })}
 
-                    {/* Sector IS resaltado en VERDE LIMA (Exacto a captura 3) */}
-                    {/* El sector IS está en el cuadrante inferior derecho (~22.5 grados de amplitud) */}
+                    {/* Sector IS resaltado en VERDE LIMA */}
                     <path
                       d="M 150 150 L 270 150 A 130 130 0 0 1 261 199 Z"
                       fill="#84CC16"
                       opacity="0.9"
                     />
 
-                    {/* Nombres de los sectores */}
+                    {/* Sectores etiquetas */}
                     <text x="145" y="45" fontSize="9" fontWeight="bold" fill="#DC2626">D</text>
                     <text x="175" y="55" fontSize="8" fontWeight="bold" fill="#EA580C">Di</text>
                     <text x="205" y="75" fontSize="8" fontWeight="bold" fill="#D97706">DI</text>
                     <text x="225" y="105" fontSize="8" fontWeight="bold" fill="#CA8A04">Id</text>
                     <text x="240" y="135" fontSize="9" fontWeight="bold" fill="#EAB308">I</text>
                     <text x="235" y="165" fontSize="8" fontWeight="bold" fill="#84CC16">Is</text>
-                    
-                    {/* Texto sector IS en blanco sobre el sector verde */}
                     <text x="230" y="185" fontSize="9" fontWeight="900" fill="#FFFFFF">IS</text>
-                    
                     <text x="205" y="225" fontSize="8" fontWeight="bold" fill="#16A34A">Si</text>
                     <text x="175" y="245" fontSize="9" fontWeight="bold" fill="#10B981">S</text>
                     <text x="140" y="250" fontSize="8" fontWeight="bold" fill="#0D9488">Sc</text>
@@ -523,9 +1135,9 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                     <text x="60" y="125" fontSize="8" fontWeight="bold" fill="#7C3AED">CD</text>
                     <text x="80" y="95" fontSize="8" fontWeight="bold" fill="#9333EA">Dc</text>
 
-                    {/* Pin del postulante "JA 3" en el sector IS */}
+                    {/* Pin del postulante "JA 3" */}
                     <g transform="translate(195, 160)">
-                      <circle cx="0" cy="0" r="14" fill="#1F2A5E" stroke="#FFFFFF" strokeWidth="2" filter="url(#shadowDisc)" />
+                      <circle cx="0" cy="0" r="14" fill="#1F2A5E" stroke="#FFFFFF" strokeWidth="2" filter="url(#shadowDisc2)" />
                       <text x="0" y="4" textAnchor="middle" fontSize="9" fontWeight="bold" fill="#FFFFFF">JA</text>
                       <circle cx="8" cy="8" r="5" fill="#84CC16" />
                       <text x="8" y="11" textAnchor="middle" fontSize="6" fontWeight="bold" fill="#FFFFFF">3</text>
@@ -535,7 +1147,7 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                 </div>
               </div>
 
-              {/* Sub-pestañas: Arquetipo vs Perfil DISC (Exacto a Captura 4) */}
+              {/* Sub-pestañas: Arquetipo vs Perfil DISC */}
               <div className="flex items-center gap-4 border-b border-[#DDE2EF] dark:border-[#2A3563] pt-2">
                 <button
                   type="button"
@@ -564,25 +1176,18 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                 </button>
               </div>
 
-              {/* ========================================================================= */}
-              {/* SECCIÓN: INTENSIDAD DEL ARQUETIPO (EXACTA A CAPTURA 4) */}
-              {/* ========================================================================= */}
+              {/* SECCIÓN: INTENSIDAD DEL ARQUETIPO */}
               <div className="bg-[#FAFAFA] dark:bg-[#151D3F] rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] p-5 space-y-5">
                 <h4 className="text-sm font-bold text-[#161C3A] dark:text-white">
                   Intensidad del Arquetipo
                 </h4>
 
-                {/* Regla de Intensidad 0 a 10 con barra magenta hasta el 3 */}
                 <div className="space-y-2 pt-2">
                   <div className="relative h-6 flex items-center">
-                    {/* Barra magenta hasta el valor 3 (30%) */}
                     <div className="absolute left-0 top-1 h-3 rounded-r-md bg-[#E11D48] w-[30%]" />
-                    
-                    {/* Punto final gris en el 10 */}
                     <div className="absolute right-0 top-1.5 w-2 h-2 rounded-full bg-slate-300" />
                   </div>
 
-                  {/* Marcas de regla 0 a 10 */}
                   <div className="flex justify-between text-xs text-[#9AA5C4] font-medium px-0.5 border-t border-slate-200 dark:border-slate-700 pt-1">
                     {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
                       <span key={num}>{num}</span>
@@ -590,10 +1195,7 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                   </div>
                 </div>
 
-                {/* Tarjetas explicativas: Adaptable (< 5) vs Definido (> 5) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
-                  
-                  {/* Columna Izquierda: Valores menores que 5 */}
                   <div className="space-y-2 text-xs leading-relaxed text-[#6B7494] dark:text-[#9AA5C4]">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-[#161C3A] dark:text-white">Valores menores que 5</span>
@@ -609,7 +1211,6 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                     </p>
                   </div>
 
-                  {/* Columna Derecha: Valores mayores que 5 */}
                   <div className="space-y-2 text-xs leading-relaxed text-[#6B7494] dark:text-[#9AA5C4]">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-[#161C3A] dark:text-white">Valores mayores que 5</span>
@@ -624,14 +1225,10 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                       a sus patrones naturales.
                     </p>
                   </div>
-
                 </div>
-
               </div>
 
-              {/* ========================================================================= */}
-              {/* SECCIÓN: DESCRIPCIÓN (9 PREGUNTAS ACORDEÓN - EXACTAS A CAPTURAS 4 Y 5) */}
-              {/* ========================================================================= */}
+              {/* SECCIÓN: DESCRIPCIÓN (10 PREGUNTAS ACORDEÓN) */}
               <div className="space-y-3 pt-2">
                 <h4 className="text-base font-extrabold text-[#1F2A5E] dark:text-white">
                   Descripción
@@ -664,9 +1261,7 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                 </div>
               </div>
 
-              {/* ========================================================================= */}
-              {/* SECCIÓN: SUBFACTORES DISC (BARRAS HORIZONTALES - EXACTAS A CAPTURA 1 PARTE 2) */}
-              {/* ========================================================================= */}
+              {/* SECCIÓN: SUBFACTORES DISC */}
               <div className="bg-white dark:bg-[#182044] rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] p-5 space-y-4">
                 <h4 className="text-base font-extrabold text-[#1F2A5E] dark:text-white">
                   Subfactores
@@ -685,7 +1280,6 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                           </p>
                         </div>
 
-                        {/* Indicador numérico y barra horizontal */}
                         <div className="w-full sm:w-48 shrink-0 space-y-1">
                           <span className="text-xs font-bold text-[#161C3A] dark:text-white block text-right">
                             {sub.val} / 10
@@ -703,9 +1297,7 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                 </div>
               </div>
 
-              {/* ========================================================================= */}
-              {/* TARJETA: COMPARACIÓN DE PERFILES LABORALES (EXACTA A CAPTURA 2 PARTE 2) */}
-              {/* ========================================================================= */}
+              {/* TARJETA: COMPARACIÓN DE PERFILES LABORALES */}
               <div className="bg-white dark:bg-[#182044] rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] p-5 shadow-2xs flex items-center justify-between gap-4">
                 <span className="text-base font-bold text-[#1F2A5E] dark:text-white">
                   Comparación de perfiles laborales
@@ -724,9 +1316,7 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
             </div>
           )}
 
-          {/* ========================================================================= */}
           {/* PESTAÑA COMPETENCIAS 🎓 */}
-          {/* ========================================================================= */}
           {activeMainTab === 'COMPETENCIAS' && (
             <div className="space-y-5 animate-in fade-in">
               <h3 className="text-lg font-bold text-[#1F2A5E] dark:text-white">
@@ -758,9 +1348,7 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
 
       </div>
 
-      {/* ========================================================================= */}
-      {/* BOTÓN FLOTANTE LATERAL DERECHO: "💬 COMENTARIOS" (EXACTO A TODAS LAS CAPTURAS) */}
-      {/* ========================================================================= */}
+      {/* BOTÓN FLOTANTE LATERAL DERECHO: "💬 COMENTARIOS" */}
       <button
         type="button"
         onClick={() => setShowCommentsDrawer(!showCommentsDrawer)}
@@ -771,14 +1359,80 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
         <span className="rotate-180">Comentarios</span>
       </button>
 
-      {/* ========================================================================= */}
-      {/* DRAWER LATERAL: COMPARACIÓN DE PERFILES (EXACTO A CAPTURAS 3, 4 Y 5 PARTE 2) */}
-      {/* ========================================================================= */}
+      {/* MODAL: INVITAR A OTRO PROCESO */}
+      {showInviteOtherProcessModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-[#182044] rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] shadow-2xl max-w-md w-full p-5 space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-[#161C3A] dark:text-white flex items-center gap-2">
+                <Send className="w-4 h-4 text-[#5844D8]" />
+                <span>Invitar a otro proceso</span>
+              </h3>
+              <button 
+                onClick={() => setShowInviteOtherProcessModal(false)}
+                className="p-1 text-[#6B7494] hover:text-[#161C3A] rounded-md"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-[#6B7494]">
+              Selecciona el proceso de selección de GEA al cual deseas transferir o convocar a <strong>{candidate.fullName}</strong>:
+            </p>
+
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {availableProcesses.map(p => (
+                <div
+                  key={p.id}
+                  onClick={() => setSelectedTargetProcessId(p.id)}
+                  className={`p-3 rounded-xl border text-xs cursor-pointer transition-colors ${
+                    selectedTargetProcessId === p.id
+                      ? 'border-[#5844D8] bg-[#EEF2FF] dark:bg-[#5844D8]/10 text-[#1F2A5E] font-bold'
+                      : 'border-[#DDE2EF] dark:border-[#2A3563] hover:bg-slate-50 dark:hover:bg-white/5 text-[#6B7494]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-[#161C3A] dark:text-white">{p.title}</span>
+                    {selectedTargetProcessId === p.id && <Check className="w-4 h-4 text-[#5844D8]" />}
+                  </div>
+                  <span className="text-[11px] block mt-1">{p.targetPosition}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowInviteOtherProcessModal(false)}
+                className="flex-1 py-2 rounded-xl border border-[#DDE2EF] text-xs font-bold text-[#6B7494] hover:bg-slate-50 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!selectedTargetProcessId) {
+                    showToast('Por favor selecciona un proceso de destino');
+                    return;
+                  }
+                  if (onInviteToProcess) onInviteToProcess(candidate.id, selectedTargetProcessId);
+                  setShowInviteOtherProcessModal(false);
+                  showToast(`✓ ${candidate.fullName} ha sido invitado exitosamente al nuevo proceso`);
+                }}
+                className="flex-1 py-2 rounded-xl bg-[#5844D8] text-white text-xs font-bold hover:bg-[#4837BA] cursor-pointer"
+              >
+                Confirmar invitación
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DRAWER LATERAL: COMPARACIÓN DE PERFILES */}
       {showProfileComparisonDrawer && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex justify-end animate-in fade-in">
           <div className="w-full max-w-md bg-white dark:bg-[#182044] h-full shadow-2xl flex flex-col border-l border-[#DDE2EF] dark:border-[#2A3563] animate-in slide-in-from-right duration-200">
             
-            {/* Header del Drawer */}
             <div className="p-4 sm:p-5 border-b border-[#DDE2EF] dark:border-[#2A3563] flex items-center justify-between">
               <h3 className="text-base font-extrabold text-[#1F2A5E] dark:text-white">
                 Comparación de perfiles
@@ -792,10 +1446,9 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
               </button>
             </div>
 
-            {/* Contenido con scroll del Drawer */}
             <div className="flex-1 overflow-y-auto p-5 space-y-6">
               
-              {/* 1. GRÁFICO: PERFIL PROFESIONAL (D=4, I=6, S=6, C=3) */}
+              {/* 1. GRÁFICO: PERFIL PROFESIONAL */}
               <div className="space-y-3">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-[#6B7494]">
                   <span>💼 Perfil Profesional</span>
@@ -803,7 +1456,6 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
 
                 <div className="h-44 w-full bg-[#FAFAFA] dark:bg-[#151D3F] rounded-xl p-3 relative">
                   <svg viewBox="0 0 200 120" className="w-full h-full overflow-visible">
-                    {/* Líneas horizontales de 1 a 10 */}
                     {[1, 3, 5, 7, 9].map(val => (
                       <line
                         key={val}
@@ -816,7 +1468,6 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                       />
                     ))}
 
-                    {/* Línea morada conectora */}
                     <polyline
                       fill="none"
                       stroke="#5844D8"
@@ -824,7 +1475,6 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                       points="35,76 85,54 135,54 185,87"
                     />
 
-                    {/* Puntos circulares morados */}
                     {[
                       { x: 35, y: 76, val: 4, label: 'D' },
                       { x: 85, y: 54, val: 6, label: 'I' },
@@ -842,7 +1492,7 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                 </div>
               </div>
 
-              {/* 2. GRÁFICO: PERFIL RELACIONAL (LINEA ROSA) */}
+              {/* 2. GRÁFICO: PERFIL RELACIONAL */}
               <div className="space-y-3">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-[#6B7494]">
                   <span>👥 Perfil Relacional</span>
@@ -864,7 +1514,7 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                 </div>
               </div>
 
-              {/* 3. SIMILITUD (SEMI-GAUGE 8.5 / 10) */}
+              {/* 3. SIMILITUD */}
               <div className="pt-2 border-t border-[#DDE2EF]/60 space-y-3">
                 <h4 className="text-xs font-bold text-[#161C3A] dark:text-white">
                   Similitud
@@ -874,7 +1524,6 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                 </p>
 
                 <div className="flex items-center gap-4 pt-1">
-                  {/* Semicírculo morado */}
                   <div className="relative w-24 h-14 flex items-end justify-center">
                     <svg viewBox="0 0 100 50" className="w-full h-full">
                       <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#E2E8F0" strokeWidth="12" />
@@ -896,43 +1545,34 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                 </div>
               </div>
 
-              {/* 4. ORIENTACIÓN DE LA ENERGÍA (Activo vs Reflexivo) */}
+              {/* 4. ORIENTACIÓN DE LA ENERGÍA */}
               <div className="pt-2 border-t border-[#DDE2EF]/60 space-y-2">
                 <h4 className="text-xs font-bold text-[#161C3A] dark:text-white">
                   Orientación de la energía
                 </h4>
-                <p className="text-[11px] text-[#6B7494]">
-                  Refleja la preferencia de la persona a trabajar más activo o reflexivo
-                </p>
+                <div className="flex justify-between text-[11px] text-[#6B7494] font-medium pt-1">
+                  <span>Activo ❓</span>
+                  <span>Reflexivo ❓</span>
+                </div>
 
-                <div className="pt-2 space-y-1">
-                  <div className="flex justify-between text-[11px] text-[#6B7494] font-medium">
-                    <span>Activo ❓</span>
-                    <span>Reflexivo ❓</span>
+                <div className="relative h-7 bg-[#FAFAFA] dark:bg-[#151D3F] rounded-lg border border-slate-100 flex items-center">
+                  <div className="w-full flex justify-between px-1 text-[9px] text-slate-400">
+                    <span>5</span><span>4</span><span>3</span><span>2</span><span>1</span>
+                    <span className="font-bold">0</span>
+                    <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
                   </div>
 
-                  {/* Escala 5 4 3 2 1 0 1 2 3 4 5 con barras azul y rosa */}
-                  <div className="relative h-7 bg-[#FAFAFA] dark:bg-[#151D3F] rounded-lg border border-slate-100 flex items-center">
-                    <div className="w-full flex justify-between px-1 text-[9px] text-slate-400">
-                      <span>5</span><span>4</span><span>3</span><span>2</span><span>1</span>
-                      <span className="font-bold">0</span>
-                      <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
-                    </div>
-
-                    {/* Barra morada hacia activo (1) */}
-                    <div className="absolute left-[40%] top-1 h-2 rounded bg-[#5844D8] w-[10%]" />
-                    {/* Barra rosa hacia reflexivo (2) */}
-                    <div className="absolute left-[50%] top-4 h-2 rounded bg-[#E11D48] w-[18%]" />
-                  </div>
+                  <div className="absolute left-[40%] top-1 h-2 rounded bg-[#5844D8] w-[10%]" />
+                  <div className="absolute left-[50%] top-4 h-2 rounded bg-[#E11D48] w-[18%]" />
                 </div>
               </div>
 
-              {/* 5. ORIENTACIÓN: PERSONAS O A LAS TAREAS */}
+              {/* 5. ORIENTACIÓN AL TRABAJO */}
               <div className="pt-2 border-t border-[#DDE2EF]/60 space-y-2">
                 <h4 className="text-xs font-bold text-[#161C3A] dark:text-white">
                   Orientación al trabajo
                 </h4>
-                <div className="flex justify-between text-[11px] text-[#6B7494] font-medium">
+                <div className="flex justify-between text-[11px] text-[#6B7494] font-medium pt-1">
                   <span>Orientado a las tareas ❓</span>
                   <span>Orientado a las personas ❓</span>
                 </div>
@@ -944,33 +1584,16 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                     <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
                   </div>
 
-                  {/* Barra morada hacia personas (3) */}
                   <div className="absolute left-[50%] top-1 h-2 rounded bg-[#5844D8] w-[28%]" />
-                  {/* Barra rosa hacia personas (2) */}
                   <div className="absolute left-[50%] top-4 h-2 rounded bg-[#E11D48] w-[18%]" />
-                </div>
-
-                <div className="flex items-center gap-4 text-[10px] text-[#6B7494] pt-1">
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-[#5844D8]" />
-                    <span>Perfil profesional</span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-[#E11D48]" />
-                    <span>Perfil relacional</span>
-                  </span>
                 </div>
               </div>
 
-              {/* 6. RELACIÓN CON EL EQUIPO (Influyente vs Apoyador) */}
+              {/* 6. RELACIÓN CON EL EQUIPO */}
               <div className="pt-2 border-t border-[#DDE2EF]/60 space-y-2">
                 <h4 className="text-xs font-bold text-[#161C3A] dark:text-white">
                   Relación con el equipo
                 </h4>
-                <p className="text-[11px] text-[#6B7494]">
-                  Refleja el cómo se relaciona la persona con su equipo de trabajo, influyendo o apoyando
-                </p>
-
                 <div className="flex justify-between text-[11px] text-[#6B7494] font-medium pt-1">
                   <span>Influyente ❓</span>
                   <span>Apoyador ❓</span>
@@ -993,9 +1616,7 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* DRAWER LATERAL: COMENTARIOS Y NOTAS DEL RECLUTADOR */}
-      {/* ========================================================================= */}
+      {/* DRAWER: COMENTARIOS Y NOTAS */}
       {showCommentsDrawer && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex justify-end animate-in fade-in">
           <div className="w-full max-w-sm bg-white dark:bg-[#182044] h-full shadow-2xl flex flex-col border-l border-[#DDE2EF] dark:border-[#2A3563] animate-in slide-in-from-right duration-200">
