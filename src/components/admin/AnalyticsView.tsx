@@ -203,6 +203,42 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const closedPct = Math.round((closedProcessesCount / totalProcesses) * 100);
   const draftPct = Math.round((draftProcessesCount / totalProcesses) * 100);
 
+  // Cobertura calculada a partir de los procesos
+  const coverageData = useMemo(() => {
+    if (!tests || tests.length === 0) return { avg: 0, min: 0, max: 0 };
+    const now = Date.now();
+    const daysList = tests.map(t => {
+      const start = new Date(t.createdAt || t.startDate || now).getTime();
+      const end = t.endDate ? new Date(t.endDate).getTime() : (t.processStatus === 'CERRADO' ? new Date(t.updatedAt || now).getTime() : now);
+      const diff = Math.max(0, Math.round((end - start) / (1000 * 60 * 60 * 24)));
+      return diff;
+    }).filter(d => !isNaN(d));
+
+    if (daysList.length === 0) return { avg: 0, min: 0, max: 0 };
+    const avg = Math.round(daysList.reduce((a, b) => a + b, 0) / daysList.length);
+    const min = Math.min(...daysList);
+    const max = Math.max(...daysList);
+    return { avg, min, max };
+  }, [tests]);
+
+  // Velocidad de contratación calculada a partir de los candidatos
+  const hiringSpeedData = useMemo(() => {
+    const relevant = candidates.filter(c => c.completedAt || c.status === 'FINALIST' || c.status === 'SCORED');
+    if (relevant.length === 0) return { avg: 0, min: 0, max: 0 };
+    const daysList = relevant.map(c => {
+      const invited = new Date(c.invitedAt || 0).getTime();
+      const completed = new Date(c.completedAt || c.startedAt || Date.now()).getTime();
+      const diff = Math.max(0, Math.round((completed - invited) / (1000 * 60 * 60 * 24)));
+      return diff;
+    }).filter(d => !isNaN(d));
+
+    if (daysList.length === 0) return { avg: 0, min: 0, max: 0 };
+    const avg = Math.round(daysList.reduce((a, b) => a + b, 0) / daysList.length);
+    const min = Math.min(...daysList);
+    const max = Math.max(...daysList);
+    return { avg, min, max };
+  }, [candidates]);
+
   return (
     <div className="font-sans text-[#161C3A] dark:text-[#F0F4FF] animate-in fade-in">
       <main className="w-full space-y-5 min-w-0">
@@ -212,7 +248,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           <div className="flex items-center gap-2.5">
             <Rocket className="w-6 h-6 text-[#1F2A5E] dark:text-[#5B8AE0]" />
             <h1 className="text-2xl font-bold text-[#1F2A5E] dark:text-white tracking-tight font-sans">
-              Analítica – Procesos
+              Analítica - Procesos
             </h1>
           </div>
 
@@ -589,26 +625,31 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
             {/* Tri-color gauge bar with arrow pointer */}
             <div className="space-y-1.5 pt-1">
-              <div className="relative">
-                {/* Pointer triangle at promoter start */}
-                <div
-                  className="absolute -bottom-4 z-10 transition-all flex flex-col items-center"
-                  style={{ left: `${Math.min(95, Math.max(2, npsDetractorPct + npsNeutralPct))}%` }}
-                >
-                  <div className="w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-b-[6px] border-b-[#1F2A5E] dark:border-b-[#5B8AE0]" />
-                  <div className="w-0.5 h-10 border-l-2 border-dashed border-[#1F2A5E] dark:border-[#5B8AE0]" />
-                </div>
+              <div className="relative pt-2">
+                {/* Pointer marker (pointing down at current distribution) */}
+                {npsTotal > 0 && (
+                  <div
+                    className="absolute top-[-2px] z-10 transition-all -translate-x-1/2 flex flex-col items-center"
+                    style={{ left: `${Math.min(95, Math.max(5, npsDetractorPct + npsNeutralPct / 2))}%` }}
+                  >
+                    <div className="w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[6px] border-t-[#1F2A5E] dark:border-t-[#5B8AE0]" />
+                  </div>
+                )}
 
                 <div className="h-6 w-full rounded-lg overflow-hidden flex border border-[#DDE2EF] dark:border-[#2A3563] shadow-2xs">
                   {npsDetractorPct > 0 && <div style={{ width: `${npsDetractorPct}%` }} className="bg-[#E4572E]" title="Detractores" />}
                   {npsNeutralPct > 0 && <div style={{ width: `${npsNeutralPct}%` }} className="bg-[#F28C28]" title="Neutros" />}
                   {npsPromoterPct > 0 && <div style={{ width: `${npsPromoterPct}%` }} className="bg-[#2FA58B]" title="Promotores" />}
-                  {npsTotal === 0 && <div className="w-full bg-[#DDE2EF]" title="Sin datos" />}
+                  {npsTotal === 0 && (
+                    <div className="w-full bg-[#DDE2EF]/50 dark:bg-zinc-800 flex items-center justify-center text-[10px] text-[#6B7494]">
+                      Sin evaluaciones completadas
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Legend underneath */}
-              <div className="flex items-center gap-4 text-[10px] text-[#6B7494] pt-3">
+              <div className="flex items-center gap-4 text-[10px] text-[#6B7494] pt-2">
                 <span className="flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-[#E4572E]" />
                   <span>Detractores: {detractores}</span>
@@ -644,12 +685,35 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
               </h3>
             </div>
 
-            {/* Semicircle Gauge */}
+            {/* Semicircle Gauge (Arco superior orientado correctamente) */}
             <div className="flex flex-col items-center justify-center py-2">
-              <div className="relative w-36 h-18 overflow-hidden flex items-end justify-center">
-                <div className="w-36 h-36 rounded-full border-[10px] border-[#DDE2EF]/60 dark:border-[#2A3563] border-t-[#1F2A5E]/40 border-l-[#1F2A5E]/40" />
+              <div className="relative w-36 h-20 flex items-end justify-center">
+                <svg viewBox="0 0 144 80" className="w-36 h-20 overflow-visible">
+                  {/* Track base */}
+                  <path
+                    d="M 16 70 A 56 56 0 0 1 128 70"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="10"
+                    strokeLinecap="round"
+                    className="text-[#DDE2EF]/70 dark:text-[#2A3563]"
+                  />
+                  {/* Arco activo */}
+                  <path
+                    d="M 16 70 A 56 56 0 0 1 128 70"
+                    fill="none"
+                    stroke="#1F2A5E"
+                    strokeWidth="10"
+                    strokeLinecap="round"
+                    strokeDasharray="175.9"
+                    strokeDashoffset={175.9 * (1 - Math.min(1, Math.max(0.08, coverageData.avg > 0 ? coverageData.avg / 30 : 0.08)))}
+                    className="dark:stroke-[#5B8AE0] transition-all duration-700"
+                  />
+                </svg>
                 <div className="absolute bottom-0 text-center">
-                  <span className="text-2xl font-extrabold text-[#1F2A5E] dark:text-white block leading-none">0</span>
+                  <span className="text-2xl font-extrabold text-[#1F2A5E] dark:text-white block leading-none">
+                    {coverageData.avg}
+                  </span>
                   <span className="text-[10px] font-bold text-[#6B7494] uppercase tracking-widest">DÍAS</span>
                 </div>
               </div>
@@ -658,11 +722,11 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             <div className="text-[11px] text-[#6B7494] space-y-1 pt-1 border-t border-[#DDE2EF] dark:border-[#2A3563]">
               <div className="flex items-center gap-1.5">
                 <Clock className="w-3 h-3 text-[#6B7494]" />
-                <span>Proceso más rápido: <strong>0 días</strong></span>
+                <span>Proceso más rápido: <strong>{coverageData.min} días</strong></span>
               </div>
               <div className="flex items-center gap-1.5">
                 <Clock className="w-3 h-3 text-[#6B7494]" />
-                <span>Proceso más lento: <strong>0 días</strong></span>
+                <span>Proceso más lento: <strong>{coverageData.max} días</strong></span>
               </div>
             </div>
           </div>
@@ -678,12 +742,35 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
               </h3>
             </div>
 
-            {/* Semicircle Gauge */}
+            {/* Semicircle Gauge (Arco superior orientado correctamente) */}
             <div className="flex flex-col items-center justify-center py-2">
-              <div className="relative w-36 h-18 overflow-hidden flex items-end justify-center">
-                <div className="w-36 h-36 rounded-full border-[10px] border-[#DDE2EF]/60 dark:border-[#2A3563] border-t-[#2FA58B]/40 border-l-[#2FA58B]/40" />
+              <div className="relative w-36 h-20 flex items-end justify-center">
+                <svg viewBox="0 0 144 80" className="w-36 h-20 overflow-visible">
+                  {/* Track base */}
+                  <path
+                    d="M 16 70 A 56 56 0 0 1 128 70"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="10"
+                    strokeLinecap="round"
+                    className="text-[#DDE2EF]/70 dark:text-[#2A3563]"
+                  />
+                  {/* Arco activo */}
+                  <path
+                    d="M 16 70 A 56 56 0 0 1 128 70"
+                    fill="none"
+                    stroke="#2FA58B"
+                    strokeWidth="10"
+                    strokeLinecap="round"
+                    strokeDasharray="175.9"
+                    strokeDashoffset={175.9 * (1 - Math.min(1, Math.max(0.08, hiringSpeedData.avg > 0 ? hiringSpeedData.avg / 30 : 0.08)))}
+                    className="transition-all duration-700"
+                  />
+                </svg>
                 <div className="absolute bottom-0 text-center">
-                  <span className="text-2xl font-extrabold text-[#2FA58B] block leading-none">0</span>
+                  <span className="text-2xl font-extrabold text-[#2FA58B] block leading-none">
+                    {hiringSpeedData.avg}
+                  </span>
                   <span className="text-[10px] font-bold text-[#6B7494] uppercase tracking-widest">DÍAS</span>
                 </div>
               </div>
@@ -692,11 +779,11 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             <div className="text-[11px] text-[#6B7494] space-y-1 pt-1 border-t border-[#DDE2EF] dark:border-[#2A3563]">
               <div className="flex items-center gap-1.5">
                 <Clock className="w-3 h-3 text-[#6B7494]" />
-                <span>Contratación más rápida: <strong>0 días</strong></span>
+                <span>Contratación más rápida: <strong>{hiringSpeedData.min} días</strong></span>
               </div>
               <div className="flex items-center gap-1.5">
                 <Clock className="w-3 h-3 text-[#6B7494]" />
-                <span>Contratación más lenta: <strong>0 días</strong></span>
+                <span>Contratación más lenta: <strong>{hiringSpeedData.max} días</strong></span>
               </div>
             </div>
           </div>

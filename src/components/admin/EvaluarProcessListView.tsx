@@ -35,10 +35,14 @@ import {
   Sparkles
 } from 'lucide-react';
 
+export type ProcessModuleFilter = 'TODOS' | 'VIRALIZACION' | 'MODULO_EVALUACION' | 'TRUST' | 'SEGURIDAD';
+
 interface EvaluarProcessListViewProps {
   tests: EvaluationTest[];
   candidates: Candidate[];
   activeTestId: string;
+  activeModuleFilter?: ProcessModuleFilter;
+  onSelectModuleFilter?: (filter: ProcessModuleFilter) => void;
   onSelectActiveTest: (testId: string) => void;
   onOpenInviteForTest: (testId: string) => void;
   onCreateNewProcess: () => void;
@@ -49,12 +53,15 @@ interface EvaluarProcessListViewProps {
   onViewCandidateDetail?: (candidate: Candidate) => void;
   onSwitchToCandidateExam?: (candidateId: string) => void;
   onViewAssignedCandidates?: () => void;
+  onOpenProcessDetail?: (process: EvaluationTest) => void;
 }
 
 export const EvaluarProcessListView: React.FC<EvaluarProcessListViewProps> = ({
   tests,
   candidates,
   activeTestId,
+  activeModuleFilter = 'TODOS',
+  onSelectModuleFilter,
   onSelectActiveTest,
   onOpenInviteForTest,
   onCreateNewProcess,
@@ -64,10 +71,12 @@ export const EvaluarProcessListView: React.FC<EvaluarProcessListViewProps> = ({
   onDeleteProcess,
   onViewCandidateDetail,
   onSwitchToCandidateExam,
-  onViewAssignedCandidates
+  onViewAssignedCandidates,
+  onOpenProcessDetail
 }) => {
   const [subView, setSubView] = useState<'LIST' | 'CONFIG_PRUEBAS'>('LIST');
   const [activeStatusTab, setActiveStatusTab] = useState<'LANZADO' | 'BORRADOR' | 'CERRADO' | 'ARCHIVADO' | 'TODOS'>('LANZADO');
+  const [showModuleTag, setShowModuleTag] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortOrder, setSortOrder] = useState<'created_desc' | 'created_asc' | 'title_asc' | 'title_desc'>('created_desc');
   const [openSubDropdown, setOpenSubDropdown] = useState<'sort' | 'status' | null>(null);
@@ -159,11 +168,29 @@ export const EvaluarProcessListView: React.FC<EvaluarProcessListViewProps> = ({
   // Filter and sort tests based on status, search and sort order
   const filteredTests = useMemo(() => {
     let list = tests.filter(test => {
+      // 1. Filtro por Módulo (Idéntico a Evaluar v4.1.2)
+      if (activeModuleFilter === 'VIRALIZACION') {
+        const isViral = (test as any).isViral || test.category === 'VIRALIZACION' || test.title.toLowerCase().includes('viral');
+        if (!isViral) return false;
+      } else if (activeModuleFilter === 'TRUST') {
+        const isTrust = (test as any).hasTrust || test.category === 'TRUST' || test.title.toLowerCase().includes('trust');
+        if (!isTrust) return false;
+      } else if (activeModuleFilter === 'SEGURIDAD') {
+        const isSafer = (test as any).isSafer || test.category === 'SAFER' || test.category === 'SEGURIDAD' || test.title.toLowerCase().includes('safer');
+        if (!isSafer) return false;
+      } else if (activeModuleFilter === 'MODULO_EVALUACION') {
+        const isNonEval = test.category === 'VIRALIZACION' || test.category === 'TRUST' || test.category === 'SAFER';
+        if (isNonEval) return false;
+      }
+      // 'TODOS' no filtra ningún proceso
+
+      // 2. Filtro por Estado
       const status = test.processStatus || 'LANZADO';
       if (activeStatusTab !== 'TODOS' && status !== activeStatusTab) {
         return false;
       }
 
+      // 3. Filtro por Buscador
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase();
         const matchTitle = test.title.toLowerCase().includes(q);
@@ -192,7 +219,7 @@ export const EvaluarProcessListView: React.FC<EvaluarProcessListViewProps> = ({
     });
 
     return list;
-  }, [tests, activeStatusTab, searchTerm, sortOrder]);
+  }, [tests, activeStatusTab, searchTerm, sortOrder, activeModuleFilter]);
 
   const launchedCount = tests.filter(t => (t.processStatus || 'LANZADO') === 'LANZADO').length;
   const draftCount = tests.filter(t => t.processStatus === 'BORRADOR').length;
@@ -390,6 +417,31 @@ export const EvaluarProcessListView: React.FC<EvaluarProcessListViewProps> = ({
           )}
         </div>
 
+        {/* Tag de Módulo Dinámico (Exacto a las 5 capturas oficiales de Evaluar v4.1.2) */}
+        {activeModuleFilter !== 'TODOS' && (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-zinc-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs text-zinc-700 dark:text-zinc-300 shadow-2xs font-medium animate-in fade-in">
+            <span>
+              {activeModuleFilter === 'VIRALIZACION'
+                ? 'Aviso con viralización y filtrado'
+                : activeModuleFilter === 'MODULO_EVALUACION'
+                ? 'Módulo de evaluación'
+                : activeModuleFilter === 'TRUST'
+                ? 'Trust'
+                : activeModuleFilter === 'SEGURIDAD'
+                ? 'SAFER'
+                : ''}
+            </span>
+            <button
+              type="button"
+              onClick={() => onSelectModuleFilter?.('TODOS')}
+              className="w-3.5 h-3.5 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-700 flex items-center justify-center cursor-pointer transition-colors"
+              title="Quitar filtro de módulo"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* Quick Reset Filter */}
         <button
           type="button"
@@ -397,6 +449,7 @@ export const EvaluarProcessListView: React.FC<EvaluarProcessListViewProps> = ({
             setActiveStatusTab('TODOS');
             setSortOrder('created_desc');
             setSearchTerm('');
+            onSelectModuleFilter?.('TODOS');
             setOpenSubDropdown(null);
           }}
           className={`p-1.5 rounded-xl border transition-all cursor-pointer shadow-2xs flex items-center justify-center ${
@@ -518,9 +571,64 @@ export const EvaluarProcessListView: React.FC<EvaluarProcessListViewProps> = ({
         </button>
       </div>
 
-      {/* 5. PROCESS CARDS LIST (EXACT EVALUAR SCREENSHOT STYLE) */}
-      <div className="space-y-4">
-        {filteredTests.map((test) => {
+      {/* 5. PROCESS CARDS LIST (EXACT EVALUAR SCREENSHOT STYLE) O ILUSTRACIÓN FANTASMA AMIGABLE */}
+      {filteredTests.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-14 animate-in fade-in duration-300">
+          <div className="relative w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center">
+            {/* Círculo base lavanda suave */}
+            <div className="w-56 h-56 sm:w-64 sm:h-64 rounded-full bg-[#EAE8F8] dark:bg-[#252445] relative overflow-hidden flex items-center justify-center shadow-inner">
+              {/* Montículo inferior púrpura redondeado idéntico a captura Evaluar */}
+              <div className="absolute -bottom-8 inset-x-0 h-32 bg-[#9286D4] dark:bg-[#5E52A4] rounded-t-[50%]" />
+
+              {/* Fantasmita Blanco Amigable Ilustración Vectorial */}
+              <svg
+                className="w-36 h-44 relative z-10 drop-shadow-xs"
+                viewBox="0 0 130 160"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                {/* Cuerpo del fantasma con brazos abiertos y base ondulada */}
+                <path
+                  d="M 65 16
+                     C 38 16 26 36 26 76
+                     C 26 84 21 95 12 102
+                     C 7 106 12 114 18 111
+                     C 24 108 28 97 30 89
+                     C 30 115 30 136 30 142
+                     C 30 147 36 147 40 142
+                     C 44 137 52 137 56 142
+                     C 60 147 66 147 70 142
+                     C 74 137 82 137 86 142
+                     C 90 147 96 147 100 142
+                     C 100 136 100 115 100 89
+                     C 102 97 106 108 112 111
+                     C 118 114 123 106 118 102
+                     C 109 95 104 84 104 76
+                     C 104 36 92 16 65 16 Z"
+                  fill="#FFFFFF"
+                  stroke="#4E4773"
+                  strokeWidth="3.2"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                />
+                {/* Ojos redondos simpáticos */}
+                <circle cx="53" cy="62" r="4.5" fill="#3D375B" />
+                <circle cx="77" cy="62" r="4.5" fill="#3D375B" />
+                {/* Sonrisa curva amigable */}
+                <path
+                  d="M 60 74 Q 65 81 70 74"
+                  stroke="#3D375B"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  fill="none"
+                />
+              </svg>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {filteredTests.map((test) => {
           const isSelected = test.id === activeTestId;
           
           // Candidatos reales asociados a este proceso desde Supabase
@@ -575,7 +683,11 @@ export const EvaluarProcessListView: React.FC<EvaluarProcessListViewProps> = ({
               id={`process-card-${test.id}`}
               onClick={() => {
                 onSelectActiveTest(test.id);
-                setActivityModalTest(test);
+                if (onOpenProcessDetail) {
+                  onOpenProcessDetail(test);
+                } else {
+                  setActivityModalTest(test);
+                }
               }}
               className={`p-5 sm:p-6 rounded-2xl border transition-all cursor-pointer relative ${
                 activeMenuTestId === test.id ? 'z-30' : 'z-0'
@@ -887,6 +999,7 @@ export const EvaluarProcessListView: React.FC<EvaluarProcessListViewProps> = ({
           );
         })}
       </div>
+      )}
 
       {/* MODAL DE ACTIVIDAD DE POSTULANTES DEL PROCESO */}
       {activityModalTest && (

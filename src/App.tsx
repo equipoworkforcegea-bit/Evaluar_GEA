@@ -8,6 +8,7 @@ import {
   useParams
 } from 'react-router-dom';
 import { Header } from './components/common/Header';
+import { AdminSidebar } from './components/admin/AdminSidebar';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { ExamContainer } from './components/candidate/ExamContainer';
 import { AdminDashboard, MainAdminTab } from './components/admin/AdminDashboard';
@@ -18,6 +19,7 @@ import { CandidateDataService } from './services/candidateDataService';
 import { AuthStorage } from './services/authStorage';
 import { Candidate, AuthSession } from './types';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { ProcessModuleFilter } from './components/admin/EvaluarProcessListView';
 
 // Mapeo seguro y bidireccional de Pestañas Administrativas a URLs amigables
 const TAB_TO_PATH: Record<MainAdminTab, string> = {
@@ -27,7 +29,13 @@ const TAB_TO_PATH: Record<MainAdminTab, string> = {
   TALENT_POOL: 'talent-pool',
   DESARROLLO: 'desarrollo',
   POTENCIAL: 'potencial',
-  POSTULANTES: 'postulantes'
+  POSTULANTES: 'postulantes',
+  VIRALIZACION: 'viralizacion',
+  TRUST: 'trust',
+  SEGURIDAD: 'seguridad',
+  INFORMES: 'informes',
+  CONTRATADOS: 'contratados',
+  NO_DESEADOS: 'no-deseados'
 };
 
 const PATH_TO_TAB: Record<string, MainAdminTab> = {
@@ -37,7 +45,13 @@ const PATH_TO_TAB: Record<string, MainAdminTab> = {
   'talent-pool': 'TALENT_POOL',
   'desarrollo': 'DESARROLLO',
   'potencial': 'POTENCIAL',
-  'postulantes': 'POSTULANTES'
+  'postulantes': 'POSTULANTES',
+  'viralizacion': 'VIRALIZACION',
+  'trust': 'TRUST',
+  'seguridad': 'SEGURIDAD',
+  'informes': 'INFORMES',
+  'contratados': 'CONTRATADOS',
+  'no-deseados': 'NO_DESEADOS'
 };
 
 interface AdminViewProps {
@@ -53,7 +67,7 @@ interface AdminViewProps {
   onSwitchToCandidateView: (id?: string) => void;
 }
 
-// Componente de Vista Administrativa por Pestaña (Extraído como componente independiente)
+// Componente de Vista Administrativa con Barra Lateral Izquierda (Evaluar v4.1.2)
 function AdminView({
   session,
   candidates,
@@ -66,46 +80,97 @@ function AdminView({
   onAddCandidates,
   onSwitchToCandidateView
 }: AdminViewProps) {
-  const { tab } = useParams<{ tab?: string }>();
+  const { tab, processId } = useParams<{ tab?: string; processId?: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Obtener pestaña activa a partir de la URL
   const activeTab: MainAdminTab = (tab && PATH_TO_TAB[tab.toLowerCase()]) || 'PROCESOS';
+
+  const searchParams = new URLSearchParams(location.search);
+  const rawModulo = searchParams.get('modulo')?.toUpperCase();
+  const moduloQuery: ProcessModuleFilter | null = 
+    rawModulo && ['TODOS', 'VIRALIZACION', 'MODULO_EVALUACION', 'TRUST', 'SEGURIDAD'].includes(rawModulo)
+      ? (rawModulo as ProcessModuleFilter)
+      : null;
+
+  const [activeModuleFilter, setActiveModuleFilter] = useState<ProcessModuleFilter>(
+    moduloQuery ||
+    (activeTab === 'VIRALIZACION' ? 'VIRALIZACION' :
+     activeTab === 'TRUST' ? 'TRUST' :
+     activeTab === 'SEGURIDAD' ? 'SEGURIDAD' : 'TODOS')
+  );
+
+  useEffect(() => {
+    if (moduloQuery) {
+      setActiveModuleFilter(moduloQuery);
+    } else if (activeTab === 'VIRALIZACION') {
+      setActiveModuleFilter('VIRALIZACION');
+    } else if (activeTab === 'TRUST') {
+      setActiveModuleFilter('TRUST');
+    } else if (activeTab === 'SEGURIDAD') {
+      setActiveModuleFilter('SEGURIDAD');
+    } else if (activeTab === 'PROCESOS' && !rawModulo) {
+      setActiveModuleFilter('TODOS');
+    }
+  }, [moduloQuery, activeTab, rawModulo]);
 
   const handleTabChange = (newTab: MainAdminTab) => {
     const pathSuffix = TAB_TO_PATH[newTab] || 'procesos';
     navigate(`/admin/${pathSuffix}`);
   };
 
+  const handleSelectModuleFilter = (filter: ProcessModuleFilter) => {
+    setActiveModuleFilter(filter);
+    if (filter === 'TODOS') {
+      navigate('/admin/procesos');
+    } else {
+      navigate(`/admin/procesos?modulo=${filter.toLowerCase()}`);
+    }
+  };
+
+  const handleSelectProcess = (id: string | null) => {
+    if (id) {
+      navigate(`/admin/procesos/${id}`);
+    } else {
+      navigate('/admin/procesos');
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-[var(--bg-page)] text-[var(--text-primary)] font-sans antialiased selection:bg-[#1F2A5E] selection:text-white transition-colors">
-      <Header
-        authSession={session}
-        currentView="ADMIN"
-        onViewChange={(view) => {
-          if (view === 'CANDIDATE') navigate('/examen');
-          else if (view === 'ARCHITECTURE') navigate('/arquitectura');
-        }}
+    <div className="min-h-screen flex bg-[var(--bg-page)] text-[var(--text-primary)] font-sans antialiased selection:bg-[#1F2A5E] selection:text-white transition-colors">
+      {/* SIDEBAR LATERAL IZQUIERDO OFICIAL */}
+      <AdminSidebar
+        activeTab={activeTab}
+        onSelectTab={handleTabChange}
+        activeModuleFilter={activeModuleFilter}
+        onSelectModuleFilter={handleSelectModuleFilter}
+        session={session}
         isDarkMode={isDarkMode}
         onToggleDarkMode={onToggleDarkMode}
-        candidates={candidates}
-        selectedCandidateId={selectedCandidateId}
-        onSelectCandidate={onSelectCandidate}
         onLogout={onLogout}
-        activeAdminTab={activeTab}
-        onSelectAdminTab={(tabName) => handleTabChange(tabName as MainAdminTab)}
+        onOpenArchitecture={() => navigate('/arquitectura')}
+        onOpenCandidateView={() => navigate('/examen')}
+        onResetProcessDetail={() => handleSelectProcess(null)}
       />
 
-      <main className="focus:outline-hidden">
-        <AdminDashboard
-          candidates={candidates}
-          onUpdateCandidate={onUpdateCandidate}
-          onAddCandidates={onAddCandidates}
-          onSwitchToCandidateView={onSwitchToCandidateView}
-          activeTab={activeTab}
-          onTabChange={handleTabChange}
-        />
-      </main>
+      {/* ÁREA CENTRAL DE CONTENIDO */}
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1560px] w-full mx-auto focus:outline-hidden">
+          <AdminDashboard
+            candidates={candidates}
+            onUpdateCandidate={onUpdateCandidate}
+            onAddCandidates={onAddCandidates}
+            onSwitchToCandidateView={onSwitchToCandidateView}
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+            activeProcessId={processId}
+            onSelectProcess={handleSelectProcess}
+            activeModuleFilter={activeModuleFilter}
+            onSelectModuleFilter={handleSelectModuleFilter}
+          />
+        </main>
+      </div>
     </div>
   );
 }
@@ -445,9 +510,9 @@ export default function App() {
         } 
       />
 
-      {/* 3. Apartados Administrativos con URLs independientes (/admin/:tab) */}
+      {/* 3. Apartados Administrativos con URLs independientes (/admin/:tab y /admin/:tab/:processId) */}
       <Route
-        path="/admin/:tab"
+        path="/admin/:tab/:processId?"
         element={
           <ProtectedRoute session={session} allowedRoles={['SUPER_ADMIN', 'ADMIN']}>
             <AdminView

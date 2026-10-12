@@ -90,8 +90,8 @@ export const AVAILABLE_QUESTION_CATEGORIES: CategoryDefinition[] = [
 export const INITIAL_EVALUATION_TESTS: EvaluationTest[] = [
   {
     id: 'test-gea-postpago-01',
-    code: 'POSTPAGO CHILE PRUEBA',
-    title: 'POSTPAGO CHILE PRUEBA',
+    code: 'POSTPAGO CHILE PRUEBA 2026 09 28',
+    title: 'POSTPAGO CHILE PRUEBA 2026 09 28',
     targetPosition: 'Postpago Chile Prueba',
     description: 'Consejos: Haz un resumen del puesto, explica qué se necesita para triunfar en él y el lugar que ocupa en la empresa.sfgvtgrbfdsfghjgfdsfghgfdfghnjgfd...',
     instructions: 'Examen de avance unidireccional con cronómetro autoritativo en servidor.',

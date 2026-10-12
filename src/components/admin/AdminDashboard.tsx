@@ -3,13 +3,19 @@ import { Candidate, EvaluationTest } from '../../types';
 import { CandidateDetailModal } from './CandidateDetailModal';
 import { PrintableCandidateReport } from './PrintableCandidateReport';
 import { InviteCandidateModal } from './InviteCandidateModal';
-import { EvaluarProcessListView } from './EvaluarProcessListView';
+import { EvaluarProcessListView, ProcessModuleFilter } from './EvaluarProcessListView';
+import { ProcessDetailControlView } from './ProcessDetailControlView';
 import { AnalyticsView } from './AnalyticsView';
 import { ProfilesManagerView } from './ProfilesManagerView';
 import { TalentPoolView } from './TalentPoolView';
+import { TrustView } from './TrustView';
+import { ViralizacionView } from './ViralizacionView';
 import { CreateProcessModal } from './CreateProcessModal';
 import { CreateProfileModal } from './CreateProfileModal';
 import { AssignedCandidatesView } from './AssignedCandidatesView';
+import { InformesView } from './InformesView';
+import { ContratadosView } from './ContratadosView';
+import { NoDeseadosView } from './NoDeseadosView';
 import { ProcessDataService } from '../../services/processDataService';
 import { CandidateDataService } from '../../services/candidateDataService';
 import { INITIAL_EVALUATION_TESTS } from '../../data/testTemplates';
@@ -32,7 +38,13 @@ export type MainAdminTab =
   | 'TALENT_POOL' 
   | 'DESARROLLO' 
   | 'POTENCIAL'
-  | 'POSTULANTES';
+  | 'POSTULANTES'
+  | 'VIRALIZACION'
+  | 'TRUST'
+  | 'SEGURIDAD'
+  | 'INFORMES'
+  | 'CONTRATADOS'
+  | 'NO_DESEADOS';
 
 interface AdminDashboardProps {
   candidates: Candidate[];
@@ -41,6 +53,10 @@ interface AdminDashboardProps {
   onSwitchToCandidateView: (candidateId?: string) => void;
   activeTab?: MainAdminTab;
   onTabChange?: (tab: MainAdminTab) => void;
+  activeProcessId?: string;
+  onSelectProcess?: (id: string | null) => void;
+  activeModuleFilter?: ProcessModuleFilter;
+  onSelectModuleFilter?: (filter: ProcessModuleFilter) => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -49,7 +65,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onAddCandidates,
   onSwitchToCandidateView,
   activeTab: activeTabProp = 'PROCESOS',
-  onTabChange
+  onTabChange,
+  activeProcessId,
+  onSelectProcess,
+  activeModuleFilter: activeModuleFilterProp,
+  onSelectModuleFilter: onSelectModuleFilterProp
 }) => {
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
   const [reportCandidate, setReportCandidate] = useState<Candidate | null>(null);
@@ -61,6 +81,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [internalTab, setInternalTab] = useState<MainAdminTab>(activeTabProp);
   const [filterByActiveProcess, setFilterByActiveProcess] = useState<boolean>(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const [internalModuleFilter, setInternalModuleFilter] = useState<ProcessModuleFilter>(
+    activeTabProp === 'VIRALIZACION' ? 'VIRALIZACION' :
+    activeTabProp === 'TRUST' ? 'TRUST' :
+    activeTabProp === 'SEGURIDAD' ? 'SEGURIDAD' : 'TODOS'
+  );
+  const activeModuleFilter = activeModuleFilterProp || internalModuleFilter;
+  const setActiveModuleFilter = (filter: ProcessModuleFilter) => {
+    setInternalModuleFilter(filter);
+    onSelectModuleFilterProp?.(filter);
+  };
 
   // Sync prop changes
   useEffect(() => {
@@ -79,6 +110,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [processes, setProcesses] = useState<EvaluationTest[]>([]);
   const [profiles, setProfiles] = useState<EvaluationTest[]>([]);
   const [activeTestId, setActiveTestId] = useState<string>('');
+  const [selectedProcessForControl, setSelectedProcessForControl] = useState<EvaluationTest | null>(null);
 
   // Cargar procesos y perfiles reales desde Supabase al iniciar
   useEffect(() => {
@@ -108,6 +140,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
     loadDataFromSupabase();
   }, []);
+
+  // Sincronizar proceso específico seleccionado para la vista de control (URL o interactivo)
+  useEffect(() => {
+    if (activeProcessId && processes.length > 0) {
+      const found = processes.find(p => 
+        p.id === activeProcessId || 
+        (p.code && p.code === activeProcessId) ||
+        (p.id && activeProcessId && p.id.toLowerCase() === activeProcessId.toLowerCase())
+      );
+      if (found) {
+        setSelectedProcessForControl(found);
+      }
+    } else if (!activeProcessId) {
+      setSelectedProcessForControl(null);
+    }
+  }, [activeProcessId, processes]);
+
+  const handleOpenProcessDetail = (test: EvaluationTest) => {
+    setSelectedProcessForControl(test);
+    setActiveTestId(test.id);
+    onSelectProcess?.(test.id);
+  };
+
+  const handleBackFromProcessDetail = () => {
+    setSelectedProcessForControl(null);
+    onSelectProcess?.(null);
+  };
 
   const currentActiveTest = processes.find(t => t.id === activeTestId) || processes[0] || INITIAL_EVALUATION_TESTS[0];
 
@@ -286,7 +345,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           onOpenReport={(cand) => setReportCandidate(cand)}
           onSelectCandidate={(cand) => setSelectedCandidate(cand)}
           onViewProcess={(test) => {
-            setActiveTestId(test.id);
+            handleOpenProcessDetail(test);
             setFilterByActiveProcess(true);
             setActiveTab('PROCESOS');
             showToast(`→ Abriendo proceso: ${test.title}`);
@@ -314,17 +373,75 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         />
       )}
 
-      {/* 3. PROCESOS: VISUAL DE PROCESOS ACTIVOS, BOTÓN NUEVO PROCESO, CONFIGURACIÓN DE PRUEBAS */}
+      {/* 3. PROCESOS: VISTA DE CONTROL DE PROCESO (EVALUAR V4.1.2) O LISTADO DE PROCESOS */}
       {activeTab === 'PROCESOS' && (
+        selectedProcessForControl ? (
+          <ProcessDetailControlView
+            process={selectedProcessForControl}
+            candidates={candidates}
+            onBack={handleBackFromProcessDetail}
+            onViewCandidateDetail={(cand) => setSelectedCandidate(cand)}
+            onOpenInviteModal={() => {
+              setInviteTargetTestId(selectedProcessForControl.id);
+              setShowInviteModal(true);
+            }}
+            onSwitchToCandidateExam={onSwitchToCandidateView}
+            onUpdateCandidate={onUpdateCandidate}
+          />
+        ) : (
+          <EvaluarProcessListView
+            tests={processes}
+            candidates={candidates}
+            activeTestId={activeTestId}
+            activeModuleFilter={activeModuleFilter}
+            onSelectModuleFilter={setActiveModuleFilter}
+            onSelectActiveTest={(testId) => {
+              setActiveTestId(testId);
+              setFilterByActiveProcess(true);
+              showToast(`✓ Convocatoria activa: ${processes.find(t => t.id === testId)?.title}`);
+            }}
+            onOpenProcessDetail={handleOpenProcessDetail}
+            onOpenInviteForTest={(testId) => {
+              setInviteTargetTestId(testId);
+              setShowInviteModal(true);
+            }}
+            onCreateNewProcess={() => {
+              setCreateProcessPreselectedProfileId(null);
+              setShowCreateProcessModal(true);
+            }}
+            onViewReportsForTest={(testId) => {
+              setActiveTestId(testId);
+              setFilterByActiveProcess(true);
+              setActiveTab('ANALITICA');
+            }}
+            onCreateTest={handleCreateTest}
+            onUpdateProcessStatus={handleUpdateProcessStatus}
+            onDeleteProcess={handleDeleteProcess}
+            onViewCandidateDetail={(cand) => setSelectedCandidate(cand)}
+            onSwitchToCandidateExam={onSwitchToCandidateView}
+            onViewAssignedCandidates={() => setActiveTab('POSTULANTES')}
+          />
+        )
+      )}
+
+      {/* 4. POSTULANTES ASIGNADOS (Gestión de postulantes convocados, estados y derechos ARCO) */}
+      {activeTab === 'POSTULANTES' && (
+        <AssignedCandidatesView
+          tests={processes}
+          onBackToProcesses={() => setActiveTab('PROCESOS')}
+        />
+      )}
+
+      {/* 5. VIRALIZACIÓN & DIFUSIÓN (Convocatorias con viralización y filtrado - Evaluar v4.1.2) */}
+      {activeTab === 'VIRALIZACION' && (
         <EvaluarProcessListView
           tests={processes}
           candidates={candidates}
           activeTestId={activeTestId}
-          onSelectActiveTest={(testId) => {
-            setActiveTestId(testId);
-            setFilterByActiveProcess(true);
-            showToast(`✓ Convocatoria activa: ${processes.find(t => t.id === testId)?.title}`);
-          }}
+          activeModuleFilter="VIRALIZACION"
+          onSelectModuleFilter={setActiveModuleFilter}
+          onSelectActiveTest={setActiveTestId}
+          onOpenProcessDetail={handleOpenProcessDetail}
           onOpenInviteForTest={(testId) => {
             setInviteTargetTestId(testId);
             setShowInviteModal(true);
@@ -333,25 +450,57 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             setCreateProcessPreselectedProfileId(null);
             setShowCreateProcessModal(true);
           }}
-          onViewReportsForTest={(testId) => {
-            setActiveTestId(testId);
-            setFilterByActiveProcess(true);
-            setActiveTab('ANALITICA');
-          }}
-          onCreateTest={handleCreateTest}
-          onUpdateProcessStatus={handleUpdateProcessStatus}
-          onDeleteProcess={handleDeleteProcess}
           onViewCandidateDetail={(cand) => setSelectedCandidate(cand)}
           onSwitchToCandidateExam={onSwitchToCandidateView}
           onViewAssignedCandidates={() => setActiveTab('POSTULANTES')}
         />
       )}
 
-      {/* 4. POSTULANTES ASIGNADOS (Gestión de postulantes convocados, estados y derechos ARCO) */}
-      {activeTab === 'POSTULANTES' && (
-        <AssignedCandidatesView
+      {/* 6. TRUST & ANTIFRAUDE (Filtro Trust - Evaluar v4.1.2) */}
+      {activeTab === 'TRUST' && (
+        <EvaluarProcessListView
           tests={processes}
-          onBackToProcesses={() => setActiveTab('PROCESOS')}
+          candidates={candidates}
+          activeTestId={activeTestId}
+          activeModuleFilter="TRUST"
+          onSelectModuleFilter={setActiveModuleFilter}
+          onSelectActiveTest={setActiveTestId}
+          onOpenProcessDetail={handleOpenProcessDetail}
+          onOpenInviteForTest={(testId) => {
+            setInviteTargetTestId(testId);
+            setShowInviteModal(true);
+          }}
+          onCreateNewProcess={() => {
+            setCreateProcessPreselectedProfileId(null);
+            setShowCreateProcessModal(true);
+          }}
+          onViewCandidateDetail={(cand) => setSelectedCandidate(cand)}
+          onSwitchToCandidateExam={onSwitchToCandidateView}
+          onViewAssignedCandidates={() => setActiveTab('POSTULANTES')}
+        />
+      )}
+
+      {/* 7. SEGURIDAD & AUDITORÍA (Filtro SAFER - Evaluar v4.1.2) */}
+      {activeTab === 'SEGURIDAD' && (
+        <EvaluarProcessListView
+          tests={processes}
+          candidates={candidates}
+          activeTestId={activeTestId}
+          activeModuleFilter="SEGURIDAD"
+          onSelectModuleFilter={setActiveModuleFilter}
+          onSelectActiveTest={setActiveTestId}
+          onOpenProcessDetail={handleOpenProcessDetail}
+          onOpenInviteForTest={(testId) => {
+            setInviteTargetTestId(testId);
+            setShowInviteModal(true);
+          }}
+          onCreateNewProcess={() => {
+            setCreateProcessPreselectedProfileId(null);
+            setShowCreateProcessModal(true);
+          }}
+          onViewCandidateDetail={(cand) => setSelectedCandidate(cand)}
+          onSwitchToCandidateExam={onSwitchToCandidateView}
+          onViewAssignedCandidates={() => setActiveTab('POSTULANTES')}
         />
       )}
 
@@ -381,6 +530,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             setActiveTab('PROCESOS');
           }}
         />
+      )}
+
+      {/* 8. INFORMES CONSOLIDADOS & EXCEL (GEA Selección) */}
+      {activeTab === 'INFORMES' && (
+        <InformesView
+          candidates={candidates}
+          tests={processes}
+          onOpenReport={(cand) => setReportCandidate(cand)}
+        />
+      )}
+
+      {/* 9. BANDEJA DE CONTRATADOS */}
+      {activeTab === 'CONTRATADOS' && (
+        <ContratadosView
+          candidates={candidates}
+          tests={processes}
+          onOpenCandidateDetail={(cand) => setSelectedCandidate(cand)}
+        />
+      )}
+
+      {/* 10. LISTA NO DESEADOS & PREVENCIÓN DE FRAUDE */}
+      {activeTab === 'NO_DESEADOS' && (
+        <NoDeseadosView />
       )}
 
       {/* ========================================================================= */}
