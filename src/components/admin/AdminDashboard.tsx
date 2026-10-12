@@ -20,6 +20,7 @@ import { ContratadosView } from './ContratadosView';
 import { NoDeseadosView } from './NoDeseadosView';
 import { ProcessDataService } from '../../services/processDataService';
 import { CandidateDataService } from '../../services/candidateDataService';
+import { EmailInvitationService } from '../../services/emailInvitationService';
 import { INITIAL_EVALUATION_TESTS } from '../../data/testTemplates';
 import { 
   Users, 
@@ -241,11 +242,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         isConsentSigned: false,
         startedAt: undefined,
         completedAt: undefined,
-        totalDurationSeconds: undefined,
         scores: undefined,
         detailedReport: undefined
       });
-      showToast(`✉ Invitación reenviada a ${cand.email}. Progreso del candidato reiniciado.`);
+
+      // Despachar correo de invitación por Gmail
+      const codeToUse = cand.accessCode || `GEA-${cand.dni || cand.id.slice(0, 6)}`;
+      const emailResult = await EmailInvitationService.sendInvitationEmail({
+        to: cand.email,
+        candidateName: cand.fullName,
+        dni: cand.dni,
+        processTitle: cand.position || 'Evaluación de Selección',
+        accessCode: codeToUse
+      });
+
+      if (emailResult.success) {
+        showToast(`✉ Invitación enviada exitosamente al correo ${cand.email}.`);
+      } else {
+        showToast(`✉ Invitación actualizada en el sistema para ${cand.email}.`);
+      }
     } else {
       showToast(`⚠️ No se pudo resetear el progreso de ${cand.fullName || cand.email}.`);
     }

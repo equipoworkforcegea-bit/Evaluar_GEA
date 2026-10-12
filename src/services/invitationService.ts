@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient';
 import { generateSafeUuid } from './processDataService';
+import { EmailInvitationService } from './emailInvitationService';
 
 export interface PostulanteInviteData {
   correo: string;
@@ -100,24 +101,21 @@ export const InvitationService = {
       
       const whatsappUrl = `https://wa.me/${phoneForWhatsapp}?text=${encodeURIComponent(whatsappMsg)}`;
 
-      // Intentar despacho por Edge Function de Supabase en segundo plano si está disponible
+      // Enviar correo formal de invitación a través del endpoint de Gmail
       try {
-        supabase.functions.invoke('invitar-postulante', {
-          body: {
-            correo: emailClean,
-            nombre: data.nombre,
-            apellido: data.apellido,
-            nombre_completo: data.nombreCompleto,
-            dni: dniClean,
-            telefono: data.telefono,
-            proceso_id: procUuid,
-            titulo_proceso: processName,
-            duracion_minutos: data.duracionMinutos,
-            invite_url: inviteUrl
-          }
-        }).catch(() => {});
-      } catch {
-        // No bloqueante
+        EmailInvitationService.sendInvitationEmail({
+          to: emailClean,
+          candidateName: data.nombreCompleto || `${data.nombre} ${data.apellido}`,
+          dni: dniClean,
+          processTitle: processName,
+          accessCode: codigoFinal,
+          durationMinutes: data.duracionMinutos || 45,
+          customLoginUrl: inviteUrl
+        }).catch((err) => {
+          console.warn('[InvitationService] No se pudo enviar correo por Gmail:', err);
+        });
+      } catch (err) {
+        console.warn('[InvitationService] Error al disparar envío de correo:', err);
       }
 
       return {
