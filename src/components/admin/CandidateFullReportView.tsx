@@ -96,13 +96,6 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
 
   const scoreVal = candidate.scores?.overall || 87;
 
-  // Lista de procesos disponibles para invitar a otro proceso
-  const availableProcesses = allProcesses.length > 0 ? allProcesses : [
-    { id: 'proc-01', title: 'ASESOR POSTPAGO CLARO CHILE', code: 'CLARO-POST-01', targetPosition: 'Asesor de Ventas Postpago' },
-    { id: 'proc-02', title: 'SUPERVISOR DE OPERACIONES CALL CENTER', code: 'SUP-OPS-02', targetPosition: 'Supervisor de Atención y Retención' },
-    { id: 'proc-03', title: 'ASESOR DE RETENCIÓN Y FIDELIZACIÓN', code: 'RET-03', targetPosition: 'Asesor de Retención Telefónica' },
-    { id: 'proc-04', title: 'ANALISTA DE CALIDAD Y MONITOREO', code: 'QA-04', targetPosition: 'Analista QA Operativo' }
-  ];
 
   // Preguntas del acordeón de descripción (las 10 preguntas exactas de la captura de Evaluar)
   const ACCORDION_QUESTIONS = [
