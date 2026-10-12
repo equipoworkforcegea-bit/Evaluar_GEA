@@ -16,7 +16,8 @@ import {
   ArrowRight,
   ShieldAlert,
   Sparkles,
-  Printer
+  Printer,
+  Download
 } from 'lucide-react';
 
 interface CandidatePipelineProps {
@@ -542,11 +543,11 @@ export const CandidatePipeline: React.FC<CandidatePipelineProps> = ({
                               e.stopPropagation();
                               onOpenReport(cand);
                             }}
-                            className="px-2.5 py-1.5 border border-blue-200 dark:border-blue-900 bg-blue-50/70 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
-                            title="Imprimir informe oficial de resultados en PDF"
+                            className="px-2.5 py-1.5 border border-purple-200 dark:border-purple-900 bg-purple-50/70 dark:bg-purple-950/40 text-[#6355DE] dark:text-purple-300 hover:bg-purple-100 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                            title="Descargar informe oficial de resultados en PDF"
                           >
-                            <Printer className="w-3.5 h-3.5" />
-                            <span>Informe</span>
+                            <Download className="w-3.5 h-3.5" />
+                            <span>Informe PDF</span>
                           </button>
                         )}
 

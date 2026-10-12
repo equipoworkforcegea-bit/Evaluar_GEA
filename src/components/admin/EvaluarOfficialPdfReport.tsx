@@ -200,8 +200,15 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
     }).join(' ');
   };
 
-  const handlePrint = () => {
+  const handleDownloadPdf = () => {
+    const originalTitle = document.title;
+    const cleanName = candidateName.replace(/[^\w\s-]/gi, '').trim().replace(/\s+/g, '_');
+    const cleanPosition = positionTitle.replace(/[^\w\s-]/gi, '').trim().replace(/\s+/g, '_');
+    document.title = `Reporte_Oficial_Evaluar_GEA_${cleanName || 'Postulante'}_${cleanPosition || 'Evaluacion'}`;
     window.print();
+    setTimeout(() => {
+      document.title = originalTitle;
+    }, 1500);
   };
 
   return (
@@ -209,15 +216,16 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
       
       {/* Top Floating Action Bar (Hidden on print) */}
       <div className="fixed top-4 right-4 z-[210] flex items-center gap-3 print:hidden bg-zinc-900/90 text-white px-5 py-2.5 rounded-2xl border border-zinc-700 shadow-2xl backdrop-blur-md">
-        <span className="text-xs font-semibold text-zinc-300">Vista de impresión Oficial (15 págs.)</span>
+        <span className="text-xs font-semibold text-zinc-300">Reporte Oficial (15 págs.)</span>
         
         <button
           type="button"
-          onClick={handlePrint}
+          onClick={handleDownloadPdf}
           className="px-4 py-2 rounded-xl bg-[#6355DE] hover:bg-[#5244C9] text-white font-bold text-xs flex items-center gap-2 shadow-md cursor-pointer transition-all active:scale-95"
+          title="Descargar el informe oficial completo en PDF"
         >
-          <Printer className="w-4 h-4" />
-          <span>Imprimir / Guardar en PDF</span>
+          <Download className="w-4 h-4" />
+          <span>Descargar PDF</span>
         </button>
 
         {onClose && (
@@ -225,7 +233,7 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
             type="button"
             onClick={onClose}
             className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 cursor-pointer transition-colors"
-            title="Cerrar vista de impresión"
+            title="Cerrar vista previa"
           >
             <X className="w-4 h-4" />
           </button>

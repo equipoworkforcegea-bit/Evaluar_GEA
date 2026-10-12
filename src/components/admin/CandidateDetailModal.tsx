@@ -24,7 +24,8 @@ import {
   FileText, 
   HelpCircle,
   TrendingUp,
-  BarChart3
+  BarChart3,
+  Download
 } from 'lucide-react';
 
 interface CandidateDetailModalProps {
@@ -589,10 +590,10 @@ export const CandidateDetailModal: React.FC<CandidateDetailModalProps> = ({
               <button
                 type="button"
                 onClick={() => setShowPrintModal(true)}
-                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-98 transition-all"
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-[#6355DE] hover:bg-[#5244C9] text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-98 transition-all"
               >
-                <Printer className="w-4 h-4" />
-                <span>Imprimir Reporte Oficial (PDF)</span>
+                <Download className="w-4 h-4" />
+                <span>Descargar Reporte Oficial (PDF)</span>
               </button>
 
               <button
