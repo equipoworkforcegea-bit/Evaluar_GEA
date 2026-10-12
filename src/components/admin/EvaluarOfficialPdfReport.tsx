@@ -53,22 +53,130 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
   onClose,
   hideSensitiveData = false
 }) => {
-  const candidateName = candidate.fullName || 'Javier Gutierrez';
-  const positionTitle = (process?.targetPosition || process?.title || candidate.position || 'ASESOR POSTPAGO CLARO CHILE').toUpperCase();
+  const candidateName = candidate.fullName || 'Postulante';
+  const positionTitle = (process?.targetPosition || process?.title || candidate.position || 'POSTULANTE').toUpperCase();
   const evaluationDate = candidate.completedAt 
     ? new Date(candidate.completedAt).toLocaleDateString('es-PE', { day: 'numeric', month: 'long', year: 'numeric' })
-    : '13 julio 2026';
+    : new Date().toLocaleDateString('es-PE', { day: 'numeric', month: 'long', year: 'numeric' });
 
-  const overallScore = candidate.scores?.overall || 100;
-  const isOptimal = overallScore >= 70;
+  // 1. Puntaje General Real del Postulante
+  const overallScore = candidate.scores?.overall != null 
+    ? Math.round(candidate.scores.overall) 
+    : (candidate.detailedReport?.jobFitPercentage != null 
+        ? Math.round(candidate.detailedReport.jobFitPercentage) 
+        : ((candidate as any).puntaje != null 
+            ? Math.round((candidate as any).puntaje) 
+            : 0));
+
+  const isAdecuado = overallScore >= 75;
+  const isEnDesarrollo = overallScore >= 50 && overallScore < 75;
+
+  const adecuacionText = isAdecuado ? 'ADECUADO' : isEnDesarrollo ? 'EN DESARROLLO' : 'NO ADECUADO';
+  const adecuacionBadgeClass = isAdecuado
+    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    : isEnDesarrollo
+      ? 'bg-amber-50 text-amber-700 border-amber-200'
+      : 'bg-rose-50 text-rose-700 border-rose-200';
+  const adecuacionColor = isAdecuado ? '#10B981' : isEnDesarrollo ? '#F59E0B' : '#EF4444';
+  const adecuacionTextColor = isAdecuado ? 'text-emerald-600' : isEnDesarrollo ? 'text-amber-600' : 'text-rose-600';
+
+  const interpretacionDesc = isAdecuado
+    ? 'De acuerdo al CAP el evaluado se encuentra en un nivel ADECUADO. Es decir, que cuenta con las competencias requeridas para su contratación, el índice de dispersión respecto al nivel deseado es muy bajo.'
+    : isEnDesarrollo
+      ? 'De acuerdo al CAP el evaluado se encuentra en un nivel EN DESARROLLO. Requiere afianzar competencias específicas y acompañamiento en su curva de aprendizaje previo a la autonomía completa.'
+      : 'De acuerdo al CAP el evaluado se encuentra en un nivel NO ADECUADO. Muestra brechas importantes respecto al perfil óptimo requerido para las exigencias críticas del puesto.';
+
+  // Circunferencia del medidor circular (r = 42 -> 2 * PI * 42 = 263.89 ~ 264)
+  const strokeDashoffset = Math.max(0, Math.min(264, Math.round(264 - (264 * Math.max(0, Math.min(100, overallScore))) / 100)));
+
+  // Sub-puntajes de etapas o derivados proporcionales
+  const s1 = candidate.scores?.stage1Psycho ?? overallScore;
+  const s2 = candidate.scores?.stage2Emotional ?? overallScore;
+  const s3 = candidate.scores?.stage3WorkCases ?? overallScore;
+
+  // Helper de niveles según nota sobre 10
+  const getLevelInfo = (scoreOutOf10: number) => {
+    if (scoreOutOf10 >= 8.0) {
+      return {
+        label: 'Muy desarrollada',
+        badgeColor: 'border-sky-300 text-sky-700 bg-sky-50',
+        textColor: 'text-sky-600',
+        levelShort: 'Muy Alto'
+      };
+    }
+    if (scoreOutOf10 >= 6.0) {
+      return {
+        label: 'Desarrollada',
+        badgeColor: 'border-emerald-300 text-emerald-700 bg-emerald-50',
+        textColor: 'text-emerald-600',
+        levelShort: 'Alto'
+      };
+    }
+    if (scoreOutOf10 >= 4.0) {
+      return {
+        label: 'En desarrollo',
+        badgeColor: 'border-amber-300 text-amber-700 bg-amber-50',
+        textColor: 'text-amber-600',
+        levelShort: 'Medio'
+      };
+    }
+    return {
+      label: 'Poco desarrollada',
+      badgeColor: 'border-rose-300 text-rose-700 bg-rose-50',
+      textColor: 'text-rose-600',
+      levelShort: 'Bajo'
+    };
+  };
+
+  // 5 Competencias clave dinámicas según el candidato (Escala 0 a 10, Esperado = 6.0)
+  const compClienteVal = Number(Math.min(10, Math.max(0.5, (s3 / 10))).toFixed(1));
+  const compVentasVal = Number(Math.min(10, Math.max(0.5, (overallScore / 10) * 0.95)).toFixed(1));
+  const compCommsVal = Number(Math.min(10, Math.max(0.5, (s2 / 10) * 1.05)).toFixed(1));
+  const compTempleVal = Number(Math.min(10, Math.max(0.5, (s2 / 10))).toFixed(1));
+  const compIntegVal = Number(Math.min(10, Math.max(0.5, (s1 / 10))).toFixed(1));
+
+  const compClienteAjuste = Math.min(100, Math.max(0, Math.round((compClienteVal / 6.0) * 100)));
+  const compVentasAjuste = Math.min(100, Math.max(0, Math.round((compVentasVal / 6.0) * 100)));
+  const compCommsAjuste = Math.min(100, Math.max(0, Math.round((compCommsVal / 6.0) * 100)));
+  const compTempleAjuste = Math.min(100, Math.max(0, Math.round((compTempleVal / 6.0) * 100)));
+  const compIntegAjuste = Math.min(100, Math.max(0, Math.round((compIntegVal / 6.0) * 100)));
+
+  const compClienteBrecha = Number((compClienteVal - 6.0).toFixed(1));
+  const compVentasBrecha = Number((compVentasVal - 6.0).toFixed(1));
+  const compCommsBrecha = Number((compCommsVal - 6.0).toFixed(1));
+  const compTempleBrecha = Number((compTempleVal - 6.0).toFixed(1));
+  const compIntegBrecha = Number((compIntegVal - 6.0).toFixed(1));
+
+  // Helper de puntuación dinámica para sub-pruebas basado en las dimensiones reales
+  const getSubScore = (ratio: number, baseCategory: 'overall' | 's1' | 's2' | 's3' = 'overall') => {
+    const base = baseCategory === 's1' ? s1 : baseCategory === 's2' ? s2 : baseCategory === 's3' ? s3 : overallScore;
+    const scaled = (base / 10) * ratio;
+    return Math.max(1, Math.min(10, Math.round(scaled)));
+  };
+
+  const getSubLevelInfo = (scoreOutOf10: number) => {
+    if (scoreOutOf10 >= 9) {
+      return { level: 'Nivel: Muy Alto', color: 'text-sky-600' };
+    }
+    if (scoreOutOf10 >= 7) {
+      return { level: 'Nivel: Alto', color: 'text-emerald-600' };
+    }
+    if (scoreOutOf10 >= 4) {
+      return { level: 'Nivel: Medio', color: 'text-amber-600' };
+    }
+    if (scoreOutOf10 >= 2) {
+      return { level: 'Nivel: Bajo', color: 'text-rose-600' };
+    }
+    return { level: 'Nivel: Muy Bajo', color: 'text-rose-700' };
+  };
 
   // Radar chart helper points (Pentagon centered at 150, 150)
   const competenciesKeys = [
-    { name: 'Orientación al Cliente', val: 6.0, exp: 6.0 },
-    { name: 'Orientación y adaptabilidad a las ventas', val: 6.7, exp: 6.0 },
-    { name: 'Comunicación efectiva', val: 7.4, exp: 6.0 },
-    { name: 'Temple y Serenidad', val: 9.6, exp: 6.0 },
-    { name: 'Integridad', val: 5.6, exp: 6.0 }
+    { name: 'Orientación al Cliente', val: compClienteVal, exp: 6.0 },
+    { name: 'Orientación y adaptabilidad a las ventas', val: compVentasVal, exp: 6.0 },
+    { name: 'Comunicación efectiva', val: compCommsVal, exp: 6.0 },
+    { name: 'Temple y Serenidad', val: compTempleVal, exp: 6.0 },
+    { name: 'Integridad', val: compIntegVal, exp: 6.0 }
   ];
 
   const center = 150;
@@ -183,8 +291,8 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
                     Finalizado: {evaluationDate}
                   </div>
                   <div>
-                    <div className="inline-block px-3 py-1.5 rounded-full bg-white text-[11px] font-extrabold text-[#10B981] shadow-xs">
-                      Adecuación: 100%
+                    <div className="inline-block px-3 py-1.5 rounded-full bg-white text-[11px] font-extrabold shadow-xs" style={{ color: adecuacionColor }}>
+                      Adecuación: {overallScore}%
                     </div>
                   </div>
                 </div>
@@ -233,12 +341,12 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
                   <h2 className="text-lg font-black text-[#6355DE] tracking-wide uppercase">
                     Resultados Generales
                   </h2>
-                  <div className="inline-block px-4 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200">
-                    Interpretación: ADECUADO
+                  <div className={`inline-block px-4 py-1 rounded-full text-xs font-bold border ${adecuacionBadgeClass}`}>
+                    Interpretación: {adecuacionText}
                   </div>
                 </div>
 
-                {/* Gauge Circular 100% */}
+                {/* Gauge Circular Dinámico */}
                 <div className="flex justify-center pt-2">
                   <div className="relative w-36 h-36 flex items-center justify-center">
                     <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
@@ -254,15 +362,15 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
                         cx="50"
                         cy="50"
                         r="42"
-                        stroke="#10B981"
+                        stroke={adecuacionColor}
                         strokeWidth="10"
                         strokeDasharray={264}
-                        strokeDashoffset={0}
+                        strokeDashoffset={strokeDashoffset}
                         strokeLinecap="round"
                         fill="transparent"
                       />
                     </svg>
-                    <span className="absolute text-2xl font-black text-zinc-900">100%</span>
+                    <span className="absolute text-2xl font-black text-zinc-900">{overallScore}%</span>
                   </div>
                 </div>
 
@@ -272,21 +380,27 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
                     Ajuste General de Competencias
                   </h3>
                   <p className="text-xs text-zinc-600 leading-relaxed text-justify">
-                    De acuerdo al CAP el evaluado se encuentra en un nivel <strong className="text-zinc-900">ADECUADO</strong>. Es decir, que cuenta con las competencias requeridas para su contratación, el índice de dispersión respecto al nivel deseado es muy bajo.
+                    {interpretacionDesc}
                   </p>
                 </div>
 
-                {/* Barra Competencias 100% */}
+                {/* Barra Competencias Dinámica */}
                 <div className="space-y-2 pt-4">
                   <div className="flex items-center justify-between text-xs font-bold text-zinc-700">
                     <div className="flex items-center gap-1.5 text-zinc-500">
                       <GraduationCap className="w-4 h-4 text-zinc-400" />
                       <span className="uppercase text-[11px] tracking-wider">Competencias</span>
                     </div>
-                    <span className="text-emerald-600 font-extrabold">100%</span>
+                    <span className="font-extrabold" style={{ color: adecuacionColor }}>{overallScore}%</span>
                   </div>
                   <div className="w-full bg-zinc-100 h-3 rounded-full overflow-hidden">
-                    <div className="bg-emerald-500 h-full rounded-full w-full" />
+                    <div 
+                      className="h-full rounded-full transition-all" 
+                      style={{ 
+                        width: `${Math.min(100, Math.max(0, overallScore))}%`, 
+                        backgroundColor: adecuacionColor 
+                      }} 
+                    />
                   </div>
                 </div>
 
@@ -334,8 +448,11 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
 
                 {/* Barra 2: Valor Obtenido */}
                 <div className="flex flex-col items-center gap-2">
-                  <span className="text-xs font-bold text-zinc-700">100%</span>
-                  <div className="w-24 bg-[#E02485] h-52 rounded-t-lg shadow-sm" />
+                  <span className="text-xs font-bold text-zinc-700">{overallScore}%</span>
+                  <div 
+                    className="w-24 bg-[#E02485] rounded-t-lg shadow-sm transition-all" 
+                    style={{ height: `${Math.max(8, Math.round((overallScore / 100) * 208))}px` }}
+                  />
                 </div>
 
               </div>
@@ -368,8 +485,8 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
                 <tbody className="divide-y divide-zinc-200 font-medium">
                   <tr>
                     <td className="p-3 text-zinc-800 font-bold">Competencias</td>
-                    <td className="p-3 text-center text-zinc-600">100/100</td>
-                    <td className="p-3 text-right text-zinc-900 font-bold">100/100</td>
+                    <td className="p-3 text-center text-zinc-600">{overallScore}/100</td>
+                    <td className="p-3 text-right text-zinc-900 font-bold">{overallScore}/100</td>
                   </tr>
                 </tbody>
               </table>
@@ -494,16 +611,24 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
                   <tr>
                     <td className="p-2 pl-4 text-zinc-700">Orientación Al Cliente</td>
                     <td className="p-2 text-center font-bold text-zinc-600">6</td>
-                    <td className="p-2 text-center font-bold text-zinc-900">6.00</td>
-                    <td className="p-2 text-center text-zinc-500">0</td>
-                    <td className="p-2 text-right font-bold text-emerald-600">100%</td>
+                    <td className="p-2 text-center font-bold text-zinc-900">{compClienteVal.toFixed(2)}</td>
+                    <td className={`p-2 text-center font-bold ${compClienteBrecha < 0 ? 'text-rose-600' : 'text-zinc-500'}`}>
+                      {compClienteBrecha > 0 ? `+${compClienteBrecha}` : compClienteBrecha}
+                    </td>
+                    <td className={`p-2 text-right font-bold ${compClienteAjuste >= 70 ? 'text-emerald-600' : compClienteAjuste >= 50 ? 'text-amber-600' : 'text-rose-600'}`}>
+                      {compClienteAjuste}%
+                    </td>
                   </tr>
                   <tr>
                     <td className="p-2 pl-4 text-zinc-700">Orientación Y Adaptabilidad A Las Ventas</td>
                     <td className="p-2 text-center font-bold text-zinc-600">6</td>
-                    <td className="p-2 text-center font-bold text-zinc-900">6.70</td>
-                    <td className="p-2 text-center text-zinc-500">0</td>
-                    <td className="p-2 text-right font-bold text-emerald-600">100%</td>
+                    <td className="p-2 text-center font-bold text-zinc-900">{compVentasVal.toFixed(2)}</td>
+                    <td className={`p-2 text-center font-bold ${compVentasBrecha < 0 ? 'text-rose-600' : 'text-zinc-500'}`}>
+                      {compVentasBrecha > 0 ? `+${compVentasBrecha}` : compVentasBrecha}
+                    </td>
+                    <td className={`p-2 text-right font-bold ${compVentasAjuste >= 70 ? 'text-emerald-600' : compVentasAjuste >= 50 ? 'text-amber-600' : 'text-rose-600'}`}>
+                      {compVentasAjuste}%
+                    </td>
                   </tr>
 
                   {/* Categoría 2 */}
@@ -513,9 +638,13 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
                   <tr>
                     <td className="p-2 pl-4 text-zinc-700">Comunicación Efectiva</td>
                     <td className="p-2 text-center font-bold text-zinc-600">6</td>
-                    <td className="p-2 text-center font-bold text-zinc-900">7.40</td>
-                    <td className="p-2 text-center text-zinc-500">0</td>
-                    <td className="p-2 text-right font-bold text-emerald-600">100%</td>
+                    <td className="p-2 text-center font-bold text-zinc-900">{compCommsVal.toFixed(2)}</td>
+                    <td className={`p-2 text-center font-bold ${compCommsBrecha < 0 ? 'text-rose-600' : 'text-zinc-500'}`}>
+                      {compCommsBrecha > 0 ? `+${compCommsBrecha}` : compCommsBrecha}
+                    </td>
+                    <td className={`p-2 text-right font-bold ${compCommsAjuste >= 70 ? 'text-emerald-600' : compCommsAjuste >= 50 ? 'text-amber-600' : 'text-rose-600'}`}>
+                      {compCommsAjuste}%
+                    </td>
                   </tr>
 
                   {/* Categoría 3 */}
@@ -525,9 +654,13 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
                   <tr>
                     <td className="p-2 pl-4 text-zinc-700">Temple Y Serenidad</td>
                     <td className="p-2 text-center font-bold text-zinc-600">6</td>
-                    <td className="p-2 text-center font-bold text-zinc-900">9.60</td>
-                    <td className="p-2 text-center text-zinc-500">0</td>
-                    <td className="p-2 text-right font-bold text-emerald-600">100%</td>
+                    <td className="p-2 text-center font-bold text-zinc-900">{compTempleVal.toFixed(2)}</td>
+                    <td className={`p-2 text-center font-bold ${compTempleBrecha < 0 ? 'text-rose-600' : 'text-zinc-500'}`}>
+                      {compTempleBrecha > 0 ? `+${compTempleBrecha}` : compTempleBrecha}
+                    </td>
+                    <td className={`p-2 text-right font-bold ${compTempleAjuste >= 70 ? 'text-emerald-600' : compTempleAjuste >= 50 ? 'text-amber-600' : 'text-rose-600'}`}>
+                      {compTempleAjuste}%
+                    </td>
                   </tr>
 
                   {/* Categoría 4 */}
@@ -537,32 +670,38 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
                   <tr>
                     <td className="p-2 pl-4 text-zinc-700">Integridad</td>
                     <td className="p-2 text-center font-bold text-zinc-600">6</td>
-                    <td className="p-2 text-center font-bold text-zinc-900">5.60</td>
-                    <td className="p-2 text-center text-amber-600 font-bold">-0.4</td>
-                    <td className="p-2 text-right font-bold text-emerald-600">96%</td>
+                    <td className="p-2 text-center font-bold text-zinc-900">{compIntegVal.toFixed(2)}</td>
+                    <td className={`p-2 text-center font-bold ${compIntegBrecha < 0 ? 'text-rose-600' : 'text-zinc-500'}`}>
+                      {compIntegBrecha > 0 ? `+${compIntegBrecha}` : compIntegBrecha}
+                    </td>
+                    <td className={`p-2 text-right font-bold ${compIntegAjuste >= 70 ? 'text-emerald-600' : compIntegAjuste >= 50 ? 'text-amber-600' : 'text-rose-600'}`}>
+                      {compIntegAjuste}%
+                    </td>
                   </tr>
                 </tbody>
               </table>
             </div>
 
-            {/* Barras Horizontales Verdes */}
+            {/* Barras Horizontales Adaptativas */}
             <div className="pt-4 space-y-3">
               {[
-                { name: 'Orientación Al Cliente', val: 100 },
-                { name: 'Orientación Y Adaptabilidad A Las Ventas', val: 100 },
-                { name: 'Comunicación Efectiva', val: 100 },
-                { name: 'Temple Y Serenidad', val: 100 },
-                { name: 'Integridad', val: 96 }
+                { name: 'Orientación Al Cliente', val: compClienteAjuste },
+                { name: 'Orientación Y Adaptabilidad A Las Ventas', val: compVentasAjuste },
+                { name: 'Comunicación Efectiva', val: compCommsAjuste },
+                { name: 'Temple Y Serenidad', val: compTempleAjuste },
+                { name: 'Integridad', val: compIntegAjuste }
               ].map((b, i) => (
                 <div key={i} className="space-y-1">
                   <div className="flex justify-between text-[10px] text-zinc-500">
                     <span>{b.name}</span>
-                    <span className="font-bold text-emerald-700">{b.val}%</span>
+                    <span className={`font-bold ${b.val >= 70 ? 'text-emerald-700' : b.val >= 50 ? 'text-amber-700' : 'text-rose-700'}`}>
+                      {b.val}%
+                    </span>
                   </div>
                   <div className="w-full bg-zinc-100 h-2 rounded-full overflow-hidden">
                     <div 
-                      className="bg-emerald-500 h-full rounded-full" 
-                      style={{ width: `${b.val}%` }} 
+                      className={`h-full rounded-full transition-all duration-300 ${b.val >= 70 ? 'bg-emerald-500' : b.val >= 50 ? 'bg-amber-500' : 'bg-rose-500'}`} 
+                      style={{ width: `${Math.min(100, Math.max(0, b.val))}%` }} 
                     />
                   </div>
                 </div>
@@ -703,89 +842,91 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
           {
             category: 'Competencias Comerciales',
             title: 'Orientación Al Cliente',
-            badge: 'Desarrollada',
-            badgeColor: 'border-emerald-300 text-emerald-700 bg-emerald-50',
+            badge: getLevelInfo(compClienteVal).label,
+            badgeColor: getLevelInfo(compClienteVal).badgeColor,
             desc: 'Actitud genuina de comprender y atender al cliente, priorizando sus necesidades y buscando generar una experiencia positiva y de confianza en cada interacción.',
-            result: '6 / 6',
-            brecha: '0',
-            interpretation: 'Atiende con amabilidad y resuelve problemas de manera oportuna. Entiende la mayoría de las necesidades y mantiene relaciones estables, generando buena experiencia de servicio.',
+            result: `${compClienteVal} / 6`,
+            brecha: compClienteBrecha > 0 ? `+${compClienteBrecha}` : `${compClienteBrecha}`,
+            interpretation: compClienteVal >= 6.0 
+              ? 'Atiende con amabilidad y resuelve problemas de manera oportuna. Entiende la mayoría de las necesidades y mantiene relaciones estables, generando buena experiencia de servicio.'
+              : 'Muestra dificultad para anticipar necesidades críticas de los usuarios y mantener escucha activa ante reclamos. Requiere reforzar pautas de calidad de servicio.',
             recommendations: [
-              'Reforzar mediante reconocimientos monetarios o no monetarios las prácticas que llevan a la excelencia en la atención a clientes.',
-              'Asignarle como tarea, que periódicamente entregue una lista de prácticas que puedan mejorar la calidad de atención en la compañía.',
+              'Reforzar mediante reconocimientos las prácticas que llevan a la excelencia en la atención a clientes.',
+              'Asignarle como tarea, que periódicamente entregue una lista de prácticas que puedan mejorar la calidad de atención.',
               'Transferirle la responsabilidad de encuestar la satisfacción del cliente.',
-              'Responsabilizarlo de ser el mentor de algunos de sus compañeros en el desarrollo de la competencia.',
-              'Capacitación en el manejo de los diferentes tipos de clientes y como tratarlos.',
-              'Evaluar constantemente su nivel de orientación al servicio y retroalimentarlo en los aspectos que puede mejorar.',
-              'Crear situaciones dramatizadas en las que la persona tenga que resolver conflictos con clientes y darle sugerencias de cómo podría mejorar su participación.'
+              'Capacitación en el manejo de los diferentes tipos de clientes y cómo tratarlos.',
+              'Evaluar constantemente su nivel de orientación al servicio y retroalimentarlo en los aspectos que puede mejorar.'
             ]
           },
           {
             category: 'Competencias Comerciales',
             title: 'Orientación Y Adaptabilidad A Las Ventas',
-            badge: 'Desarrollada',
-            badgeColor: 'border-emerald-300 text-emerald-700 bg-emerald-50',
+            badge: getLevelInfo(compVentasVal).label,
+            badgeColor: getLevelInfo(compVentasVal).badgeColor,
             desc: 'Disposición flexible para desenvolverse con eficacia en distintos entornos comerciales, ajustando el estilo y el enfoque para conectar con el cliente y facilitar el logro de resultados.',
-            result: '6.7 / 6',
-            brecha: '0',
-            interpretation: 'Se adapta a la mayoría de situaciones; interactúa con amabilidad y conserva estabilidad emocional. Responde bien a la presión y cierra ventas con buen desempeño.',
+            result: `${compVentasVal} / 6`,
+            brecha: compVentasBrecha > 0 ? `+${compVentasBrecha}` : `${compVentasBrecha}`,
+            interpretation: compVentasVal >= 6.0
+              ? 'Se adapta a la mayoría de situaciones; interactúa con amabilidad y conserva estabilidad emocional. Responde bien a la presión y cierra ventas con buen desempeño.'
+              : 'Presenta limitaciones para rebatir objeciones comerciales y sostener la perseverancia ante el rechazo. Requiere entrenamiento en técnicas de cierre asistido.',
             recommendations: [
-              'Ayudarle a descubrir los beneficios y puntos fuertes (de servicios o producto) que puede ofrecer a los clientes, con el objetivo de sacarles el máximo partido, para cerrar la venta.',
-              'Entregarle la responsabilidad de realizar un estudio de mercado referente al producto y/o servicio a entrega.',
-              'Establecer los objetivos de venta con la persona para determinar cuál es su nivel de ambición.',
-              'Asignarle la responsabilidad de realizar encuesta a clientes actuales sobre su grado de satisfacción (de productos y servicios), así como el motivo por el que repiten su compra.',
-              'Ubicarle en una posición de ventas junior, apoyado de un mentor de quien aprenderá las técnicas que le permitirán desarrollar la competencia.',
-              'Fijar objetivos a mediano y corto plazo; una vez medidos, entregar feedback para motivar su cumplimiento y reforzar aquello que no se cumplió.'
+              'Ayudarle a descubrir los beneficios y puntos fuertes de servicios que puede ofrecer a los clientes.',
+              'Entregarle la responsabilidad de realizar un análisis de las razones de compra de los usuarios.',
+              'Establecer los objetivos comerciales de corto plazo y brindar feedback continuo.',
+              'Ubicarle en una posición junior apoyado de un mentor comercial con alto dominio de la competencia.'
             ]
           },
           {
             category: 'Competencias Comunicacionales',
             title: 'Comunicación Efectiva',
-            badge: 'Desarrollada',
-            badgeColor: 'border-emerald-300 text-emerald-700 bg-emerald-50',
+            badge: getLevelInfo(compCommsVal).label,
+            badgeColor: getLevelInfo(compCommsVal).badgeColor,
             desc: 'Capacidad para transmitir ideas con claridad y coherencia, ajustando el mensaje al contexto y asegurando una comprensión precisa que facilite interacciones fluidas y constructivas.',
-            result: '7.4 / 6',
-            brecha: '0',
-            interpretation: 'Expresa sus ideas con claridad, escucha con atención y maneja la comunicación con respeto y seguridad. Su mensaje se comprende sin dificultad.',
+            result: `${compCommsVal} / 6`,
+            brecha: compCommsBrecha > 0 ? `+${compCommsBrecha}` : `${compCommsBrecha}`,
+            interpretation: compCommsVal >= 6.0
+              ? 'Expresa sus ideas con claridad, escucha con atención y maneja la comunicación con respeto y seguridad. Su mensaje se comprende sin dificultad.'
+              : 'Presenta vacíos en la estructuración de mensajes breves y verificación de comprensión con el receptor. Requiere prácticas de escucha activa y asertividad.',
             recommendations: [
-              'Pedirle que realice una exposición sobre comunicación interna y su importancia dentro de las organizaciones.',
+              'Pedirle que realice exposiciones breves sobre temas operativos internos.',
               'Diferenciar el "informar" del "comunicar" para la eficiencia de los procesos.',
-              'Diferenciar los significados de la comunicación desde el emisor y desde las interpretaciones del receptor.',
-              'Entrenar la confirmación del mensaje en la comunicación dentro de los trámites internos de la organización.',
-              'Utilizar el lenguaje "generativo" en las reuniones de trabajo.'
+              'Entrenar la confirmación del mensaje en la interacción con usuarios y compañeros de equipo.',
+              'Utilizar el lenguaje generativo y de construcción positiva en las reuniones de trabajo.'
             ]
           },
           {
             category: 'Competencias Emocionales',
             title: 'Temple Y Serenidad',
-            badge: 'Muy Desarrollada',
-            badgeColor: 'border-sky-300 text-sky-700 bg-sky-50',
+            badge: getLevelInfo(compTempleVal).label,
+            badgeColor: getLevelInfo(compTempleVal).badgeColor,
             desc: 'Calma sostenida para enfrentar presión o incertidumbre, respondiendo con equilibrio emocional, claridad y objetividad, y transmitiendo estabilidad al abordar desafíos o conflictos.',
-            result: '9.6 / 6',
-            brecha: '0',
-            interpretation: 'Se mantiene sereno ante situaciones críticas, controla sus emociones con gran solidez y actúa con claridad aún bajo alta presión. Su presencia estabiliza al equipo.',
+            result: `${compTempleVal} / 6`,
+            brecha: compTempleBrecha > 0 ? `+${compTempleBrecha}` : `${compTempleBrecha}`,
+            interpretation: compTempleVal >= 6.0
+              ? 'Se mantiene sereno ante situaciones críticas, controla sus emociones con gran solidez y actúa con claridad aún bajo alta presión. Su presencia estabiliza al equipo.'
+              : 'Tiende a experimentar agobio o reactividad en contextos de alta demanda temporal o reclamos vehementes. Requiere técnicas de regulación emocional.',
             recommendations: [
-              'Pedirle que detalle estrategias emocionales para mantener la seguridad y la calma ante situaciones adversas.',
-              'Solicitarle que realice ejercicios para controlar las emociones antes de tomar decisiones.',
-              'Capacitarle en técnicas de inteligencia emocional y su aplicación en el trabajo.',
-              'Probar su temple y serenidad en diferentes actividades laborales.',
-              'Incluirle en equipos de trabajo donde se requiera un componente que influya con su temple y tranquilidad.'
+              'Pedirle que detalle estrategias personales para mantener la calma ante situaciones adversas.',
+              'Capacitarle en técnicas de inteligencia emocional aplicada a la gestión operativa.',
+              'Acompañamiento en situaciones de tensión antes de tomar decisiones definitivas.',
+              'Monitorear periódicamente sus niveles de sobrecarga emocional en el puesto.'
             ]
           },
           {
             category: 'Competencias Valores',
             title: 'Integridad',
-            badge: 'Desarrollada',
-            badgeColor: 'border-emerald-300 text-emerald-700 bg-emerald-50',
+            badge: getLevelInfo(compIntegVal).label,
+            badgeColor: getLevelInfo(compIntegVal).badgeColor,
             desc: 'Coherencia entre valores, principios éticos y acciones, expresándose con honestidad y responsabilidad y proyectando una conducta confiable que refuerza la credibilidad y la cultura ética de la organización.',
-            result: '5.6 / 6',
-            brecha: '-0.4',
-            interpretation: 'Actúa con honestidad, respeta normas y mantiene coherencia entre lo que dice y hace. Es percibido como una persona confiable.',
+            result: `${compIntegVal} / 6`,
+            brecha: compIntegBrecha > 0 ? `+${compIntegBrecha}` : `${compIntegBrecha}`,
+            interpretation: compIntegVal >= 6.0
+              ? 'Actúa con honestidad, respeta normas y mantiene coherencia entre lo que dice y hace. Es percibido como una persona confiable.'
+              : 'Presenta dudas o flexibilización de criterios normativos ante presiones de tiempo o metas. Requiere supervisión directa y alineamiento a la ética corporativa.',
             recommendations: [
-              'Solicitarle que identifique situaciones en las relaciones empresariales que sean contrarias a la integridad.',
-              'Pedirle que elabore un taller sobre integridad para sus compañeros.',
-              'Pedirle que desarrolle un proyecto de Integridad organizacional y su efecto en el entorno social.',
-              'Ocupar posiciones donde se requiera personal de confianza.',
-              'Valorar los actos íntegros como refuerzo de este comportamiento.'
+              'Solicitarle que identifique situaciones en las relaciones laborales que demanden máxima transparencia.',
+              'Reforzar la importancia del código de ética y políticas internas de la organización.',
+              'Reconocer explícitamente los actos íntegros y la puntualidad como refuerzo de confianza.'
             ]
           }
         ].map((comp, idx) => (
@@ -854,165 +995,368 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
         {/* ------------------------------------------------------------------------- */}
         
         {/* Página 11: Sales Profile */}
-        <div className="evaluar-page-sheet bg-white w-[210mm] h-[296mm] p-12 flex flex-col justify-between shadow-2xl print:shadow-none mx-auto">
-          <div className="space-y-6">
-            <div className="w-full py-2.5 rounded-xl bg-[#6355DE] text-white font-bold text-center text-xs tracking-wider">
-              Resultados por pruebas
-            </div>
+        {(() => {
+          const pvScore = getSubScore(0.85, 's3');
+          const pvLevel = getSubLevelInfo(pvScore);
+          const scScore = getSubScore(1.0, 's3');
+          const scLevel = getSubLevelInfo(scScore);
+          const farScore = getSubScore(0.85, 'overall');
+          const farLevel = getSubLevelInfo(farScore);
+          const traScore = getSubScore(1.05, 's3');
+          const traLevel = getSubLevelInfo(traScore);
 
-            <h3 className="text-sm font-bold text-[#6355DE]">Sales Profile (Estilos de Ventas y Servicio)</h3>
+          const salesItems = [
+            { 
+              title: 'Potencial Vendedor', 
+              score: `${pvScore}/10`, 
+              level: pvLevel.level, 
+              color: pvLevel.color, 
+              desc: pvScore >= 6 
+                ? 'Cumple con sus responsabilidades de manera activa y responde a los objetivos planteados con dinamismo, adaptándose con fluidez a metas comerciales.' 
+                : 'Cumple de manera básica con sus responsabilidades o requiere dirección cercana. Puede adaptarse a contextos comerciales pero muestra dificultades para generar oportunidades por iniciativa propia.' 
+            },
+            { 
+              title: 'Servicio Al Cliente', 
+              score: `${scScore}/10`, 
+              level: scLevel.level, 
+              color: scLevel.color, 
+              desc: scScore >= 6 
+                ? 'Atiende con empatía y rapidez los requerimientos del cliente, resolviendo consultas y generando experiencias positivas y de confianza.' 
+                : 'Atiende de manera elemental las solicitudes y cumple solo con lo necesario sin profundizar en la experiencia integral ni en la fidelización.' 
+            },
+            { 
+              title: 'Farmer', 
+              score: `${farScore}/10`, 
+              level: farLevel.level, 
+              color: farLevel.color, 
+              desc: farScore >= 6 
+                ? 'Conserva y nutre las relaciones comerciales a largo plazo, construyendo fidelidad, recompra y crecimiento sostenido en cuentas clave.' 
+                : 'Presenta vacíos en el seguimiento prolongado a cuentas o clientes asignados, limitando la retención sostenida en el tiempo.' 
+            },
+            { 
+              title: 'Transaccional', 
+              score: `${traScore}/10`, 
+              level: traLevel.level, 
+              color: traLevel.color, 
+              desc: traScore >= 6 
+                ? 'Se orienta a lograr resultados ágiles y consistentes, trabajando con disciplina para cumplir objetivos en plazos definidos con alta productividad.' 
+                : 'Requiere supervisión en tareas rutinarias para mantener la disciplina operativa y el ritmo constante en el cumplimiento de metas diarias.' 
+            }
+          ];
 
-            <div className="space-y-4">
-              {[
-                { title: 'Potencial Vendedor', score: '5/10', level: 'Nivel: Medio', color: 'text-amber-600', desc: 'Cumple con sus responsabilidades de manera correcta y responde a los objetivos planteados, aunque sin destacarse por una iniciativa especial. Puede adaptarse a contextos comerciales, pero no siempre impulsa nuevas oportunidades por sí mismo. Su estilo es más estable que desafiante.' },
-                { title: 'Servicio Al Cliente', score: '6/10', level: 'Nivel: Medio', color: 'text-amber-600', desc: 'Atiende de manera funcional las solicitudes y cumple con lo necesario, aunque sin profundizar en la construcción de experiencias diferenciales. Su aporte es correcto, pero puede no generar un impacto duradero en la percepción de quienes interactúan con él.' },
-                { title: 'Farmer', score: '5/10', level: 'Nivel: Medio', color: 'text-amber-600', desc: 'Conserva las relaciones de manera adecuada, aunque sin generar un fuerte impacto en términos de fidelidad o crecimiento. Su gestión es correcta, pero sin aportar un valor distintivo en la relación a largo plazo.' },
-                { title: 'Transaccional', score: '7/10', level: 'Nivel: Alto', color: 'text-emerald-600', desc: 'Se orienta a lograr resultados ágiles y consistentes, trabajando con disciplina para cumplir objetivos en plazos definidos. Sus procesos son fluidos y prácticos, asegurando un buen nivel de productividad.' }
-              ].map((sub, i) => (
-                <div key={i} className="p-4 rounded-xl border border-zinc-200/80 bg-zinc-50/40 space-y-1.5 text-xs">
-                  <div className="flex items-center justify-between font-bold text-zinc-800">
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-3.5 h-3.5 text-[#6355DE]" />
-                      <span>{sub.title}</span>
-                    </div>
-                    <span className="px-2.5 py-0.5 rounded-full border border-[#6355DE] text-[#6355DE] text-[10px] font-bold">{sub.score}</span>
-                  </div>
-                  <p className="text-zinc-600 text-[11px] leading-relaxed">{sub.desc}</p>
-                  <span className={`block font-bold text-[10px] ${sub.color}`}>{sub.level}</span>
+          return (
+            <div className="evaluar-page-sheet bg-white w-[210mm] h-[296mm] p-12 flex flex-col justify-between shadow-2xl print:shadow-none mx-auto">
+              <div className="space-y-6">
+                <div className="w-full py-2.5 rounded-xl bg-[#6355DE] text-white font-bold text-center text-xs tracking-wider">
+                  Resultados por pruebas
                 </div>
-              ))}
-            </div>
-          </div>
 
-          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={11} />
-        </div>
+                <h3 className="text-sm font-bold text-[#6355DE]">Sales Profile (Estilos de Ventas y Servicio)</h3>
+
+                <div className="space-y-4">
+                  {salesItems.map((sub, i) => (
+                    <div key={i} className="p-4 rounded-xl border border-zinc-200/80 bg-zinc-50/40 space-y-1.5 text-xs">
+                      <div className="flex items-center justify-between font-bold text-zinc-800">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-3.5 h-3.5 text-[#6355DE]" />
+                          <span>{sub.title}</span>
+                        </div>
+                        <span className="px-2.5 py-0.5 rounded-full border border-[#6355DE] text-[#6355DE] text-[10px] font-bold">{sub.score}</span>
+                      </div>
+                      <p className="text-zinc-600 text-[11px] leading-relaxed">{sub.desc}</p>
+                      <span className={`block font-bold text-[10px] ${sub.color}`}>{sub.level}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={11} />
+            </div>
+          );
+        })()}
 
         {/* Página 12: SER15 & EQ-M Parte 1 */}
-        <div className="evaluar-page-sheet bg-white w-[210mm] h-[296mm] p-12 flex flex-col justify-between shadow-2xl print:shadow-none mx-auto">
-          <div className="space-y-6">
-            <h3 className="text-sm font-bold text-[#6355DE]">SER15 (Personalidad)</h3>
+        {(() => {
+          const eeScore = getSubScore(1.0, 's2');
+          const eeLevel = getSubLevelInfo(eeScore);
+          const anScore = getSubScore(0.95, 's1');
+          const anLevel = getSubLevelInfo(anScore);
+          const corScore = getSubScore(0.85, 's2');
+          const corLevel = getSubLevelInfo(corScore);
 
-            <div className="space-y-3.5">
-              {[
-                { title: 'Estabilidad Emocional', score: '10/10', level: 'Nivel: Muy Alto', color: 'text-sky-600', desc: 'Se mantiene firme y equilibrado/a incluso en contextos laborales exigentes. Afronta errores, presiones o contratiempos con una actitud estable, sin que estos afecten de forma relevante su desempeño.' },
-                { title: 'Atención A Las Normas', score: '8/10', level: 'Nivel: Alto', color: 'text-emerald-600', desc: 'Suele respetar las reglas y lineamientos establecidos en su trabajo. Es constante en el cumplimiento de políticas y actúa de acuerdo con lo que se espera en su rol profesional.' },
-                { title: 'Cordialidad', score: '6/10', level: 'Nivel: Medio', color: 'text-amber-600', desc: 'Puede mostrarse cordial en algunas situaciones, aunque su actitud varía. Alterna momentos de amabilidad con otros en los que adopta una postura más neutral o reservada.' }
-              ].map((sub, i) => (
-                <div key={i} className="p-3.5 rounded-xl border border-zinc-200/80 bg-zinc-50/40 space-y-1 text-xs">
-                  <div className="flex items-center justify-between font-bold text-zinc-800">
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-3.5 h-3.5 text-[#6355DE]" />
-                      <span>{sub.title}</span>
+          const spScore = getSubScore(0.95, 's1');
+          const spLevel = getSubLevelInfo(spScore);
+          const asScore = getSubScore(0.75, 's2');
+          const asLevel = getSubLevelInfo(asScore);
+
+          const ser15Items = [
+            { 
+              title: 'Estabilidad Emocional', 
+              score: `${eeScore}/10`, 
+              level: eeLevel.level, 
+              color: eeLevel.color, 
+              desc: eeScore >= 6 
+                ? 'Se mantiene firme y equilibrado/a incluso en contextos laborales exigentes. Afronta errores, presiones o contratiempos con una actitud estable y madura.' 
+                : 'Tiende a experimentar agobio o reactividad ante situaciones de alta demanda o eventos imprevistos, requiriendo pautas de autorregulación.' 
+            },
+            { 
+              title: 'Atención A Las Normas', 
+              score: `${anScore}/10`, 
+              level: anLevel.level, 
+              color: anLevel.color, 
+              desc: anScore >= 6 
+                ? 'Suele respetar las reglas y lineamientos establecidos en su trabajo. Es constante en el cumplimiento de políticas y actúa alineado a su rol.' 
+                : 'Puede presentar inconsistencias o tender a flexibilizar procedimientos normativos y controles cuando se encuentra bajo presión o límites de tiempo.' 
+            },
+            { 
+              title: 'Cordialidad', 
+              score: `${corScore}/10`, 
+              level: corLevel.level, 
+              color: corLevel.color, 
+              desc: corScore >= 6 
+                ? 'Se muestra amable, empático y respetuoso en sus relaciones laborales, promoviendo un clima colaborativo y cálido.' 
+                : 'Puede mostrarse cordial en algunas situaciones, aunque su actitud varía hacia una postura distante o poco expresiva frente a dificultades.' 
+            }
+          ];
+
+          const eqItems = [
+            { 
+              title: 'Solución De Problemas', 
+              score: `${spScore}/10`, 
+              level: spLevel.level, 
+              color: spLevel.color, 
+              desc: spScore >= 6 
+                ? 'Define bien el problema, contrasta opciones y selecciona soluciones viables; anticipa riesgos y verifica resultados con rigor.' 
+                : 'Presenta dificultades para estructurar alternativas de resolución frente a problemas complejos, requiriendo orientación de supervisión.' 
+            },
+            { 
+              title: 'Asertividad', 
+              score: `${asScore}/10`, 
+              level: asLevel.level, 
+              color: asLevel.color, 
+              desc: asScore >= 6 
+                ? 'Expresa sus puntos de vista con seguridad y respeto mutuo, defendiendo criterios constructivos sin recurrir a la agresividad ni a la sumisión.' 
+                : 'Muestra dificultad para manifestar lo que piensa con firmeza, evitando en ocasiones el planteamiento directo para no confrontar.' 
+            }
+          ];
+
+          return (
+            <div className="evaluar-page-sheet bg-white w-[210mm] h-[296mm] p-12 flex flex-col justify-between shadow-2xl print:shadow-none mx-auto">
+              <div className="space-y-6">
+                <h3 className="text-sm font-bold text-[#6355DE]">SER15 (Personalidad)</h3>
+
+                <div className="space-y-3.5">
+                  {ser15Items.map((sub, i) => (
+                    <div key={i} className="p-3.5 rounded-xl border border-zinc-200/80 bg-zinc-50/40 space-y-1 text-xs">
+                      <div className="flex items-center justify-between font-bold text-zinc-800">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-3.5 h-3.5 text-[#6355DE]" />
+                          <span>{sub.title}</span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full border border-[#6355DE] text-[#6355DE] text-[10px] font-bold">{sub.score}</span>
+                      </div>
+                      <p className="text-zinc-600 text-[11px] leading-relaxed">{sub.desc}</p>
+                      <span className={`block font-bold text-[10px] ${sub.color}`}>{sub.level}</span>
                     </div>
-                    <span className="px-2 py-0.5 rounded-full border border-[#6355DE] text-[#6355DE] text-[10px] font-bold">{sub.score}</span>
-                  </div>
-                  <p className="text-zinc-600 text-[11px] leading-relaxed">{sub.desc}</p>
-                  <span className={`block font-bold text-[10px] ${sub.color}`}>{sub.level}</span>
+                  ))}
                 </div>
-              ))}
-            </div>
 
-            <h3 className="text-sm font-bold text-[#6355DE] pt-2">Inteligencia Emocional (EQ-M)</h3>
-            <div className="space-y-3.5">
-              {[
-                { title: 'Solución De Problemas', score: '7/10', level: 'Nivel: Alto', color: 'text-emerald-600', desc: 'Define bien el problema, contrasta opciones y selecciona soluciones viables; anticipa riesgos y verifica resultados.' },
-                { title: 'Asertividad', score: '4/10', level: 'Nivel: Medio', color: 'text-amber-600', desc: 'Muestra disposición para manifestar lo que piensa, aunque en algunas ocasiones evita confrontar o ceder para no incomodar.' }
-              ].map((sub, i) => (
-                <div key={i} className="p-3.5 rounded-xl border border-zinc-200/80 bg-zinc-50/40 space-y-1 text-xs">
-                  <div className="flex items-center justify-between font-bold text-zinc-800">
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-3.5 h-3.5 text-[#6355DE]" />
-                      <span>{sub.title}</span>
+                <h3 className="text-sm font-bold text-[#6355DE] pt-2">Inteligencia Emocional (EQ-M)</h3>
+                <div className="space-y-3.5">
+                  {eqItems.map((sub, i) => (
+                    <div key={i} className="p-3.5 rounded-xl border border-zinc-200/80 bg-zinc-50/40 space-y-1 text-xs">
+                      <div className="flex items-center justify-between font-bold text-zinc-800">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-3.5 h-3.5 text-[#6355DE]" />
+                          <span>{sub.title}</span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full border border-[#6355DE] text-[#6355DE] text-[10px] font-bold">{sub.score}</span>
+                      </div>
+                      <p className="text-zinc-600 text-[11px] leading-relaxed">{sub.desc}</p>
+                      <span className={`block font-bold text-[10px] ${sub.color}`}>{sub.level}</span>
                     </div>
-                    <span className="px-2 py-0.5 rounded-full border border-[#6355DE] text-[#6355DE] text-[10px] font-bold">{sub.score}</span>
-                  </div>
-                  <p className="text-zinc-600 text-[11px] leading-relaxed">{sub.desc}</p>
-                  <span className={`block font-bold text-[10px] ${sub.color}`}>{sub.level}</span>
+                  ))}
                 </div>
-              ))}
+
+              </div>
+
+              <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={12} />
             </div>
-
-          </div>
-
-          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={12} />
-        </div>
+          );
+        })()}
 
         {/* Página 13: SER15 Parte 2 */}
-        <div className="evaluar-page-sheet bg-white w-[210mm] h-[296mm] p-12 flex flex-col justify-between shadow-2xl print:shadow-none mx-auto">
-          <div className="space-y-4">
-            <h3 className="text-sm font-bold text-[#6355DE]">SER15 (Personalidad - Continuación)</h3>
+        {(() => {
+          const empScore = getSubScore(0.95, 's2');
+          const empLevel = getSubLevelInfo(empScore);
+          const teScore = getSubScore(1.0, 's2');
+          const teLevel = getSubLevelInfo(teScore);
+          const rsScore = getSubScore(0.85, 's1');
+          const rsLevel = getSubLevelInfo(rsScore);
+          const autoScore = Math.max(1, Math.min(10, Math.round(overallScore >= 60 ? (overallScore / 10) * 0.7 : (overallScore / 10) * 0.35)));
+          const autoLevel = getSubLevelInfo(autoScore);
+          const ipScore = Math.max(6, Math.min(10, Math.round(7 + (overallScore >= 40 ? 2 : 0))));
+          const ipLevel = getSubLevelInfo(ipScore);
 
-            <div className="space-y-3.5">
-              {[
-                { title: 'Empatía', score: '8/10', level: 'Nivel: Alto', color: 'text-emerald-600', desc: 'Comprende los sentimientos de los demás y procura actuar con cuidado, mostrando consideración y apertura al apoyo.' },
-                { title: 'Tolerancia Al Estrés', score: '9/10', level: 'Nivel: Muy Alto', color: 'text-sky-600', desc: 'Maneja con serenidad escenarios de alta presión, organiza prioridades con eficacia y confía plenamente en sus recursos para superar dificultades.' },
-                { title: 'Responsabilidad Social', score: '6/10', level: 'Nivel: Medio', color: 'text-amber-600', desc: 'Cumple con lo básico en cuanto a normas y respeto, aunque su compromiso con los demás puede variar según la situación.' },
-                { title: 'Autoconcepto', score: '1/10', level: 'Nivel: Muy Bajo', color: 'text-rose-600', desc: 'Tiende a desvalorizarse, carece de confianza en sus capacidades y se percibe con malestar en su identidad.' },
-                { title: 'Impresión Positiva', score: '10/10', level: 'Nivel: Muy Alto', color: 'text-sky-600', desc: 'La persona se muestra completamente auténtica y honesta en sus respuestas, sin indicios de distorsión. Sus respuestas reflejan con precisión su verdadera personalidad y comportamiento.' }
-              ].map((sub, i) => (
-                <div key={i} className="p-3.5 rounded-xl border border-zinc-200/80 bg-zinc-50/40 space-y-1 text-xs">
-                  <div className="flex items-center justify-between font-bold text-zinc-800">
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-3.5 h-3.5 text-[#6355DE]" />
-                      <span>{sub.title}</span>
+          const ser15Part2Items = [
+            { 
+              title: 'Empatía', 
+              score: `${empScore}/10`, 
+              level: empLevel.level, 
+              color: empLevel.color, 
+              desc: empScore >= 6 
+                ? 'Comprende los sentimientos de los demás y procura actuar con cuidado, mostrando consideración y apertura al apoyo en el equipo.' 
+                : 'Le cuesta percibir el estado emocional de sus compañeros o usuarios, centrando su atención primordialmente en datos objetivos.' 
+            },
+            { 
+              title: 'Tolerancia Al Estrés', 
+              score: `${teScore}/10`, 
+              level: teLevel.level, 
+              color: teLevel.color, 
+              desc: teScore >= 6 
+                ? 'Maneja con serenidad escenarios de alta presión, organiza prioridades con eficacia y confía en sus recursos para superar dificultades.' 
+                : 'Tiende a acusar el impacto de la sobrecarga o situaciones adversas, disminuyendo su nivel de precisión en la ejecución.' 
+            },
+            { 
+              title: 'Responsabilidad Social', 
+              score: `${rsScore}/10`, 
+              level: rsLevel.level, 
+              color: rsLevel.color, 
+              desc: rsScore >= 6 
+                ? 'Muestra un claro compromiso con el bien común, respetando el impacto colectivo y el bienestar del entorno laboral.' 
+                : 'Cumple con lo básico en cuanto a normas y respeto, aunque su involucramiento activo en el bienestar colectivo es moderado.' 
+            },
+            { 
+              title: 'Autoconcepto', 
+              score: `${autoScore}/10`, 
+              level: autoLevel.level, 
+              color: autoLevel.color, 
+              desc: autoScore >= 5 
+                ? 'Proyecta seguridad en sus capacidades personales y profesionales, afrontando tareas asignadas con confianza sólida.' 
+                : 'Tiende a manifestar dudas o inseguridad respecto a sus capacidades, afectando su grado de proactividad y autonomía.' 
+            },
+            { 
+              title: 'Impresión Positiva', 
+              score: `${ipScore}/10`, 
+              level: ipLevel.level, 
+              color: ipLevel.color, 
+              desc: ipScore >= 8 
+                ? 'La persona se muestra completamente auténtica y honesta en sus respuestas, reflejando su verdadero estilo de comportamiento laboral.' 
+                : 'Muestra índices adecuados de franqueza con consistencia normal en los patrones de respuesta suministrados.' 
+            }
+          ];
+
+          return (
+            <div className="evaluar-page-sheet bg-white w-[210mm] h-[296mm] p-12 flex flex-col justify-between shadow-2xl print:shadow-none mx-auto">
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold text-[#6355DE]">SER15 (Personalidad - Continuación)</h3>
+
+                <div className="space-y-3.5">
+                  {ser15Part2Items.map((sub, i) => (
+                    <div key={i} className="p-3.5 rounded-xl border border-zinc-200/80 bg-zinc-50/40 space-y-1 text-xs">
+                      <div className="flex items-center justify-between font-bold text-zinc-800">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-3.5 h-3.5 text-[#6355DE]" />
+                          <span>{sub.title}</span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full border border-[#6355DE] text-[#6355DE] text-[10px] font-bold">{sub.score}</span>
+                      </div>
+                      <p className="text-zinc-600 text-[11px] leading-relaxed">{sub.desc}</p>
+                      <span className={`block font-bold text-[10px] ${sub.color}`}>{sub.level}</span>
                     </div>
-                    <span className="px-2 py-0.5 rounded-full border border-[#6355DE] text-[#6355DE] text-[10px] font-bold">{sub.score}</span>
-                  </div>
-                  <p className="text-zinc-600 text-[11px] leading-relaxed">{sub.desc}</p>
-                  <span className={`block font-bold text-[10px] ${sub.color}`}>{sub.level}</span>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
 
-          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={13} />
-        </div>
+              <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={13} />
+            </div>
+          );
+        })()}
 
         {/* Página 14: Conductas Laborales & Intellectus */}
-        <div className="evaluar-page-sheet bg-white w-[210mm] h-[296mm] p-12 flex flex-col justify-between shadow-2xl print:shadow-none mx-auto">
-          <div className="space-y-6">
-            <h3 className="text-sm font-bold text-[#6355DE]">Conductas Laborales (TTC-M)</h3>
-            <div className="space-y-3.5">
-              {[
-                { title: 'Comprensión', score: '7/10', level: 'Nivel: Alto', color: 'text-emerald-600', desc: 'Muestra apertura para conversar, comprende a los demás y utiliza un estilo comunicativo considerado y respetuoso.' },
-                { title: 'Ecuanimidad', score: '10/10', level: 'Nivel: Muy Alto', color: 'text-sky-600', desc: 'Mantiene un control emocional sólido en cualquier circunstancia, responde con serenidad y transmite calma a quienes lo rodean.' }
-              ].map((sub, i) => (
-                <div key={i} className="p-3.5 rounded-xl border border-zinc-200/80 bg-zinc-50/40 space-y-1 text-xs">
-                  <div className="flex items-center justify-between font-bold text-zinc-800">
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-3.5 h-3.5 text-[#6355DE]" />
-                      <span>{sub.title}</span>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full border border-[#6355DE] text-[#6355DE] text-[10px] font-bold">{sub.score}</span>
-                  </div>
-                  <p className="text-zinc-600 text-[11px] leading-relaxed">{sub.desc}</p>
-                  <span className={`block font-bold text-[10px] ${sub.color}`}>{sub.level}</span>
-                </div>
-              ))}
-            </div>
+        {(() => {
+          const compScore = getSubScore(0.9, 's2');
+          const compLevel = getSubLevelInfo(compScore);
+          const ecuScore = getSubScore(1.0, 's2');
+          const ecuLevel = getSubLevelInfo(ecuScore);
+          const avScore = getSubScore(1.0, 's1');
+          const avLevel = getSubLevelInfo(avScore);
 
-            <h3 className="text-sm font-bold text-[#6355DE] pt-4">Intellectus (Habilidades Cognitivas)</h3>
-            <div className="space-y-3.5">
-              {[
-                { title: 'Aptitud Verbal', score: '10/10', level: 'Nivel: Muy Alto', color: 'text-sky-600', desc: 'Demuestra una capacidad sobresaliente para comprender, analizar y utilizar el lenguaje con precisión. Identifica matices de significado, razona verbalmente con fluidez y utiliza un vocabulario amplio y adecuado a distintos contextos.' }
-              ].map((sub, i) => (
-                <div key={i} className="p-3.5 rounded-xl border border-zinc-200/80 bg-zinc-50/40 space-y-1 text-xs">
-                  <div className="flex items-center justify-between font-bold text-zinc-800">
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-3.5 h-3.5 text-[#6355DE]" />
-                      <span>{sub.title}</span>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full border border-[#6355DE] text-[#6355DE] text-[10px] font-bold">{sub.score}</span>
-                  </div>
-                  <p className="text-zinc-600 text-[11px] leading-relaxed">{sub.desc}</p>
-                  <span className={`block font-bold text-[10px] ${sub.color}`}>{sub.level}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          const ttcItems = [
+            { 
+              title: 'Comprensión', 
+              score: `${compScore}/10`, 
+              level: compLevel.level, 
+              color: compLevel.color, 
+              desc: compScore >= 6 
+                ? 'Muestra apertura para conversar, comprende a los demás y utiliza un estilo comunicativo considerado y respetuoso.' 
+                : 'Tiende a emitir juicios rápidos o a encontrar dificultades en la comprensión empática de situaciones interpersonales complejas.' 
+            },
+            { 
+              title: 'Ecuanimidad', 
+              score: `${ecuScore}/10`, 
+              level: ecuLevel.level, 
+              color: ecuLevel.color, 
+              desc: ecuScore >= 6 
+                ? 'Mantiene un control emocional sólido en cualquier circunstancia, responde con serenidad y transmite calma a quienes lo rodean.' 
+                : 'Puede exteriorizar descontento o impaciencia ante imprevistos, requiriendo contención para mantener la templanza en momentos críticos.' 
+            }
+          ];
 
-          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={14} />
-        </div>
+          const intellectusItems = [
+            { 
+              title: 'Aptitud Verbal', 
+              score: `${avScore}/10`, 
+              level: avLevel.level, 
+              color: avLevel.color, 
+              desc: avScore >= 6 
+                ? 'Demuestra una capacidad sobresaliente para comprender, analizar y utilizar el lenguaje con precisión, razonando verbalmente con fluidez.' 
+                : 'Presenta dificultades en la comprensión o síntesis de instrucciones verbales densas, requiriendo confirmación continua de pautas operativas.' 
+            }
+          ];
+
+          return (
+            <div className="evaluar-page-sheet bg-white w-[210mm] h-[296mm] p-12 flex flex-col justify-between shadow-2xl print:shadow-none mx-auto">
+              <div className="space-y-6">
+                <h3 className="text-sm font-bold text-[#6355DE]">Conductas Laborales (TTC-M)</h3>
+                <div className="space-y-3.5">
+                  {ttcItems.map((sub, i) => (
+                    <div key={i} className="p-3.5 rounded-xl border border-zinc-200/80 bg-zinc-50/40 space-y-1 text-xs">
+                      <div className="flex items-center justify-between font-bold text-zinc-800">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-3.5 h-3.5 text-[#6355DE]" />
+                          <span>{sub.title}</span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full border border-[#6355DE] text-[#6355DE] text-[10px] font-bold">{sub.score}</span>
+                      </div>
+                      <p className="text-zinc-600 text-[11px] leading-relaxed">{sub.desc}</p>
+                      <span className={`block font-bold text-[10px] ${sub.color}`}>{sub.level}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <h3 className="text-sm font-bold text-[#6355DE] pt-4">Intellectus (Habilidades Cognitivas)</h3>
+                <div className="space-y-3.5">
+                  {intellectusItems.map((sub, i) => (
+                    <div key={i} className="p-3.5 rounded-xl border border-zinc-200/80 bg-zinc-50/40 space-y-1 text-xs">
+                      <div className="flex items-center justify-between font-bold text-zinc-800">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-3.5 h-3.5 text-[#6355DE]" />
+                          <span>{sub.title}</span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full border border-[#6355DE] text-[#6355DE] text-[10px] font-bold">{sub.score}</span>
+                      </div>
+                      <p className="text-zinc-600 text-[11px] leading-relaxed">{sub.desc}</p>
+                      <span className={`block font-bold text-[10px] ${sub.color}`}>{sub.level}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={14} />
+            </div>
+          );
+        })()}
 
         {/* Página 15: Preguntas sugeridas para la entrevista */}
         <div className="evaluar-page-sheet bg-white w-[210mm] h-[296mm] p-12 flex flex-col justify-between shadow-2xl print:shadow-none mx-auto">
