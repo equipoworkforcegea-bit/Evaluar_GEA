@@ -13,6 +13,7 @@ import { TrustView } from './TrustView';
 import { ViralizacionView } from './ViralizacionView';
 import { CreateProcessModal } from './CreateProcessModal';
 import { CreateProfileModal } from './CreateProfileModal';
+import { ProcessSummaryView } from './ProcessSummaryView';
 import { AssignedCandidatesView } from './AssignedCandidatesView';
 import { InformesView } from './InformesView';
 import { ContratadosView } from './ContratadosView';
@@ -112,6 +113,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [profiles, setProfiles] = useState<EvaluationTest[]>([]);
   const [activeTestId, setActiveTestId] = useState<string>('');
   const [selectedProcessForControl, setSelectedProcessForControl] = useState<EvaluationTest | null>(null);
+  const [summaryProcess, setSummaryProcess] = useState<EvaluationTest | null>(null);
   const [controlInitialTab, setControlInitialTab] = useState<'CANDIDATOS' | 'COMPARADOR' | 'PRESELECCIONADOS' | 'TABLERO' | 'NO_DESEADOS' | 'DASHBOARD' | 'NOTIFICACIONES'>('CANDIDATOS');
 
   // Cargar procesos y perfiles reales desde Supabase al iniciar
@@ -320,6 +322,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         }));
         onAddCandidates(candidatesWithProcId);
       }
+      setShowCreateProcessModal(false);
+      setCreateProcessPreselectedProfileId(null);
+      setSummaryProcess(processToUse);
       setActiveTab('PROCESOS');
       setFilterByActiveProcess(true);
       showToast(`🚀 Proceso "${processToUse.title}" guardado en base de datos y lanzado con éxito (${newCandidates.length} candidatos convocados).`);
@@ -328,6 +333,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       // Respaldo de seguridad en estado local
       setProcesses(prev => [newProcess, ...prev.filter(t => t.id !== newProcess.id)]);
       setActiveTestId(newProcess.id);
+      setShowCreateProcessModal(false);
+      setCreateProcessPreselectedProfileId(null);
+      setSummaryProcess(newProcess);
       setActiveTab('PROCESOS');
       showToast(`🚀 Proceso "${newProcess.title}" disponible.`);
     }
@@ -385,9 +393,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         />
       )}
 
-      {/* 3. PROCESOS: VISTA DE CONTROL DE PROCESO (EVALUAR V4.1.2) O FICHA DE CANDIDATO O LISTADO DE PROCESOS */}
+      {/* 3. PROCESOS: RESUMEN DE PROCESO RECIÉN LANZADO O VISTA DE CONTROL O FICHA DE CANDIDATO O LISTADO */}
       {activeTab === 'PROCESOS' && (
-        selectedCandidate ? (
+        summaryProcess ? (
+          <ProcessSummaryView
+            process={summaryProcess}
+            onBack={() => setSummaryProcess(null)}
+            onMonitorProcess={() => {
+              handleOpenProcessDetail(summaryProcess);
+              setSummaryProcess(null);
+            }}
+            onInviteCandidates={() => {
+              setInviteTargetTestId(summaryProcess.id);
+              setShowInviteModal(true);
+            }}
+            onCustomizeInvitation={() => {
+              setInviteTargetTestId(summaryProcess.id);
+              setShowInviteModal(true);
+            }}
+          />
+        ) : selectedCandidate ? (
           <CandidateFullReportView
             candidate={selectedCandidate}
             process={selectedProcessForControl || processes.find(p => p.id === selectedCandidate.testId) || processes[0]}

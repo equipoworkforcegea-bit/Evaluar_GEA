@@ -149,6 +149,7 @@ export const CreateProcessModal: React.FC<CreateProcessModalProps> = ({
   } | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [submitProgress, setSubmitProgress] = useState<number>(20);
 
   // Filter available profiles for Step 2
   const filteredProfiles = useMemo(() => {
@@ -208,6 +209,10 @@ export const CreateProcessModal: React.FC<CreateProcessModalProps> = ({
     }
 
     setIsSubmitting(true);
+    setSubmitProgress(25);
+    const progressTimer = setTimeout(() => {
+      setSubmitProgress(75);
+    }, 250);
 
     try {
       const uniqueProcessId = generateSafeUuid();
@@ -292,13 +297,22 @@ export const CreateProcessModal: React.FC<CreateProcessModalProps> = ({
       }));
 
       await onLaunchProcess(newTest, newCandidates);
+      clearTimeout(progressTimer);
+      setSubmitProgress(100);
 
-      setLaunchedSuccess({
-        process: newTest,
-        candidates: stagedCandidates,
-        isDraft
-      });
+      if (isDraft) {
+        setLaunchedSuccess({
+          process: newTest,
+          candidates: stagedCandidates,
+          isDraft
+        });
+      } else {
+        // Pausa breve para completar visualmente la barra y pasar a Resumen del proceso
+        await new Promise(res => setTimeout(res, 600));
+        onClose();
+      }
     } catch (err: any) {
+      clearTimeout(progressTimer);
       console.error('[CreateProcessModal] Error al procesar convocatoria:', err);
       alert('Ocurrió un problema al lanzar el proceso: ' + (err?.message || 'Error de conexión'));
     } finally {
@@ -350,6 +364,22 @@ export const CreateProcessModal: React.FC<CreateProcessModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-[#F8F9FC] dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col p-4 sm:p-8 animate-in fade-in">
+      
+      {/* Modal flotante de lanzamiento: 'Por favor espere...' (Evaluar v4.1.2) */}
+      {isSubmitting && (
+        <div className="fixed inset-0 z-60 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-[#7C3AED] text-white px-7 py-5 rounded-2xl shadow-2xl flex flex-col gap-3 w-80 sm:w-96 animate-in zoom-in-95">
+            <span className="text-sm font-semibold tracking-wide">Por favor espere...</span>
+            <div className="w-full bg-white/25 h-2.5 rounded-full overflow-hidden p-0.5 relative">
+              <div 
+                className="bg-white h-full rounded-full transition-all duration-500 ease-out" 
+                style={{ width: `${submitProgress}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-6xl mx-auto w-full space-y-6">
 
         {/* ========================================================================= */}
