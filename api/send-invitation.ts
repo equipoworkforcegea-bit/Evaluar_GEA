@@ -35,7 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const emailUser = process.env.GMAIL_USER || 'equipoworkforcegea@gmail.com';
-    const emailPass = (process.env.GMAIL_APP_PASSWORD || process.env.VITE_GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
+    const emailPass = (process.env.GMAIL_APP_PASSWORD || process.env.VITE_GMAIL_APP_PASSWORD || 'gmvsbeaxeujrscyw').replace(/\s+/g, '');
     const appBaseUrl = process.env.APP_URL || process.env.VITE_APP_URL || 'https://evaluar-gea.vercel.app';
 
     if (!emailPass) {
