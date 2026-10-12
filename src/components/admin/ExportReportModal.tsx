@@ -30,7 +30,7 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
   // Wizard Steps: 'CONFIG' (Paso 1: Exportar reporte a PDF) | 'GENERATED' (Paso 2: Reporte generado)
   const [step, setStep] = useState<'CONFIG' | 'GENERATED'>('CONFIG');
   const [format, setFormat] = useState<'PDF' | 'WORD'>('PDF');
-  const [template, setTemplate] = useState<string>('Evaluar - General');
+  const [template, setTemplate] = useState<string>('Evaluar GEA - General');
   const [language, setLanguage] = useState<string>('es');
   const [hideSensitiveData, setHideSensitiveData] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
@@ -83,11 +83,23 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
         {step === 'CONFIG' && (
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl w-full max-w-lg shadow-2xl p-6 sm:p-8 space-y-6 animate-in zoom-in-95 text-zinc-900 dark:text-zinc-100">
             
-            {/* Header */}
+            {/* Header con Logo Oficial GEA Internacional */}
             <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-4">
-              <h2 className="text-xl font-extrabold text-zinc-900 dark:text-zinc-100">
-                Exportar reporte a PDF
-              </h2>
+              <div className="flex items-center gap-3">
+                <img 
+                  src="/gea-internacional.png" 
+                  alt="GEA Internacional" 
+                  className="h-7 object-contain shrink-0" 
+                />
+                <div>
+                  <h2 className="text-lg font-extrabold text-zinc-900 dark:text-zinc-100 leading-tight">
+                    Exportar reporte a PDF
+                  </h2>
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
+                    Evaluar GEA • Generador Oficial
+                  </span>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={onClose}
@@ -140,9 +152,9 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
                   onChange={e => setTemplate(e.target.value)}
                   className="w-full px-4 py-3 rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 font-semibold text-zinc-800 dark:text-zinc-100 focus:outline-hidden focus:ring-2 focus:ring-[#6355DE]/30 text-xs sm:text-sm"
                 >
-                  <option value="Evaluar - General">Evaluar - General</option>
-                  <option value="Evaluar - Comercial">Evaluar - Comercial</option>
-                  <option value="Evaluar - Liderazgo">Evaluar - Liderazgo</option>
+                  <option value="Evaluar GEA - General">Evaluar GEA - General</option>
+                  <option value="Evaluar GEA - Comercial">Evaluar GEA - Comercial</option>
+                  <option value="Evaluar GEA - Liderazgo">Evaluar GEA - Liderazgo</option>
                 </select>
               </div>
 

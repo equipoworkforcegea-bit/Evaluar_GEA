@@ -406,19 +406,26 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         
         {/* Mobile Header: Visible on mobile devices at top */}
         <div className="w-full flex lg:hidden items-center justify-between pb-2 border-b border-slate-200/80">
-          <div>
-            <div className="flex items-baseline">
-              <span className="font-extrabold text-2xl tracking-tight text-slate-900 font-sans">
-                Evaluar
+          <div className="flex items-center gap-2.5">
+            <img 
+              src="/gea-internacional.png" 
+              alt="Logo GEA Internacional" 
+              className="h-9 object-contain bg-white p-0.5 rounded-md shadow-2xs" 
+            />
+            <div>
+              <div className="flex items-baseline">
+                <span className="font-extrabold text-xl tracking-tight text-slate-900 font-sans">
+                  Evaluar
+                </span>
+                <span className="font-black text-xl tracking-tight text-[#1F2A5E] font-sans ml-0.5">
+                  GEA
+                </span>
+                <span className="w-1.5 h-1.5 rounded-full bg-[#E4572E] ml-0.5 inline-block shadow-[0_0_6px_#E4572E]" />
+              </div>
+              <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest block">
+                PORTAL OFICIAL DE EVALUACIÓN
               </span>
-              <span className="font-black text-2xl tracking-tight text-[#1F2A5E] font-sans">
-                GEA
-              </span>
-              <span className="w-2 h-2 rounded-full bg-[#E4572E] ml-0.5 inline-block shadow-[0_0_6px_#E4572E]" />
             </div>
-            <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest block">
-              PORTAL OFICIAL DE EVALUACIÓN
-            </span>
           </div>
 
           <button 
@@ -1004,18 +1011,27 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           
           {/* Top Brand Header (Desktop) */}
           <div className="hidden lg:block">
-            <div className="flex items-baseline">
-              <span className="font-extrabold text-2xl tracking-tight text-slate-900 font-sans">
-                Evaluar
-              </span>
-              <span className="font-black text-2xl tracking-tight text-[#1F2A5E] font-sans">
-                GEA
-              </span>
-              <span className="w-2 h-2 rounded-full bg-[#E4572E] ml-0.5 inline-block shadow-[0_0_6px_#E4572E]" />
+            <div className="flex items-center gap-3 mb-2">
+              <img 
+                src="/gea-internacional.png" 
+                alt="Logo GEA Internacional" 
+                className="h-10 object-contain bg-white p-0.5 rounded-lg shadow-2xs" 
+              />
+              <div>
+                <div className="flex items-baseline">
+                  <span className="font-extrabold text-2xl tracking-tight text-slate-900 font-sans">
+                    Evaluar
+                  </span>
+                  <span className="font-black text-2xl tracking-tight text-[#1F2A5E] font-sans ml-1">
+                    GEA
+                  </span>
+                  <span className="w-2 h-2 rounded-full bg-[#E4572E] ml-1 inline-block shadow-[0_0_6px_#E4572E]" />
+                </div>
+                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest block">
+                  GEA INTERNACIONAL • SISTEMA CORPORATIVO DE EVALUACIÓN
+                </span>
+              </div>
             </div>
-            <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest block">
-              GEA PERÚ • SISTEMA CORPORATIVO DE EVALUACIÓN
-            </span>
           </div>
 
           {/* Hero Content Area */}

@@ -21,7 +21,31 @@ interface EvaluarOfficialPdfReportProps {
   process?: EvaluationTest;
   onClose?: () => void;
   hideSensitiveData?: boolean;
-}
+const EvaluarGeaReportFooter: React.FC<{ candidateName: string; pageNumber: number }> = ({ candidateName, pageNumber }) => (
+  <div className="pt-6 border-t border-zinc-200/80 flex items-center justify-between text-[10px] text-zinc-400">
+    <div className="flex items-center gap-2">
+      <span className="font-bold text-zinc-700 uppercase tracking-wide">{candidateName}</span>
+      <span className="text-zinc-400 font-mono text-[9px] bg-zinc-100 px-1.5 py-0.5 rounded-sm">
+        Pág. {pageNumber} / 15
+      </span>
+    </div>
+    
+    <div className="flex items-center gap-2">
+      <span className="text-zinc-400 font-medium">Powered by:</span>
+      <div className="flex items-center gap-1.5 bg-white px-2 py-0.5 rounded-md border border-zinc-200/80 shadow-2xs">
+        <img 
+          src="/gea-internacional.png" 
+          alt="GEA Internacional" 
+          className="h-3.5 object-contain shrink-0" 
+        />
+        <div className="flex items-baseline font-bold text-[11px] leading-none tracking-tight select-none">
+          <span className="text-zinc-800">evaluar</span>
+          <span className="text-[#1F2A5E] ml-1 font-black uppercase text-[10px] tracking-wider">gea</span>
+        </div>
+      </div>
+    </div>
+  </div>
+);
 
 export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> = ({
   candidate,
@@ -130,12 +154,18 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
                 </svg>
               </div>
 
-              {/* Header Portada: Logo Evaluar */}
-              <div className="relative z-10 flex justify-end">
-                <div className="flex items-center gap-1 font-bold text-lg tracking-tight">
-                  <span className="text-white">e</span>
-                  <span className="text-[#FF2A85]">v</span>
-                  <span className="text-white">aluar</span>
+              {/* Header Portada: Logo Evaluar GEA con Logo Distintivo */}
+              <div className="relative z-10 flex items-center justify-between">
+                <div className="bg-white px-2.5 py-1.5 rounded-xl shadow-md flex items-center gap-1.5">
+                  <img 
+                    src="/gea-internacional.png" 
+                    alt="GEA Internacional" 
+                    className="h-6 object-contain shrink-0" 
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 font-bold text-base tracking-tight bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/20">
+                  <span className="text-white font-black tracking-tight">evaluar</span>
+                  <span className="text-[#10B981] font-black tracking-wider uppercase text-xs bg-emerald-950/60 px-1.5 py-0.5 rounded-md border border-emerald-500/30">gea</span>
                 </div>
               </div>
 
@@ -181,12 +211,13 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
                   )}
                 </div>
 
-                {/* Recuadro de Empresa GEA Perú */}
+                {/* Recuadro de Empresa GEA Internacional con Logo Oficial */}
                 <div className="bg-white p-3 rounded-xl shadow-lg flex items-center justify-center">
-                  <div className="text-center">
-                    <span className="text-base font-black text-[#1F2A5E] tracking-wider block">GEA</span>
-                    <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest">GEA PIENSA EN TI</span>
-                  </div>
+                  <img 
+                    src="/gea-internacional.png" 
+                    alt="GEA Internacional" 
+                    className="h-10 object-contain" 
+                  />
                 </div>
               </div>
 
@@ -261,14 +292,8 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
 
               </div>
 
-              {/* Footer Página */}
-              <div className="pt-6 border-t border-zinc-100 flex items-center justify-between text-[10px] text-zinc-400">
-                <span className="font-bold text-zinc-600 uppercase">{candidateName}</span>
-                <div className="flex items-center gap-1">
-                  <span>Powered by:</span>
-                  <span className="font-bold text-[#FF2A85]">e<span className="text-zinc-700">valuar</span></span>
-                </div>
-              </div>
+              {/* Footer Página 1 */}
+              <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={1} />
 
             </div>
 
@@ -352,13 +377,7 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
 
           </div>
 
-          <div className="pt-6 border-t border-zinc-100 flex items-center justify-between text-[10px] text-zinc-400">
-            <span className="font-bold text-zinc-600 uppercase">{candidateName}</span>
-            <div className="flex items-center gap-1">
-              <span>Powered by:</span>
-              <span className="font-bold text-[#FF2A85]">e<span className="text-zinc-700">valuar</span></span>
-            </div>
-          </div>
+          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={2} />
 
         </div>
 
@@ -440,13 +459,7 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
 
           </div>
 
-          <div className="pt-6 border-t border-zinc-100 flex items-center justify-between text-[10px] text-zinc-400">
-            <span className="font-bold text-zinc-600 uppercase">{candidateName}</span>
-            <div className="flex items-center gap-1">
-              <span>Powered by:</span>
-              <span className="font-bold text-[#FF2A85]">e<span className="text-zinc-700">valuar</span></span>
-            </div>
-          </div>
+          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={3} />
 
         </div>
 
@@ -558,13 +571,7 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
 
           </div>
 
-          <div className="pt-6 border-t border-zinc-100 flex items-center justify-between text-[10px] text-zinc-400">
-            <span className="font-bold text-zinc-600 uppercase">{candidateName}</span>
-            <div className="flex items-center gap-1">
-              <span>Powered by:</span>
-              <span className="font-bold text-[#FF2A85]">e<span className="text-zinc-700">valuar</span></span>
-            </div>
-          </div>
+          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={4} />
 
         </div>
 
@@ -684,13 +691,7 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
 
           </div>
 
-          <div className="pt-6 border-t border-zinc-100 flex items-center justify-between text-[10px] text-zinc-400">
-            <span className="font-bold text-zinc-600 uppercase">{candidateName}</span>
-            <div className="flex items-center gap-1">
-              <span>Powered by:</span>
-              <span className="font-bold text-[#FF2A85]">e<span className="text-zinc-700">valuar</span></span>
-            </div>
-          </div>
+          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={5} />
 
         </div>
 
@@ -842,13 +843,7 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
 
             </div>
 
-            <div className="pt-6 border-t border-zinc-100 flex items-center justify-between text-[10px] text-zinc-400">
-              <span className="font-bold text-zinc-600 uppercase">{candidateName}</span>
-              <div className="flex items-center gap-1">
-                <span>Powered by:</span>
-                <span className="font-bold text-[#FF2A85]">e<span className="text-zinc-700">valuar</span></span>
-              </div>
-            </div>
+            <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={6 + idx} />
 
           </div>
         ))}
@@ -889,13 +884,7 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
             </div>
           </div>
 
-          <div className="pt-6 border-t border-zinc-100 flex items-center justify-between text-[10px] text-zinc-400">
-            <span className="font-bold text-zinc-600 uppercase">{candidateName}</span>
-            <div className="flex items-center gap-1">
-              <span>Powered by:</span>
-              <span className="font-bold text-[#FF2A85]">e<span className="text-zinc-700">valuar</span></span>
-            </div>
-          </div>
+          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={11} />
         </div>
 
         {/* Página 12: SER15 & EQ-M Parte 1 */}
@@ -945,13 +934,7 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
 
           </div>
 
-          <div className="pt-6 border-t border-zinc-100 flex items-center justify-between text-[10px] text-zinc-400">
-            <span className="font-bold text-zinc-600 uppercase">{candidateName}</span>
-            <div className="flex items-center gap-1">
-              <span>Powered by:</span>
-              <span className="font-bold text-[#FF2A85]">e<span className="text-zinc-700">valuar</span></span>
-            </div>
-          </div>
+          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={12} />
         </div>
 
         {/* Página 13: SER15 Parte 2 */}
@@ -982,13 +965,7 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
             </div>
           </div>
 
-          <div className="pt-6 border-t border-zinc-100 flex items-center justify-between text-[10px] text-zinc-400">
-            <span className="font-bold text-zinc-600 uppercase">{candidateName}</span>
-            <div className="flex items-center gap-1">
-              <span>Powered by:</span>
-              <span className="font-bold text-[#FF2A85]">e<span className="text-zinc-700">valuar</span></span>
-            </div>
-          </div>
+          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={13} />
         </div>
 
         {/* Página 14: Conductas Laborales & Intellectus */}
@@ -1034,13 +1011,7 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
             </div>
           </div>
 
-          <div className="pt-6 border-t border-zinc-100 flex items-center justify-between text-[10px] text-zinc-400">
-            <span className="font-bold text-zinc-600 uppercase">{candidateName}</span>
-            <div className="flex items-center gap-1">
-              <span>Powered by:</span>
-              <span className="font-bold text-[#FF2A85]">e<span className="text-zinc-700">valuar</span></span>
-            </div>
-          </div>
+          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={14} />
         </div>
 
         {/* Página 15: Preguntas sugeridas para la entrevista */}
@@ -1100,13 +1071,7 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
             </div>
           </div>
 
-          <div className="pt-6 border-t border-zinc-100 flex items-center justify-between text-[10px] text-zinc-400">
-            <span className="font-bold text-zinc-600 uppercase">{candidateName}</span>
-            <div className="flex items-center gap-1">
-              <span>Powered by:</span>
-              <span className="font-bold text-[#FF2A85]">e<span className="text-zinc-700">valuar</span></span>
-            </div>
-          </div>
+          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={15} />
         </div>
 
       </div>

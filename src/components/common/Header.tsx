@@ -78,20 +78,19 @@ export const Header: React.FC<HeaderProps> = ({
               className={`flex items-center select-none ${isAdmin ? 'cursor-pointer' : 'cursor-default'}`}
               style={{ gap: '10px' }}
             >
-              {/* GEA Perú Logo: ~46x46px, object-fit: contain, rounded corners, white background */}
+              {/* GEA Internacional Logo Oficial */}
               <img 
-                src="/gea-logo.svg" 
-                alt="Logo GEA Perú" 
-                className="w-[46px] h-[46px] object-contain rounded-md bg-white p-0.5 shadow-2xs shrink-0"
-                style={{ objectFit: 'contain' }}
+                src="/gea-internacional.png" 
+                alt="Logo GEA Internacional" 
+                className="h-10 w-auto object-contain rounded-md bg-white p-0.5 shadow-2xs shrink-0"
               />
 
-              {/* Brand Text: EvaluarGEA (~21px bold, Evaluar navy #1F2A5E, GEA medium blue #2F5BA8) */}
+              {/* Brand Text: Evaluar GEA */}
               <div className="flex items-baseline font-bold text-[21px] leading-none tracking-tight select-none">
                 <span className="text-[#1F2A5E] dark:text-white">
                   Evaluar
                 </span>
-                <span className="text-[#2F5BA8] dark:text-[#5B8AE0]">
+                <span className="text-[#2F5BA8] dark:text-[#5B8AE0] ml-1 font-black uppercase">
                   GEA
                 </span>
                 {!isAdmin && (
