@@ -308,20 +308,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleLaunchProcess = async (newProcess: EvaluationTest, newCandidates: Candidate[]) => {
-    const saved = await ProcessDataService.createProcess(newProcess, createProcessPreselectedProfileId || undefined);
-    const processToUse = saved || newProcess;
-    setProcesses(prev => [processToUse, ...prev.filter(t => t.id !== processToUse.id)]);
-    setActiveTestId(processToUse.id);
-    if (newCandidates.length > 0) {
-      const candidatesWithProcId = newCandidates.map(c => ({
-        ...c,
-        testId: processToUse.id
-      }));
-      onAddCandidates(candidatesWithProcId);
+    try {
+      const saved = await ProcessDataService.createProcess(newProcess, createProcessPreselectedProfileId || undefined);
+      const processToUse = saved || newProcess;
+      setProcesses(prev => [processToUse, ...prev.filter(t => t.id !== processToUse.id)]);
+      setActiveTestId(processToUse.id);
+      if (newCandidates.length > 0) {
+        const candidatesWithProcId = newCandidates.map(c => ({
+          ...c,
+          testId: processToUse.id
+        }));
+        onAddCandidates(candidatesWithProcId);
+      }
+      setActiveTab('PROCESOS');
+      setFilterByActiveProcess(true);
+      showToast(`🚀 Proceso "${processToUse.title}" guardado en base de datos y lanzado con éxito (${newCandidates.length} candidatos convocados).`);
+    } catch (err) {
+      console.error('[AdminDashboard] Error al lanzar proceso:', err);
+      // Respaldo de seguridad en estado local
+      setProcesses(prev => [newProcess, ...prev.filter(t => t.id !== newProcess.id)]);
+      setActiveTestId(newProcess.id);
+      setActiveTab('PROCESOS');
+      showToast(`🚀 Proceso "${newProcess.title}" disponible.`);
     }
-    setActiveTab('PROCESOS');
-    setFilterByActiveProcess(true);
-    showToast(`🚀 Proceso "${processToUse.title}" guardado en base de datos y lanzado con éxito (${newCandidates.length} candidatos convocados).`);
   };
 
   return (

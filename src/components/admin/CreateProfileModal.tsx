@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { EvaluationTest, TestStageConfig } from '../../types';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
+import { generateSafeUuid } from '../../services/processDataService';
 import { 
   X, 
   User, 
@@ -176,7 +177,7 @@ export const CreateProfileModal: React.FC<CreateProfileModalProps> = ({
     }
 
     setIsSubmitting(true);
-    const uniqueId = crypto.randomUUID();
+    const uniqueId = generateSafeUuid();
     const cleanPos = targetPosition.trim().replace(/[^a-zA-Z0-9]/g, '').slice(0, 3).toUpperCase() || 'POS';
     const randomSuffix = Math.floor(100 + Math.random() * 900);
     const code = profileCode.trim() || `PRF-${cleanPos}-${new Date().getFullYear()}-${randomSuffix}`;

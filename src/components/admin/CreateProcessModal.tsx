@@ -37,16 +37,18 @@ import {
   Shield,
   HardHat,
   Users,
-  CheckCircle
+  CheckCircle,
+  RotateCw
 } from 'lucide-react';
 
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
+import { generateSafeUuid } from '../../services/processDataService';
 
 interface CreateProcessModalProps {
   tests: EvaluationTest[];
   preselectedProfileId?: string;
   onClose: () => void;
-  onLaunchProcess: (newProcess: EvaluationTest, newCandidates: Candidate[]) => void;
+  onLaunchProcess: (newProcess: EvaluationTest, newCandidates: Candidate[]) => void | Promise<void>;
 }
 
 interface StagedCandidate {
@@ -146,6 +148,8 @@ export const CreateProcessModal: React.FC<CreateProcessModalProps> = ({
     isDraft?: boolean;
   } | null>(null);
 
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
   // Filter available profiles for Step 2
   const filteredProfiles = useMemo(() => {
     return tests.filter(p => {
@@ -195,99 +199,111 @@ export const CreateProcessModal: React.FC<CreateProcessModalProps> = ({
   };
 
   // Submit / Launch Process Action
-  const handleSubmitProcess = (isDraft: boolean = false) => {
+  const handleSubmitProcess = async (isDraft: boolean = false) => {
+    if (isSubmitting) return;
+
     if (!processTitle.trim()) {
       alert('Por favor ingresa un nombre para el proceso.');
       return;
     }
 
-    const uniqueProcessId = crypto.randomUUID();
-    const targetPos = selectedProfile?.targetPosition || selectedProfile?.title || 'Asesor Operativo';
-    const code = `${selectedProfile?.code || 'PROC'}-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
+    setIsSubmitting(true);
 
-    const newTest: EvaluationTest = {
-      id: uniqueProcessId,
-      code,
-      title: processTitle.trim(),
-      targetPosition: targetPos,
-      description: selectedProfile?.description || `Proceso de evaluación psicopedagógica y casos reales para ${targetPos}.`,
-      instructions: 'Examen de evaluación psicométrica y situacional oficial de Evaluar GEA.',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      isActive: !isDraft,
-      totalDurationMinutes: durationMinutes,
-      candidateCount: stagedCandidates.length,
-      completedCount: 0,
-      averageScore: 0,
-      launchedBy,
-      startDate: startDateTime.split('T')[0] || new Date().toLocaleDateString('es-PE'),
-      endDate: endDateTime.split('T')[0] || '31/12/2026',
-      processStatus: isDraft ? 'BORRADOR' : 'LANZADO',
-      profileName: selectedProfile?.title || targetPos,
-      hiredCount: 0,
-      inProgressCount: 0,
-      selectedCompetencies: selectedProfile?.selectedCompetencies || [
-        'Orientación a Resultados & Eficiencia',
-        'Autorregulación Emocional bajo Presión',
-        'Toma de Decisiones en Contingencias'
-      ],
-      stages: selectedProfile?.stages || [
-        {
-          id: 'STAGE_1_PSYCHO',
-          category: 'PSYCHOLOGICAL',
-          name: 'Etapa 1: Prueba Psicopedagógica & Lógica',
-          description: 'Evaluación psicométrica y razonamiento lógico-deductivo',
-          durationMinutes: Math.round(durationMinutes * 0.33),
-          questionCount: 8,
-          weightPercent: 35,
-          isEnabled: true
-        },
-        {
-          id: 'STAGE_2_EMOTIONAL',
-          category: 'EMOTIONAL',
-          name: 'Etapa 2: Clima y Regulación Emocional',
-          description: 'Inteligencia emocional, resiliencia y tolerancia bajo presión',
-          durationMinutes: Math.round(durationMinutes * 0.33),
-          questionCount: 8,
-          weightPercent: 30,
-          isEnabled: true
-        },
-        {
-          id: 'STAGE_3_WORK_CASES',
-          category: 'WORK_CASES',
-          name: 'Etapa 3: Casos Laborales Simulados',
-          description: 'Resolución de situaciones reales, criterio operativo y toma de decisiones',
-          durationMinutes: Math.round(durationMinutes * 0.34),
-          questionCount: 4,
-          weightPercent: 35,
-          isEnabled: true
-        }
-      ]
-    };
+    try {
+      const uniqueProcessId = generateSafeUuid();
+      const targetPos = selectedProfile?.targetPosition || selectedProfile?.title || 'Asesor Operativo';
+      const code = `${selectedProfile?.code || 'PROC'}-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
 
-    const newCandidates: Candidate[] = stagedCandidates.map((c) => ({
-      id: crypto.randomUUID(),
-      fullName: c.fullName,
-      email: c.email,
-      password: c.password,
-      phone: c.phone,
-      dni: c.dni,
-      position: targetPos,
-      testId: uniqueProcessId,
-      invitationCode: `GEA-${c.dni}`,
-      invitedAt: new Date().toISOString(),
-      status: 'INVITED',
-      auditEventCount: 0,
-      criticalFlags: 0,
-      isConsentSigned: false
-    }));
+      const newTest: EvaluationTest = {
+        id: uniqueProcessId,
+        code,
+        title: processTitle.trim(),
+        targetPosition: targetPos,
+        description: selectedProfile?.description || `Proceso de evaluación psicopedagógica y casos reales para ${targetPos}.`,
+        instructions: 'Examen de evaluación psicométrica y situacional oficial de Evaluar GEA.',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        isActive: !isDraft,
+        totalDurationMinutes: durationMinutes,
+        candidateCount: stagedCandidates.length,
+        completedCount: 0,
+        averageScore: 0,
+        launchedBy,
+        startDate: startDateTime.split('T')[0] || new Date().toLocaleDateString('es-PE'),
+        endDate: endDateTime.split('T')[0] || '31/12/2026',
+        processStatus: isDraft ? 'BORRADOR' : 'LANZADO',
+        profileName: selectedProfile?.title || targetPos,
+        hiredCount: 0,
+        inProgressCount: 0,
+        selectedCompetencies: selectedProfile?.selectedCompetencies || [
+          'Orientación a Resultados & Eficiencia',
+          'Autorregulación Emocional bajo Presión',
+          'Toma de Decisiones en Contingencias'
+        ],
+        stages: selectedProfile?.stages || [
+          {
+            id: 'STAGE_1_PSYCHO',
+            category: 'PSYCHOLOGICAL',
+            name: 'Etapa 1: Prueba Psicopedagógica & Lógica',
+            description: 'Evaluación psicométrica y razonamiento lógico-deductivo',
+            durationMinutes: Math.round(durationMinutes * 0.33),
+            questionCount: 8,
+            weightPercent: 35,
+            isEnabled: true
+          },
+          {
+            id: 'STAGE_2_EMOTIONAL',
+            category: 'EMOTIONAL',
+            name: 'Etapa 2: Clima y Regulación Emocional',
+            description: 'Inteligencia emocional, resiliencia y tolerancia bajo presión',
+            durationMinutes: Math.round(durationMinutes * 0.33),
+            questionCount: 8,
+            weightPercent: 30,
+            isEnabled: true
+          },
+          {
+            id: 'STAGE_3_WORK_CASES',
+            category: 'WORK_CASES',
+            name: 'Etapa 3: Casos Laborales Simulados',
+            description: 'Resolución de situaciones reales, criterio operativo y toma de decisiones',
+            durationMinutes: Math.round(durationMinutes * 0.34),
+            questionCount: 4,
+            weightPercent: 35,
+            isEnabled: true
+          }
+        ]
+      };
 
-    onLaunchProcess(newTest, newCandidates);
-    setLaunchedSuccess({
-      process: newTest,
-      candidates: stagedCandidates,
-      isDraft
-    });
+      const newCandidates: Candidate[] = stagedCandidates.map((c) => ({
+        id: generateSafeUuid(),
+        fullName: c.fullName,
+        email: c.email,
+        password: c.password,
+        phone: c.phone,
+        dni: c.dni,
+        position: targetPos,
+        testId: uniqueProcessId,
+        invitationCode: `GEA-${c.dni}`,
+        invitedAt: new Date().toISOString(),
+        status: 'INVITED',
+        auditEventCount: 0,
+        criticalFlags: 0,
+        isConsentSigned: false
+      }));
+
+      await onLaunchProcess(newTest, newCandidates);
+
+      setLaunchedSuccess({
+        process: newTest,
+        candidates: stagedCandidates,
+        isDraft
+      });
+    } catch (err: any) {
+      console.error('[CreateProcessModal] Error al procesar convocatoria:', err);
+      alert('Ocurrió un problema al lanzar el proceso: ' + (err?.message || 'Error de conexión'));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // SUCCESS CONFIRMATION MODAL
@@ -914,19 +930,30 @@ export const CreateProcessModal: React.FC<CreateProcessModalProps> = ({
             <div className="flex items-center justify-end gap-4 pt-2">
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={() => handleSubmitProcess(true)}
-                className="text-xs sm:text-sm font-bold text-[#7C3AED] hover:underline cursor-pointer px-3 py-2"
+                className="text-xs sm:text-sm font-bold text-[#7C3AED] hover:underline cursor-pointer px-3 py-2 disabled:opacity-50"
               >
                 Guardar como borrador
               </button>
 
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={() => handleSubmitProcess(false)}
-                className="px-6 py-3 rounded-2xl bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer shadow-md transition-all active:scale-98"
+                className="px-6 py-3 rounded-2xl bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer shadow-md transition-all active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Rocket className="w-4 h-4" />
-                <span>Lanzar Proceso</span>
+                {isSubmitting ? (
+                  <>
+                    <RotateCw className="w-4 h-4 animate-spin" />
+                    <span>Lanzando proceso...</span>
+                  </>
+                ) : (
+                  <>
+                    <Rocket className="w-4 h-4" />
+                    <span>Lanzar Proceso</span>
+                  </>
+                )}
               </button>
             </div>
 

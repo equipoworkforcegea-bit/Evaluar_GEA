@@ -1,13 +1,14 @@
 import { supabase } from './supabaseClient';
 import { Candidate, ExamStageId, AuditEventType, AuditEvent, CandidateDetailedReport, CompetencyScore } from '../types';
 import { SAMPLE_QUESTIONS } from '../data/questionBank';
+import { generateSafeUuid } from './processDataService';
 
-// Helper para validar o generar UUID v4
+// Helper para validar o generar UUID v4 de forma segura
 function ensureUuid(id?: string): string {
   if (id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
     return id;
   }
-  return crypto.randomUUID();
+  return generateSafeUuid();
 }
 
 // Proceso fallback por defecto para asegurar integridad referencial
