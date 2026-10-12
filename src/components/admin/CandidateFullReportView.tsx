@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Candidate, EvaluationTest } from '../../types';
-import { PrintableCandidateReport } from './PrintableCandidateReport';
+import { ExportReportModal } from './ExportReportModal';
 import { 
   ArrowLeft, 
   Plus, 
@@ -204,10 +204,11 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
         </div>
       )}
 
-      {/* Printable Report Modal si se pulsa "Descargar informe" */}
+      {/* Modal oficial de exportación a PDF (Flujo Evaluar v4.1.2) */}
       {showPrintModal && (
-        <PrintableCandidateReport
+        <ExportReportModal
           candidate={candidate}
+          process={process}
           onClose={() => setShowPrintModal(false)}
         />
       )}

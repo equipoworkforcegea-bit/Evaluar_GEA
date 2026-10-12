@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Candidate, AuditEvent } from '../../types';
 import { CandidateDataService } from '../../services/candidateDataService';
 import { STAGES_CONFIG, VALIDATION_DISCLAIMER } from '../../data/questionBank';
-import { PrintableCandidateReport } from './PrintableCandidateReport';
+import { ExportReportModal } from './ExportReportModal';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import { 
   X, 
@@ -77,9 +77,9 @@ export const CandidateDetailModal: React.FC<CandidateDetailModalProps> = ({
 
   return (
     <>
-      {/* Printable Report Modal if triggered */}
+      {/* Modal oficial de exportación a PDF (Flujo Evaluar v4.1.2) */}
       {showPrintModal && (
-        <PrintableCandidateReport
+        <ExportReportModal
           candidate={candidate}
           onClose={() => setShowPrintModal(false)}
         />

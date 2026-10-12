@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Candidate, EvaluationTest } from '../../types';
 import { CandidateDetailModal } from './CandidateDetailModal';
-import { PrintableCandidateReport } from './PrintableCandidateReport';
+import { ExportReportModal } from './ExportReportModal';
 import { InviteCandidateModal } from './InviteCandidateModal';
 import { EvaluarProcessListView, ProcessModuleFilter } from './EvaluarProcessListView';
 import { ProcessDetailControlView } from './ProcessDetailControlView';
@@ -631,10 +631,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         />
       )}
 
-      {/* Printable Candidate Executive Report Modal */}
+      {/* Modal oficial de exportación de reporte a PDF */}
       {reportCandidate && (
-        <PrintableCandidateReport
+        <ExportReportModal
           candidate={reportCandidate}
+          process={processes.find(p => p.id === reportCandidate.testId)}
           onClose={() => setReportCandidate(null)}
         />
       )}
