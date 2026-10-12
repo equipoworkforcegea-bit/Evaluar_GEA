@@ -55,164 +55,7 @@ interface ProcessDetailControlViewProps {
 
 type StatusPillFilter = 'FINALIZADOS' | 'EN_PROGRESO' | 'DESCALIFICADOS' | 'SIN_INICIAR' | 'TODOS';
 
-// Candidatos base para este proceso idénticos a las capturas de Evaluar v4.1.2
-const BASE_POSTPAGO_CANDIDATES: Partial<Candidate>[] = [
-  {
-    id: 'cand-pp-01',
-    fullName: 'Jean Carlos Baldeon',
-    email: 'carlosporsiempre345@gmail.com',
-    phone: '+51 984 561 230',
-    dni: '73819201',
-    status: 'FINALIST',
-    scores: { overall: 87, stage1Psycho: 88, stage2Emotional: 86, stage3WorkCases: 87, percentile: 92 },
-    invitedAt: '2026-09-28T08:30:00Z',
-    startedAt: '2026-09-28T09:00:00Z',
-    completedAt: '2026-09-28T09:42:00Z',
-    currentStage: 'STAGE_3_WORK_CASES',
-    position: 'Postpago Chile Prueba',
-    testId: 'test-gea-postpago-01',
-    isConsentSigned: true
-  },
-  {
-    id: 'cand-pp-02',
-    fullName: 'Angelo Sipion',
-    email: 'sipionangelo30@gmail.com',
-    phone: '+51 972 384 105',
-    dni: '73819202',
-    status: 'FINALIST',
-    scores: { overall: 87, stage1Psycho: 87, stage2Emotional: 89, stage3WorkCases: 86, percentile: 92 },
-    invitedAt: '2026-09-28T08:30:00Z',
-    startedAt: '2026-09-28T09:10:00Z',
-    completedAt: '2026-09-28T09:51:00Z',
-    currentStage: 'STAGE_3_WORK_CASES',
-    position: 'Postpago Chile Prueba',
-    testId: 'test-gea-postpago-01',
-    isConsentSigned: true
-  },
-  {
-    id: 'cand-pp-03',
-    fullName: 'Juan Perez',
-    email: 'juan.perez.chile@gmail.com',
-    phone: '+51 931 740 582',
-    dni: '73819203',
-    status: 'FINALIST',
-    scores: { overall: 85, stage1Psycho: 84, stage2Emotional: 86, stage3WorkCases: 85, percentile: 88 },
-    invitedAt: '2026-09-28T08:30:00Z',
-    startedAt: '2026-09-28T09:15:00Z',
-    completedAt: '2026-09-28T09:58:00Z',
-    currentStage: 'STAGE_3_WORK_CASES',
-    position: 'Postpago Chile Prueba',
-    testId: 'test-gea-postpago-01',
-    isConsentSigned: true
-  },
-  {
-    id: 'cand-pp-04',
-    fullName: 'Jesus Morales',
-    email: 'jesus.morales.chile@gmail.com',
-    phone: '+51 964 819 237',
-    dni: '73819204',
-    status: 'FINALIST',
-    scores: { overall: 85, stage1Psycho: 85, stage2Emotional: 84, stage3WorkCases: 86, percentile: 88 },
-    invitedAt: '2026-09-28T08:30:00Z',
-    startedAt: '2026-09-28T09:20:00Z',
-    completedAt: '2026-09-28T10:02:00Z',
-    currentStage: 'STAGE_3_WORK_CASES',
-    position: 'Postpago Chile Prueba',
-    testId: 'test-gea-postpago-01',
-    isConsentSigned: true
-  },
-  {
-    id: 'cand-pp-05',
-    fullName: 'Raquel Martinez',
-    email: 'raquel.martinez.pe@gmail.com',
-    phone: '+51 955 672 839',
-    dni: '73819205',
-    status: 'FINALIST',
-    scores: { overall: 84, stage1Psycho: 83, stage2Emotional: 85, stage3WorkCases: 84, percentile: 85 },
-    invitedAt: '2026-09-28T08:30:00Z',
-    startedAt: '2026-09-28T09:25:00Z',
-    completedAt: '2026-09-28T10:08:00Z',
-    currentStage: 'STAGE_3_WORK_CASES',
-    position: 'Postpago Chile Prueba',
-    testId: 'test-gea-postpago-01',
-    isConsentSigned: true
-  },
-  {
-    id: 'cand-pp-06',
-    fullName: 'Bruno Alexander Cornejo Quiroz',
-    email: 'b.cornejo@inbox.pe',
-    phone: '+51 984 561 230',
-    dni: '73819206',
-    status: 'FINALIST',
-    scores: { overall: 82, stage1Psycho: 81, stage2Emotional: 83, stage3WorkCases: 82, percentile: 81 },
-    invitedAt: '2026-09-28T08:30:00Z',
-    startedAt: '2026-09-28T09:30:00Z',
-    completedAt: '2026-09-28T10:11:00Z',
-    currentStage: 'STAGE_3_WORK_CASES',
-    position: 'Postpago Chile Prueba',
-    testId: 'test-gea-postpago-01',
-    isConsentSigned: true
-  },
-  {
-    id: 'cand-pp-07',
-    fullName: 'Manuel Jesús Quintana Arana',
-    email: 'm.quintana@correo.pe',
-    phone: '+51 931 740 582',
-    dni: '74829103',
-    status: 'IN_PROGRESS',
-    currentStage: 'STAGE_2_EMOTIONAL',
-    startedAt: '2026-09-28T11:45:00Z',
-    position: 'Postpago Chile Prueba',
-    testId: 'test-gea-postpago-01',
-    isConsentSigned: true
-  },
-  {
-    id: 'cand-pp-08',
-    fullName: 'Estefany Marisol Prado Huanca',
-    email: 'estefany.prado@gmail.com',
-    phone: '+51 972 384 105',
-    dni: '71562938',
-    status: 'IN_PROGRESS',
-    currentStage: 'STAGE_1_PSYCHO',
-    startedAt: '2026-09-28T11:55:00Z',
-    position: 'Postpago Chile Prueba',
-    testId: 'test-gea-postpago-01',
-    isConsentSigned: true
-  }
-];
 
-// Generar candidatos adicionales "Sin iniciar" para totalizar exactamente 30 candidatos
-const generateUnstartedCandidates = (): Candidate[] => {
-  const unstarted: Candidate[] = [];
-  const names = [
-    'Diana Carolina Rivas Montalvo', 'Carlos Fernando Gutierrez', 'Valeria Sofia Morales',
-    'Diego Alonso Ramos', 'Andrea Luciana Quispe', 'Gabriel Eduardo Flores',
-    'Mariana Elizabeth Castro', 'Kevin Alexander Torres', 'Patricia Jimena Salazar',
-    'Rodrigo Andres Vargas', 'Camila Nicole Mendoza', 'Sebastian Ignacio Herrera',
-    'Lucia Fernanda Ortiz', 'Mateo Nicolas Chavez', 'Renata Valentina Romero',
-    'Alvaro David Guzman', 'Fiorella Antonella Delgado', 'Joaquin Mauricio Vega',
-    'Milagros Belen Silva', 'Leonardo Javier Medina', 'Daniela Paola Rojas',
-    'Gonzalo Martin Soto'
-  ];
-
-  names.forEach((name, i) => {
-    const id = `cand-pp-unstarted-${i + 1}`;
-    unstarted.push({
-      id,
-      fullName: name,
-      email: `${name.toLowerCase().replace(/\s+/g, '.')}@gmail.com`,
-      phone: `+51 9${Math.floor(10000000 + Math.random() * 89999999)}`,
-      dni: `7${Math.floor(1000000 + Math.random() * 8999999)}`,
-      status: 'INVITED',
-      position: 'Postpago Chile Prueba',
-      testId: 'test-gea-postpago-01',
-      invitedAt: '2026-09-28T08:30:00Z',
-      isConsentSigned: false
-    } as Candidate);
-  });
-
-  return unstarted;
-};
 
 // DISC Profiles mapping para el Comparador
 const CANDIDATE_DISC_DATA: Record<string, { label: string; colorClass: string; textColor: string; dominance: number; influence: number; steadiness: number; compliance: number }> = {
@@ -286,36 +129,13 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
     };
   }, []);
 
-  // Postulantes asignados a este proceso específico
+  // Postulantes asignados a este proceso específico (solo candidatos reales)
   const processCandidates = useMemo(() => {
-    const matched = liveCandidates.filter(c => 
+    return liveCandidates.filter(c => 
       c.testId === process.id || 
       (process.code && c.testId === process.code) ||
-      (c.testId && process.id && c.testId.toLowerCase() === process.id.toLowerCase()) ||
-      (process.targetPosition && c.position && c.position.toLowerCase() === process.targetPosition.toLowerCase()) ||
-      (process.title && c.position && c.position.toLowerCase().includes('postpago'))
+      (c.testId && process.id && c.testId.toLowerCase() === process.id.toLowerCase())
     );
-
-    // Si ya tenemos suficientes candidatos reales en este proceso, usarlos
-    if (matched.length >= 15) {
-      return matched;
-    }
-
-    // Si es el proceso POSTPAGO CHILE PRUEBA, inyectar los candidatos base fieles a la captura
-    const baseList: Candidate[] = [
-      ...(BASE_POSTPAGO_CANDIDATES as Candidate[]),
-      ...generateUnstartedCandidates()
-    ];
-
-    // Combinar evitando duplicados por email
-    const combined = [...matched];
-    for (const b of baseList) {
-      if (!combined.some(c => c.email.toLowerCase() === b.email.toLowerCase())) {
-        combined.push(b);
-      }
-    }
-
-    return combined.length > 0 ? combined : (liveCandidates.length > 0 ? liveCandidates : baseList);
   }, [liveCandidates, process]);
 
   // Clasificación por estados para las píldoras de conteo
@@ -419,25 +239,25 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
     return result;
   }, [processCandidates, comparedCandidateIds]);
 
-  // Métricas para Dashboard
+  // Métricas para Dashboard (solo datos reales)
   const dashboardMetrics = useMemo(() => {
     const scoredList = processCandidates.filter(c => (c.scores?.overall || 0) > 0);
-    const adequate = scoredList.filter(c => (c.scores?.overall || 0) >= 85).length || 3;
-    const near = scoredList.filter(c => (c.scores?.overall || 0) >= 70 && (c.scores?.overall || 0) < 85).length || 2;
-    const notAdequate = scoredList.filter(c => (c.scores?.overall || 0) < 70).length || 0;
+    const adequate = scoredList.filter(c => (c.scores?.overall || 0) >= 85).length;
+    const near = scoredList.filter(c => (c.scores?.overall || 0) >= 70 && (c.scores?.overall || 0) < 85).length;
+    const notAdequate = scoredList.filter(c => (c.scores?.overall || 0) < 70).length;
 
     return {
       adequateCount: adequate,
       nearCount: near,
       notAdequateCount: notAdequate,
-      hiredCount: 0,
+      hiredCount: processCandidates.filter(c => String(c.status || '').toUpperCase() === 'FINALIST' || String(c.status || '').toUpperCase() === 'FINALISTA').length,
       coverageDays: 0,
-      totalPostulados: processCandidates.length || 30,
-      inProgressCount: inProgressList.length || 2,
-      finalizedCount: finalizedList.length || 6,
-      preselectedCount: preselectedList.length || 0,
-      disqualifiedCount: disqualifiedList.length || 0,
-      npsScore: 3
+      totalPostulados: processCandidates.length,
+      inProgressCount: inProgressList.length,
+      finalizedCount: finalizedList.length,
+      preselectedCount: preselectedList.length,
+      disqualifiedCount: disqualifiedList.length,
+      npsScore: 0
     };
   }, [processCandidates, inProgressList, finalizedList, preselectedList, disqualifiedList]);
 

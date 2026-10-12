@@ -640,7 +640,7 @@ export const EvaluarProcessListView: React.FC<EvaluarProcessListViewProps> = ({
 
           const isFinalistOrScored = (c: Candidate) => {
             const raw = String(c.status || '').toUpperCase();
-            return raw === 'FINALIST' || raw === 'FINALISTA' || raw === 'SCORED' || raw === 'EVALUADO' || raw === 'COMPLETADO';
+            return raw === 'FINALIST' || raw === 'FINALISTA' || raw === 'SCORED' || raw === 'EVALUADO' || raw === 'COMPLETADO' || (c.scores && (c.scores.overall || 0) > 0);
           };
           const isInProgress = (c: Candidate) => {
             if (isFinalistOrScored(c)) return false;
@@ -656,24 +656,12 @@ export const EvaluarProcessListView: React.FC<EvaluarProcessListViewProps> = ({
             return raw === 'REJECTED' || raw === 'RECHAZADO' || raw === 'DISQUALIFIED';
           };
 
-          const finalized = processCandidates.length > 0 
-            ? processCandidates.filter(isFinalistOrScored).length 
-            : (test.completedCount ?? 0);
-          const inProgress = processCandidates.length > 0 
-            ? processCandidates.filter(isInProgress).length 
-            : (test.inProgressCount ?? 0);
-          const disqualified = processCandidates.length > 0 
-            ? processCandidates.filter(isRejected).length 
-            : (test.disqualifiedCount ?? 0);
-          const notStarted = processCandidates.length > 0 
-            ? processCandidates.filter(c => !isFinalistOrScored(c) && !isInProgress(c) && !isRejected(c)).length 
-            : (test.notStartedCount ?? 0);
-          const totalCand = processCandidates.length > 0 
-            ? processCandidates.length 
-            : (test.candidateCount ?? 0);
-          const hired = processCandidates.length > 0 
-            ? processCandidates.filter(c => String(c.status || '').toUpperCase() === 'FINALIST' || String(c.status || '').toUpperCase() === 'FINALISTA').length 
-            : (test.hiredCount ?? 0);
+          const finalized = processCandidates.filter(isFinalistOrScored).length;
+          const inProgress = processCandidates.filter(isInProgress).length;
+          const disqualified = processCandidates.filter(isRejected).length;
+          const notStarted = processCandidates.filter(c => !isFinalistOrScored(c) && !isInProgress(c) && !isRejected(c)).length;
+          const totalCand = processCandidates.length;
+          const hired = processCandidates.filter(c => String(c.status || '').toUpperCase() === 'FINALIST' || String(c.status || '').toUpperCase() === 'FINALISTA').length;
 
           const isHighlighted = test.id === highlightedTestId;
 
