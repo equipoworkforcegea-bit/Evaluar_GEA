@@ -5,6 +5,7 @@ import { PrintableCandidateReport } from './PrintableCandidateReport';
 import { InviteCandidateModal } from './InviteCandidateModal';
 import { EvaluarProcessListView, ProcessModuleFilter } from './EvaluarProcessListView';
 import { ProcessDetailControlView } from './ProcessDetailControlView';
+import { CandidateFullReportView } from './CandidateFullReportView';
 import { AnalyticsView } from './AnalyticsView';
 import { ProfilesManagerView } from './ProfilesManagerView';
 import { TalentPoolView } from './TalentPoolView';
@@ -373,9 +374,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         />
       )}
 
-      {/* 3. PROCESOS: VISTA DE CONTROL DE PROCESO (EVALUAR V4.1.2) O LISTADO DE PROCESOS */}
+      {/* 3. PROCESOS: VISTA DE CONTROL DE PROCESO (EVALUAR V4.1.2) O FICHA DE CANDIDATO O LISTADO DE PROCESOS */}
       {activeTab === 'PROCESOS' && (
-        selectedProcessForControl ? (
+        selectedCandidate ? (
+          <CandidateFullReportView
+            candidate={selectedCandidate}
+            process={selectedProcessForControl || processes.find(p => p.id === selectedCandidate.testId) || processes[0]}
+            onBack={() => setSelectedCandidate(null)}
+            onHireCandidate={handlePromoteCandidate}
+          />
+        ) : selectedProcessForControl ? (
           <ProcessDetailControlView
             process={selectedProcessForControl}
             candidates={candidates}
@@ -559,8 +567,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* MODALS & OVERLAYS                                                         */}
       {/* ========================================================================= */}
 
-      {/* Candidate Detail Modal */}
-      {selectedCandidate && (
+      {/* Candidate Detail Modal for other tabs */}
+      {selectedCandidate && activeTab !== 'PROCESOS' && (
         <CandidateDetailModal
           candidate={selectedCandidate}
           onClose={() => setSelectedCandidate(null)}
