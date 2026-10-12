@@ -21,6 +21,8 @@ interface EvaluarOfficialPdfReportProps {
   process?: EvaluationTest;
   onClose?: () => void;
   hideSensitiveData?: boolean;
+}
+
 const EvaluarGeaReportFooter: React.FC<{ candidateName: string; pageNumber: number }> = ({ candidateName, pageNumber }) => (
   <div className="pt-6 border-t border-zinc-200/80 flex items-center justify-between text-[10px] text-zinc-400">
     <div className="flex items-center gap-2">
