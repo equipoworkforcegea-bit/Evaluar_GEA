@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { Candidate, EvaluationTest } from '../../types';
 import { 
   Smile, 
@@ -211,11 +212,11 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
     }, 1500);
   };
 
-  return (
-    <div className="fixed inset-0 z-[200] overflow-y-auto bg-zinc-950/80 backdrop-blur-xs flex flex-col items-center py-6 px-2 sm:px-4 print:p-0 print:bg-white print:static print:overflow-visible">
+  return createPortal(
+    <div id="evaluar-official-pdf-report-portal" className="fixed inset-0 z-[9999] overflow-y-auto bg-zinc-950/80 backdrop-blur-xs flex flex-col items-center py-6 px-2 sm:px-4 print:p-0 print:bg-white print:static print:overflow-visible">
       
       {/* Top Floating Action Bar (Hidden on print) */}
-      <div className="fixed top-4 right-4 z-[210] flex items-center gap-3 print:hidden bg-zinc-900/90 text-white px-5 py-2.5 rounded-2xl border border-zinc-700 shadow-2xl backdrop-blur-md">
+      <div className="evaluar-no-print fixed top-4 right-4 z-[210] flex items-center gap-3 print:hidden bg-zinc-900/90 text-white px-5 py-2.5 rounded-2xl border border-zinc-700 shadow-2xl backdrop-blur-md">
         <span className="text-xs font-semibold text-zinc-300">Reporte Oficial (15 págs.)</span>
         
         <button
@@ -251,12 +252,12 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
         {/* ------------------------------------------------------------------------- */}
         {/* PÁGINA 1: PORTADA SPLIT OFICIAL EVALUAR                                   */}
         {/* ------------------------------------------------------------------------- */}
-        <div className="evaluar-page-sheet bg-white w-[210mm] h-[296mm] relative flex flex-col justify-between shadow-2xl print:shadow-none mx-auto overflow-hidden">
+        <div className="evaluar-page-sheet evaluar-page-portada bg-white w-[210mm] h-[296.8mm] relative flex flex-col justify-between shadow-2xl print:shadow-none mx-auto overflow-hidden">
           
-          <div className="grid grid-cols-12 h-full">
+          <div className="evaluar-page-portada-grid grid grid-cols-12 h-full w-full">
             
             {/* Lado Izquierdo (5 cols): Fondo Cósmico Púrpura con Ondas y Datos */}
-            <div className="col-span-5 bg-gradient-to-b from-[#180A3A] via-[#351268] to-[#120626] text-white p-8 flex flex-col justify-between relative overflow-hidden">
+            <div className="evaluar-portada-left col-span-5 bg-gradient-to-b from-[#180A3A] via-[#351268] to-[#120626] text-white p-8 flex flex-col justify-between relative overflow-hidden">
               
               {/* Ondas decorativas de fondo */}
               <div className="absolute inset-0 opacity-40 pointer-events-none">
@@ -342,7 +343,7 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
             </div>
 
             {/* Lado Derecho (7 cols): Resultados Generales */}
-            <div className="col-span-7 p-10 flex flex-col justify-between bg-white text-zinc-900">
+            <div className="evaluar-portada-right col-span-7 p-10 flex flex-col justify-between bg-white text-zinc-900">
               
               <div className="space-y-8 pt-4">
                 
@@ -1369,7 +1370,7 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
         })()}
 
         {/* Página 15: Preguntas sugeridas para la entrevista */}
-        <div className="evaluar-page-sheet bg-white w-[210mm] h-[296mm] p-12 flex flex-col justify-between shadow-2xl print:shadow-none mx-auto">
+        <div className="evaluar-page-sheet evaluar-page-last bg-white w-[210mm] h-[296.8mm] p-12 flex flex-col justify-between shadow-2xl print:shadow-none mx-auto">
           <div className="space-y-5">
             <div className="w-full py-2.5 rounded-xl bg-[#6355DE] text-white font-bold text-center text-xs tracking-wider">
               Preguntas sugeridas para la entrevista por competencias
@@ -1430,6 +1431,7 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
 
       </div>
 
-    </div>
+    </div>,
+    document.body
   );
 };
