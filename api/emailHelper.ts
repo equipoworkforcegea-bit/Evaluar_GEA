@@ -1,5 +1,3 @@
-import nodemailer from 'nodemailer';
-
 export interface SendEmailInvitationParams {
   to: string;
   candidateName?: string;
@@ -188,6 +186,14 @@ export async function sendEmailInvitation(params: SendEmailInvitationParams) {
 
   if (!emailPass) {
     throw new Error('Falta contraseña de aplicación GMAIL_APP_PASSWORD.');
+  }
+
+  let nodemailer: any;
+  try {
+    const mod = await import('nodemailer');
+    nodemailer = mod.default || mod;
+  } catch {
+    throw new Error('nodemailer no está instalado localmente. Por favor corre en tu terminal: npm install nodemailer');
   }
 
   const transporter = nodemailer.createTransport({
