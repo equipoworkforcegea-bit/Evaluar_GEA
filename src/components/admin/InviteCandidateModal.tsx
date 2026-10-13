@@ -339,6 +339,7 @@ export const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
   const [copiedAll, setCopiedAll] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [emailStatuses, setEmailStatuses] = useState<Record<string, 'IDLE' | 'SENDING' | 'SENT' | 'ERROR'>>({});
+  const [emailErrorDetails, setEmailErrorDetails] = useState<Record<string, string>>({});
 
   // Guardar postulantes procesados
   const handleSaveCandidates = (rowsToSave: ParsedCandidateRow[]) => {
@@ -407,12 +408,16 @@ export const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
             ...prev,
             [cand.dni]: res.success ? 'SENT' : 'ERROR'
           }));
+          if (!res.success && res.error) {
+            setEmailErrorDetails(prev => ({ ...prev, [cand.dni]: res.error || 'Error de envío' }));
+          }
         }).catch(err => {
           console.warn('[InviteCandidateModal] Error enviando correo:', err);
           setEmailStatuses(prev => ({
             ...prev,
             [cand.dni]: 'ERROR'
           }));
+          setEmailErrorDetails(prev => ({ ...prev, [cand.dni]: err?.message || 'Error de conexión' }));
         });
       }
     });
@@ -435,6 +440,9 @@ export const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
       customLoginUrl: directLoginUrl
     });
     setEmailStatuses(prev => ({ ...prev, [cred.dni]: res.success ? 'SENT' : 'ERROR' }));
+    if (!res.success && res.error) {
+      setEmailErrorDetails(prev => ({ ...prev, [cred.dni]: res.error }));
+    }
   };
 
   // Submit Modo Manual
@@ -630,9 +638,15 @@ export const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
                             </span>
                           )}
                           {status === 'ERROR' && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200/60 flex items-center gap-1 font-semibold">
+                            <span 
+                              title={emailErrorDetails[cred.dni] || 'No se pudo contactar el servidor de correo. Requiere git push en Vercel.'}
+                              className="px-1.5 py-0.5 rounded text-[10px] bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200/60 flex items-center gap-1 font-semibold cursor-help"
+                            >
                               <AlertCircle className="w-2.5 h-2.5" />
-                              Pendiente envío
+                              <span>Pendiente envío</span>
+                              {emailErrorDetails[cred.dni] && (
+                                <span className="text-[9px] opacity-75 hidden sm:inline">({emailErrorDetails[cred.dni].slice(0, 30)})</span>
+                              )}
                             </span>
                           )}
                         </div>
