@@ -253,7 +253,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         candidateName: cand.fullName,
         dni: cand.dni,
         processTitle: cand.position || 'Evaluación de Selección',
-        accessCode: codeToUse
+        accessCode: codeToUse,
+        password: cand.password || 'Gea2026!'
       });
 
       if (emailResult.success) {

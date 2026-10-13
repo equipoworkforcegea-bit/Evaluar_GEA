@@ -9,6 +9,7 @@ export interface CandidateInvitationEmailParams {
   dni?: string;
   processTitle?: string;
   accessCode?: string;
+  password?: string;
   durationMinutes?: number;
   customLoginUrl?: string;
 }
@@ -42,6 +43,7 @@ export const EmailInvitationService = {
           dni: params.dni || '',
           processTitle: params.processTitle || 'Convocatoria Laboral',
           accessCode: params.accessCode || `GEA-${params.dni || Math.floor(100000 + Math.random() * 900000)}`,
+          password: params.password,
           durationMinutes: params.durationMinutes || 45,
           customLoginUrl: params.customLoginUrl
         })

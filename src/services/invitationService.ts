@@ -109,6 +109,7 @@ export const InvitationService = {
           dni: dniClean,
           processTitle: processName,
           accessCode: codigoFinal,
+          password: 'Gea2026!',
           durationMinutes: data.duracionMinutos || 45,
           customLoginUrl: inviteUrl
         }).catch((err) => {

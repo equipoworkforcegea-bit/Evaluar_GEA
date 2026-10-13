@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { Candidate, EvaluationTest } from '../../types';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
+import { EmailInvitationService } from '../../services/emailInvitationService';
 import { 
   X, 
   UserPlus, 
@@ -12,6 +13,7 @@ import {
   AlertCircle, 
   Key, 
   Mail, 
+  MailCheck,
   Phone, 
   CreditCard, 
   User, 
@@ -21,7 +23,8 @@ import {
   Check,
   Zap,
   RefreshCw,
-  MessageCircle
+  MessageCircle,
+  Loader2
 } from 'lucide-react';
 
 interface InviteCandidateModalProps {
@@ -335,6 +338,7 @@ export const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
   }> | null>(null);
   const [copiedAll, setCopiedAll] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [emailStatuses, setEmailStatuses] = useState<Record<string, 'IDLE' | 'SENDING' | 'SENT' | 'ERROR'>>({});
 
   // Guardar postulantes procesados
   const handleSaveCandidates = (rowsToSave: ParsedCandidateRow[]) => {
@@ -375,6 +379,62 @@ export const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
       password: c.password || '',
       position: c.position
     })));
+
+    // Disparar envío automático de correos oficiales por Gmail
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://evaluar-gea.vercel.app';
+    const initialStatuses: Record<string, 'IDLE' | 'SENDING' | 'SENT' | 'ERROR'> = {};
+    newCandidates.forEach(c => {
+      if (c.email && c.email.includes('@')) {
+        initialStatuses[c.dni] = 'SENDING';
+      }
+    });
+    setEmailStatuses(initialStatuses);
+
+    newCandidates.forEach(cand => {
+      if (cand.email && cand.email.includes('@')) {
+        const directLoginUrl = `${origin}/login?code=${encodeURIComponent(cand.invitationCode)}&dni=${encodeURIComponent(cand.dni)}&email=${encodeURIComponent(cand.email)}`;
+        EmailInvitationService.sendInvitationEmail({
+          to: cand.email,
+          candidateName: cand.fullName,
+          dni: cand.dni,
+          processTitle: assignedPosition,
+          accessCode: cand.invitationCode,
+          password: cand.password,
+          durationMinutes: selectedTest?.totalDurationMinutes || 45,
+          customLoginUrl: directLoginUrl
+        }).then(res => {
+          setEmailStatuses(prev => ({
+            ...prev,
+            [cand.dni]: res.success ? 'SENT' : 'ERROR'
+          }));
+        }).catch(err => {
+          console.warn('[InviteCandidateModal] Error enviando correo:', err);
+          setEmailStatuses(prev => ({
+            ...prev,
+            [cand.dni]: 'ERROR'
+          }));
+        });
+      }
+    });
+  };
+
+  // Reenviar correo individual a un postulante específico
+  const handleResendSingleEmail = async (cred: { name: string; dni: string; email: string; password: string; position: string }) => {
+    if (!cred.email || !cred.email.includes('@')) return;
+    setEmailStatuses(prev => ({ ...prev, [cred.dni]: 'SENDING' }));
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://evaluar-gea.vercel.app';
+    const directLoginUrl = `${origin}/login?code=GEA-${cred.dni}&dni=${encodeURIComponent(cred.dni)}&email=${encodeURIComponent(cred.email)}`;
+    const res = await EmailInvitationService.sendInvitationEmail({
+      to: cred.email,
+      candidateName: cred.name,
+      dni: cred.dni,
+      processTitle: cred.position,
+      accessCode: `GEA-${cred.dni}`,
+      password: cred.password,
+      durationMinutes: selectedTest?.totalDurationMinutes || 45,
+      customLoginUrl: directLoginUrl
+    });
+    setEmailStatuses(prev => ({ ...prev, [cred.dni]: res.success ? 'SENT' : 'ERROR' }));
   };
 
   // Submit Modo Manual
@@ -541,46 +601,85 @@ export const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
                 <span className="text-zinc-400 text-[11px] font-normal">Puesto: {customPosition}</span>
               </div>
 
-              <div className="max-h-72 overflow-y-auto space-y-2 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-3 bg-zinc-50 dark:bg-zinc-950/40">
-                {createdCredentials.map((cred, idx) => (
-                  <div key={idx} className="p-3 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-3 text-xs shadow-2xs">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-zinc-900 dark:text-zinc-100 truncate">{cred.name}</span>
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200/60">
-                          DNI: {cred.dni}
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/60 flex items-center gap-1">
-                          <MessageCircle className="w-2.5 h-2.5" />
-                          WA: {cred.whatsappUser}
-                        </span>
+              <div className="max-h-80 overflow-y-auto space-y-2.5 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-3 bg-zinc-50 dark:bg-zinc-950/40">
+                {createdCredentials.map((cred, idx) => {
+                  const status = emailStatuses[cred.dni];
+                  return (
+                    <div key={idx} className="p-3.5 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-3 text-xs shadow-2xs">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <span className="font-bold text-zinc-900 dark:text-zinc-100 truncate">{cred.name}</span>
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200/60">
+                            DNI: {cred.dni}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/60 flex items-center gap-1">
+                            <MessageCircle className="w-2.5 h-2.5" />
+                            WA: {cred.whatsappUser}
+                          </span>
+                          {/* Badge de estado de correo */}
+                          {status === 'SENDING' && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200/60 flex items-center gap-1 font-semibold animate-pulse">
+                              <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                              Despachando correo...
+                            </span>
+                          )}
+                          {status === 'SENT' && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/60 flex items-center gap-1 font-bold">
+                              <MailCheck className="w-2.5 h-2.5" />
+                              Correo enviado ✓
+                            </span>
+                          )}
+                          {status === 'ERROR' && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200/60 flex items-center gap-1 font-semibold">
+                              <AlertCircle className="w-2.5 h-2.5" />
+                              Pendiente envío
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-2 text-zinc-500 font-mono text-[11px]">
+                          <span>Correo: <strong className="text-zinc-700 dark:text-zinc-200">{cred.email}</strong></span>
+                          <span>•</span>
+                          <span>Contraseña: <strong className="text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 rounded">{cred.password}</strong></span>
+                        </div>
                       </div>
-                      <div className="flex flex-wrap gap-2 text-zinc-500 font-mono mt-1 text-[11px]">
-                        <span>Correo: <strong>{cred.email}</strong></span>
-                        <span>•</span>
-                        <span>Contraseña: <strong className="text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-1 rounded">{cred.password}</strong></span>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleResendSingleEmail(cred)}
+                          disabled={status === 'SENDING'}
+                          title="Enviar o reenviar invitación al correo del postulante"
+                          className="px-2.5 py-1.5 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50/60 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/40 text-purple-700 dark:text-purple-300 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-50"
+                        >
+                          {status === 'SENDING' ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Mail className="w-3.5 h-3.5" />
+                          )}
+                          <span className="hidden sm:inline">Reenviar Correo</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleCopySingle(cred, idx)}
+                          className="px-2.5 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-medium flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          {copiedIndex === idx ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              <span className="text-emerald-600 font-bold">Copiado</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>Copiar</span>
+                            </>
+                          )}
+                        </button>
                       </div>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleCopySingle(cred, idx)}
-                      className="px-2.5 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-medium flex items-center gap-1 cursor-pointer transition-colors shrink-0"
-                    >
-                      {copiedIndex === idx ? (
-                        <>
-                          <Check className="w-3.5 h-3.5 text-emerald-600" />
-                          <span className="text-emerald-600 font-bold">Copiado</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3.5 h-3.5" />
-                          <span>Copiar</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
