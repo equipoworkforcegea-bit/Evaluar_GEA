@@ -18,7 +18,8 @@ import {
   IdCard,
   FileText,
   ShieldAlert,
-  UserX
+  UserX,
+  UserCog
 } from 'lucide-react';
 import { AuthSession } from '../../types';
 import { MainAdminTab } from './AdminDashboard';
@@ -36,6 +37,8 @@ interface AdminSidebarProps {
   onOpenArchitecture?: () => void;
   onOpenCandidateView?: () => void;
   onResetProcessDetail?: () => void;
+  onOpenNotifications?: () => void;
+  unreadNotifications?: number;
 }
 
 export const AdminSidebar: React.FC<AdminSidebarProps> = ({
@@ -49,10 +52,11 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   onLogout,
   onOpenArchitecture,
   onOpenCandidateView,
-  onResetProcessDetail
+  onResetProcessDetail,
+  onOpenNotifications,
+  unreadNotifications = 0
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [procesosMenuOpen, setProcesosMenuOpen] = useState(true);
   const [analiticaMenuOpen, setAnaliticaMenuOpen] = useState(true);
 
   // Iniciales del usuario
@@ -73,8 +77,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       <div className="p-4 border-b border-[#DDE2EF]/70 dark:border-[#2A3563]/70 flex items-center justify-between gap-2">
         {!isCollapsed && (
           <div className="flex items-center gap-2">
-            <span className="text-xl font-black tracking-tight text-[#1F2A5E] dark:text-white font-sans">
-              evaluar
+            <span className="text-xl font-black tracking-tight text-[#1F2A5E] dark:text-white font-sans flex items-center">
+              Evaluar<span className="text-[#2F5BA8] dark:text-[#5B8AE0]">GEA</span>
             </span>
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-[#1F2A5E]/10 dark:bg-white/10 text-[#2F5BA8] dark:text-[#5B8AE0]">
               v4.1.2
@@ -120,40 +124,33 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         </button>
       </div>
 
-      {/* 3. QUICK ACTIONS: CTRL+K SEARCH & NOTIFICACIONES */}
-      {!isCollapsed && (
-        <div className="px-3 pt-3 space-y-1">
-          {/* Search Trigger */}
-          <button
-            type="button"
-            onClick={() => {
-              const searchInput = document.querySelector('input[type="text"]') as HTMLInputElement;
-              if (searchInput) searchInput.focus();
-            }}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-[#DDE2EF] dark:border-[#2A3563] text-xs text-[#6B7494] dark:text-[#9AA5C4] hover:border-[#2F5BA8] hover:text-[#161C3A] dark:hover:text-white transition-all bg-[#F8FAFC] dark:bg-[#151D3F] cursor-pointer shadow-2xs"
-          >
-            <div className="flex items-center gap-2">
-              <Search className="w-3.5 h-3.5" />
-              <span className="truncate">Navegación rápida</span>
-            </div>
-            <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-white dark:bg-zinc-800 border border-[#DDE2EF] dark:border-[#2A3563]">
-              Ctrl K
-            </kbd>
-          </button>
-
-          {/* Notificaciones */}
-          <button
-            type="button"
-            className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-[#6B7494] dark:text-[#9AA5C4] hover:bg-[#E9EDF6]/50 dark:hover:bg-white/5 transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-2">
+      {/* 3. NOTIFICACIONES (Navegación rápida removida según solicitud) */}
+      {/* 3. NOTIFICACIONES */}
+      <div className={`px-3 pt-3 space-y-1 ${isCollapsed ? 'flex justify-center' : ''}`}>
+        <button
+          type="button"
+          onClick={onOpenNotifications}
+          className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-[#6B7494] dark:text-[#9AA5C4] hover:bg-[#E9EDF6]/50 dark:hover:bg-white/5 transition-colors cursor-pointer relative ${
+            isCollapsed ? 'w-10 justify-center' : 'w-full'
+          }`}
+          title="Notificaciones"
+        >
+          <div className="flex items-center gap-2">
+            <div className="relative">
               <Bell className="w-4 h-4 text-[#2F5BA8]" />
-              <span>Notificaciones</span>
+              {unreadNotifications > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center leading-none">
+                  {unreadNotifications > 99 ? '99+' : unreadNotifications}
+                </span>
+              )}
             </div>
-            <span className="w-2 h-2 rounded-full bg-[#2FA58B]" />
-          </button>
-        </div>
-      )}
+            {!isCollapsed && <span>Notificaciones</span>}
+          </div>
+          {!isCollapsed && unreadNotifications === 0 && (
+            <span className="w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600" />
+          )}
+        </button>
+      </div>
 
       {/* 4. SCROLLABLE NAVIGATION ITEMS */}
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4 text-xs font-medium">
@@ -173,7 +170,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
               type="button"
               onClick={() => {
                 onSelectTab('PROCESOS');
-                setProcesosMenuOpen(!procesosMenuOpen);
+                onSelectModuleFilter?.('MODULO_EVALUACION');
+                onResetProcessDetail?.();
               }}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
                 activeTab === 'PROCESOS' || activeTab === 'VIRALIZACION' || activeTab === 'TRUST' || activeTab === 'SEGURIDAD'
@@ -187,47 +185,13 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 {!isCollapsed && <span className="truncate">Procesos</span>}
               </div>
               {!isCollapsed && (
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${procesosMenuOpen ? 'rotate-180' : ''}`} />
+                <ChevronRight className="w-3.5 h-3.5" />
               )}
             </button>
 
-            {/* Submenú de Procesos (Exacto a Evaluar v4.1.2) */}
-            {!isCollapsed && procesosMenuOpen && (
+            {/* Submenú de Procesos - Solo Módulo de evaluación */}
+            {!isCollapsed && (activeTab === 'PROCESOS' || activeTab === 'VIRALIZACION' || activeTab === 'TRUST' || activeTab === 'SEGURIDAD') && (
               <div className="pl-6 pr-2 py-1 space-y-0.5 border-l border-[#DDE2EF] dark:border-[#2A3563] ml-6 my-1">
-                {/* Todos */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    onSelectTab('PROCESOS');
-                    onSelectModuleFilter?.('TODOS');
-                    onResetProcessDetail?.();
-                  }}
-                  className={`w-full text-left py-1 px-2 text-xs transition-all cursor-pointer block ${
-                    (activeTab === 'PROCESOS' && activeModuleFilter === 'TODOS')
-                      ? 'border-l-2 border-[#1F2A5E] dark:border-[#5B8AE0] font-bold text-[#1F2A5E] dark:text-[#5B8AE0] -ml-[25px] pl-5'
-                      : 'text-[#6B7494] dark:text-[#9AA5C4] hover:text-[#1F2A5E] dark:hover:text-white'
-                  }`}
-                >
-                  Todos
-                </button>
-
-                {/* Viralización */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    onSelectTab('PROCESOS');
-                    onSelectModuleFilter?.('VIRALIZACION');
-                    onResetProcessDetail?.();
-                  }}
-                  className={`w-full text-left py-1 px-2 text-xs transition-all cursor-pointer block ${
-                    (activeTab === 'PROCESOS' && activeModuleFilter === 'VIRALIZACION') || activeTab === 'VIRALIZACION'
-                      ? 'border-l-2 border-[#1F2A5E] dark:border-[#5B8AE0] font-bold text-[#1F2A5E] dark:text-[#5B8AE0] -ml-[25px] pl-5'
-                      : 'text-[#6B7494] dark:text-[#9AA5C4] hover:text-[#1F2A5E] dark:hover:text-white'
-                  }`}
-                >
-                  Viralización
-                </button>
-
                 {/* Modulo de evaluación */}
                 <button
                   type="button"
@@ -242,41 +206,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                       : 'text-[#6B7494] dark:text-[#9AA5C4] hover:text-[#1F2A5E] dark:hover:text-white'
                   }`}
                 >
-                  Modulo de evaluación
-                </button>
-
-                {/* Trust */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    onSelectTab('PROCESOS');
-                    onSelectModuleFilter?.('TRUST');
-                    onResetProcessDetail?.();
-                  }}
-                  className={`w-full text-left py-1 px-2 text-xs transition-all cursor-pointer block ${
-                    (activeTab === 'PROCESOS' && activeModuleFilter === 'TRUST') || activeTab === 'TRUST'
-                      ? 'border-l-2 border-[#1F2A5E] dark:border-[#5B8AE0] font-bold text-[#1F2A5E] dark:text-[#5B8AE0] -ml-[25px] pl-5'
-                      : 'text-[#6B7494] dark:text-[#9AA5C4] hover:text-[#1F2A5E] dark:hover:text-white'
-                  }`}
-                >
-                  Trust
-                </button>
-
-                {/* Seguridad */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    onSelectTab('PROCESOS');
-                    onSelectModuleFilter?.('SEGURIDAD');
-                    onResetProcessDetail?.();
-                  }}
-                  className={`w-full text-left py-1 px-2 text-xs transition-all cursor-pointer block ${
-                    (activeTab === 'PROCESOS' && activeModuleFilter === 'SEGURIDAD') || activeTab === 'SEGURIDAD'
-                      ? 'border-l-2 border-[#1F2A5E] dark:border-[#5B8AE0] font-bold text-[#1F2A5E] dark:text-[#5B8AE0] -ml-[25px] pl-5'
-                      : 'text-[#6B7494] dark:text-[#9AA5C4] hover:text-[#1F2A5E] dark:hover:text-white'
-                  }`}
-                >
-                  Seguridad
+                  Módulo de evaluación
                 </button>
               </div>
             )}
@@ -333,13 +263,6 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                   }`}
                 >
                   Procesos
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onSelectTab('ANALITICA')}
-                  className="w-full text-left py-1 px-2 text-xs text-[#6B7494] dark:text-[#9AA5C4] hover:text-[#1F2A5E] dark:hover:text-white transition-all cursor-pointer block"
-                >
-                  Etiquetas
                 </button>
               </div>
             )}
@@ -419,6 +342,21 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           >
             <IdCard className={`w-4 h-4 shrink-0 ${activeTab === 'POSTULANTES' ? 'text-white' : 'text-[#2FA58B]'}`} />
             {!isCollapsed && <span>Postulantes</span>}
+          </button>
+
+          {/* Administrar Usuarios */}
+          <button
+            type="button"
+            onClick={() => onSelectTab('USUARIOS')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
+              activeTab === 'USUARIOS'
+                ? 'bg-[#1F2A5E] text-white font-bold shadow-xs'
+                : 'text-[#6B7494] dark:text-[#9AA5C4] hover:bg-[#E9EDF6]/60 dark:hover:bg-white/5'
+            } ${isCollapsed ? 'justify-center' : ''}`}
+            title="Administrar Usuarios"
+          >
+            <UserCog className={`w-4 h-4 shrink-0 ${activeTab === 'USUARIOS' ? 'text-white' : 'text-[#2F5BA8] dark:text-[#5B8AE0]'}`} />
+            {!isCollapsed && <span>Administrar Usuarios</span>}
           </button>
         </div>
       </div>

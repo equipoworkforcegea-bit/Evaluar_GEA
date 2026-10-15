@@ -1,19 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 
-const isBrowser = typeof window !== 'undefined';
-const supabaseUrl = (isBrowser && import.meta.env.DEV)
-  ? `${window.location.origin}/supabase-api`
-  : (import.meta.env.VITE_SUPABASE_URL || 'https://tipiorfjpdpiozwfhxfd.supabase.co');
-
-const nodeEnv = (globalThis as any).process?.env;
-const secretKey = nodeEnv?.SUPABASE_SECRET_KEY || nodeEnv?.VITE_SUPABASE_SERVICE_ROLE_KEY || '';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://tipiorfjpdpiozwfhxfd.supabase.co';
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcGlvcmZqcGRwaW96d2ZoeGZkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA4NjQ1ODMsImV4cCI6MjEwNjQ0MDU4M30.7gmibSRbkrYYRCZfoSGwUWo8yn3QkiSeV1lKAOswWhY';
 
-// En el navegador usamos anonKey (el proxy de Vite lo eleva a secretKey en el dev server).
-// En entorno servidor/script usamos secretKey directamente.
-const supabaseKey = (isBrowser ? anonKey : secretKey) || anonKey;
-
-export const supabase = createClient(supabaseUrl, supabaseKey, {
+export const supabase = createClient(supabaseUrl, anonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,

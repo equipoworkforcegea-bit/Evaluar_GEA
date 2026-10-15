@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Candidate, EvaluationTest } from '../../types';
+import { Candidate, EvaluationTest, AuthSession } from '../../types';
 import { CandidateDetailModal } from './CandidateDetailModal';
 import { ExportReportModal } from './ExportReportModal';
 import { InviteCandidateModal } from './InviteCandidateModal';
@@ -18,6 +18,7 @@ import { AssignedCandidatesView } from './AssignedCandidatesView';
 import { InformesView } from './InformesView';
 import { ContratadosView } from './ContratadosView';
 import { NoDeseadosView } from './NoDeseadosView';
+import { AdminUsersManagementView } from './AdminUsersManagementView';
 import { ProcessDataService } from '../../services/processDataService';
 import { CandidateDataService } from '../../services/candidateDataService';
 import { EmailInvitationService } from '../../services/emailInvitationService';
@@ -47,7 +48,8 @@ export type MainAdminTab =
   | 'SEGURIDAD'
   | 'INFORMES'
   | 'CONTRATADOS'
-  | 'NO_DESEADOS';
+  | 'NO_DESEADOS'
+  | 'USUARIOS';
 
 interface AdminDashboardProps {
   candidates: Candidate[];
@@ -60,6 +62,7 @@ interface AdminDashboardProps {
   onSelectProcess?: (id: string | null) => void;
   activeModuleFilter?: ProcessModuleFilter;
   onSelectModuleFilter?: (filter: ProcessModuleFilter) => void;
+  session?: AuthSession;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -72,7 +75,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   activeProcessId,
   onSelectProcess,
   activeModuleFilter: activeModuleFilterProp,
-  onSelectModuleFilter: onSelectModuleFilterProp
+  onSelectModuleFilter: onSelectModuleFilterProp,
+  session
 }) => {
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
   const [reportCandidate, setReportCandidate] = useState<Candidate | null>(null);
@@ -507,6 +511,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <AssignedCandidatesView
           tests={processes}
           onBackToProcesses={() => setActiveTab('PROCESOS')}
+          onSelectCandidate={async (candidateId) => {
+            // Buscar candidato en estado local primero
+            let found = candidates.find(c => c.id === candidateId);
+            if (!found) {
+              // Si no está, buscarlo en Supabase
+              try {
+                const fetched = await CandidateDataService.findCandidateByIdentifier(candidateId);
+                if (fetched) {
+                  found = fetched;
+                  onAddCandidates([fetched]);
+                }
+              } catch (err) {
+                console.warn('[AdminDashboard] Error al cargar candidato:', err);
+              }
+            }
+            if (found) {
+              setSelectedCandidate(found);
+              setActiveTab('PROCESOS');
+            } else {
+              showToast('⚠️ No se encontró el perfil completo del postulante.');
+            }
+          }}
         />
       )}
 
@@ -633,12 +659,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <NoDeseadosView />
       )}
 
+      {/* 11. GESTIÓN Y ADMINISTRACIÓN DE USUARIOS (usuarios_admin) */}
+      {activeTab === 'USUARIOS' && (
+        <AdminUsersManagementView session={session} />
+      )}
+
       {/* ========================================================================= */}
       {/* MODALS & OVERLAYS                                                         */}
       {/* ========================================================================= */}
 
-      {/* Candidate Detail Modal for other tabs */}
-      {selectedCandidate && activeTab !== 'PROCESOS' && (
+      {/* Candidate Detail Modal for other tabs (NOT for PROCESOS or POSTULANTES which use CandidateFullReportView) */}
+      {selectedCandidate && activeTab !== 'PROCESOS' && activeTab !== 'POSTULANTES' && (
         <CandidateDetailModal
           candidate={selectedCandidate}
           onClose={() => setSelectedCandidate(null)}

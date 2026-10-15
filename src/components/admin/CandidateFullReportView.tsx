@@ -917,48 +917,112 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
             <span className="truncate">{candidate.email || 'carlosporsiempre345@gmail.com'}</span>
           </div>
 
-          {/* Gauge Circular de Adecuación (87%) */}
-          <div className="flex flex-col items-center justify-center pt-3 space-y-3">
-            <div className="relative w-28 h-28 flex items-center justify-center">
-              <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                <path
-                  className="text-slate-100 dark:text-slate-800"
-                  strokeWidth="3.2"
-                  stroke="currentColor"
-                  fill="none"
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                />
-                <path
-                  className="text-[#2FA58B]"
-                  strokeDasharray={`${scoreVal}, 100`}
-                  strokeLinecap="round"
-                  strokeWidth="3.2"
-                  stroke="currentColor"
-                  fill="none"
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                />
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-2xl font-black text-[#2FA58B] tracking-tight">
-                  {scoreVal}%
-                </span>
-              </div>
-            </div>
+          {/* Gauge Circular de Adecuación - Puntaje Real */}
+          <div className="flex flex-col items-center justify-center pt-3 space-y-4">
+            {candidate.scores && candidate.scores.overall > 0 ? (
+              <>
+                {/* Círculo con promedio final */}
+                <div className="relative w-28 h-28 flex items-center justify-center">
+                  <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                    <path
+                      className="text-slate-100 dark:text-slate-800"
+                      strokeWidth="3.2"
+                      stroke="currentColor"
+                      fill="none"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    />
+                    <path
+                      className={scoreVal >= 80 ? 'text-[#2FA58B]' : scoreVal >= 60 ? 'text-amber-500' : 'text-rose-500'}
+                      strokeDasharray={`${scoreVal}, 100`}
+                      strokeLinecap="round"
+                      strokeWidth="3.2"
+                      stroke="currentColor"
+                      fill="none"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className={`text-2xl font-black tracking-tight ${scoreVal >= 80 ? 'text-[#2FA58B]' : scoreVal >= 60 ? 'text-amber-500' : 'text-rose-500'}`}>
+                      {scoreVal}%
+                    </span>
+                    <span className="text-[9px] text-[#6B7494] font-semibold mt-0.5">Promedio</span>
+                  </div>
+                </div>
 
-            {/* Barra de progreso horizontal de Competencias 87% */}
-            <div className="w-full space-y-1.5 pt-1">
-              <div className="flex items-center justify-between text-xs font-bold">
-                <span className="text-[#161C3A] dark:text-white">Competencias</span>
-                <span className="text-[#2FA58B]">{scoreVal}%</span>
+                {/* Barras por etapa */}
+                <div className="w-full space-y-2.5">
+                  {[
+                    { label: 'Psicotécnica', val: candidate.scores.stage1Psycho, color: '#6355DE' },
+                    { label: 'Emocional', val: candidate.scores.stage2Emotional, color: '#2F5BA8' },
+                    { label: 'Casos Lab.', val: candidate.scores.stage3WorkCases, color: '#2FA58B' }
+                  ].map(({ label, val, color }) => (
+                    <div key={label} className="w-full space-y-1">
+                      <div className="flex items-center justify-between text-[11px] font-semibold">
+                        <span className="text-[#6B7494] dark:text-[#9AA5C4]">{label}</span>
+                        <span style={{ color }} className="font-bold">{val}%</span>
+                      </div>
+                      <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{ width: `${val}%`, backgroundColor: color }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Barra general */}
+                  <div className="w-full space-y-1 pt-1 border-t border-[#DDE2EF]/60 dark:border-[#2A3563]/60">
+                    <div className="flex items-center justify-between text-xs font-bold">
+                      <span className="text-[#161C3A] dark:text-white">Puntaje Final</span>
+                      <span className={scoreVal >= 80 ? 'text-[#2FA58B]' : scoreVal >= 60 ? 'text-amber-500' : 'text-rose-500'}>
+                        {scoreVal}%
+                      </span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-700 ${scoreVal >= 80 ? 'bg-[#2FA58B]' : scoreVal >= 60 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                        style={{ width: `${scoreVal}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              /* Sin puntaje - examen pendiente */
+              <div className="w-full flex flex-col items-center gap-3 py-3">
+                <div className="relative w-24 h-24 flex items-center justify-center">
+                  <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                    <path
+                      className="text-slate-100 dark:text-slate-800"
+                      strokeWidth="3.2"
+                      stroke="currentColor"
+                      fill="none"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-xl font-black text-slate-300 dark:text-slate-600">—</span>
+                    <span className="text-[9px] text-slate-400 font-semibold mt-0.5">Pendiente</span>
+                  </div>
+                </div>
+                <div className="w-full space-y-2">
+                  {['Psicotécnica', 'Emocional', 'Casos Lab.'].map(label => (
+                    <div key={label} className="space-y-1">
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-[#6B7494] dark:text-[#9AA5C4]">{label}</span>
+                        <span className="text-slate-300 dark:text-slate-600 font-bold">—</span>
+                      </div>
+                      <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800" />
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-center text-slate-400 dark:text-slate-600 leading-relaxed px-2">
+                  El postulante aún no ha completado la evaluación
+                </p>
               </div>
-              <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div 
-                  className="h-full rounded-full bg-[#2FA58B]" 
-                  style={{ width: `${scoreVal}%` }} 
-                />
-              </div>
-            </div>
+            )}
           </div>
+
 
         </div>
 
@@ -1013,46 +1077,195 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
           {activeMainTab === 'DISC' && (
             <div className="space-y-6 animate-in fade-in">
               
-              {/* Encabezado del Resultado: CONCILIADOR (IS)³ */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="space-y-1">
-                  <h3 className="text-xl sm:text-2xl font-black text-[#1F2A5E] dark:text-white">
-                    Resultado: <span className="text-[#84CC16]">CONCILIADOR (IS)³</span>
-                  </h3>
-                </div>
+              {candidate.scores && candidate.scores.overall > 0 && candidate.detailedReport ? (
+                /* ── RESULTADOS REALES DE LA EVALUACIÓN ── */
+                <>
+                  {/* Encabezado con recomendación real */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <h3 className="text-xl sm:text-2xl font-black text-[#1F2A5E] dark:text-white">
+                        Resultado:{' '}
+                        <span className={
+                          candidate.detailedReport.psychologistRecommendation === 'RECOMENDADO_FINALISTA' ? 'text-[#2FA58B]' :
+                          candidate.detailedReport.psychologistRecommendation === 'RECOMENDADO_CON_OBSERVACIONES' ? 'text-amber-500' :
+                          'text-rose-500'
+                        }>
+                          {candidate.detailedReport.psychologistRecommendation === 'RECOMENDADO_FINALISTA' ? 'RECOMENDADO FINALISTA' :
+                           candidate.detailedReport.psychologistRecommendation === 'RECOMENDADO_CON_OBSERVACIONES' ? 'RECOMENDADO CON OBSERVACIONES' :
+                           'NO RECOMENDADO'}
+                        </span>
+                      </h3>
+                      <p className="text-xs text-[#6B7494] dark:text-[#9AA5C4]">
+                        Adecuación al perfil: <strong className="text-[#1F2A5E] dark:text-white">{candidate.detailedReport.jobFitPercentage}%</strong>
+                      </p>
+                    </div>
 
-                <div className="flex items-center gap-2 text-xs text-[#6B7494]">
-                  <span className="flex items-center gap-1 font-medium">
-                    <Calendar className="w-3.5 h-3.5 text-[#5844D8]" />
-                    <span>Calificación: 10 octubre 2026</span>
-                  </span>
+                    <div className="flex items-center gap-2 text-xs text-[#6B7494]">
+                      <span className="flex items-center gap-1 font-medium">
+                        <Calendar className="w-3.5 h-3.5 text-[#5844D8]" />
+                        <span>Evaluado: {candidate.detailedReport.evaluationDate || candidate.completedAt?.slice(0, 10) || '—'}</span>
+                      </span>
+                      <button type="button" className="p-1 rounded-md hover:bg-slate-100">
+                        <MoreVertical className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
 
-                  <button type="button" className="p-1 rounded-md hover:bg-slate-100">
-                    <MoreVertical className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
+                  {/* Resumen del dictamen */}
+                  <p className="text-xs sm:text-sm text-[#4A5568] dark:text-[#CBD5E1] leading-relaxed bg-slate-50 dark:bg-[#151D3F] rounded-xl p-4 border border-[#DDE2EF] dark:border-[#2A3563]">
+                    {candidate.detailedReport.recommendationSummary}
+                  </p>
 
-              {/* Párrafo explicativo del perfil Conciliador */}
-              <p className="text-xs sm:text-sm text-[#4A5568] dark:text-[#CBD5E1] leading-relaxed">
-                El Conciliador está orientado a las personas, tiende a ser el mediador del grupo y a buscar la calma
-                en sus interacciones sociales. Le llena de energía estar rodeado de personas e interactuar con ellas.
-                Busca mantener la estabilidad, evitando las confrontaciones y las críticas. Se muestra optimista y
-                alegre. Le motiva aprender de otros y su conocimiento se alimenta de las historias de los demás, de lo
-                que piensan o sienten ellos.
-              </p>
+                  {/* Puntajes por etapa - tarjetas visuales */}
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: 'Psicotécnica', sublabel: 'Etapa 1', val: candidate.scores.stage1Psycho, color: '#6355DE', bg: 'bg-[#6355DE]/8 dark:bg-[#6355DE]/15' },
+                      { label: 'Emocional', sublabel: 'Etapa 2', val: candidate.scores.stage2Emotional, color: '#2F5BA8', bg: 'bg-[#2F5BA8]/8 dark:bg-[#2F5BA8]/15' },
+                      { label: 'Casos Lab.', sublabel: 'Etapa 3', val: candidate.scores.stage3WorkCases, color: '#2FA58B', bg: 'bg-[#2FA58B]/8 dark:bg-[#2FA58B]/15' }
+                    ].map(({ label, sublabel, val, color, bg }) => (
+                      <div key={label} className={`rounded-2xl p-4 ${bg} border border-[#DDE2EF]/60 dark:border-[#2A3563] flex flex-col items-center gap-2`}>
+                        <div className="relative w-16 h-16 flex items-center justify-center">
+                          <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                            <path strokeWidth="4" stroke="#E2E8F0" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                            <path
+                              strokeDasharray={`${val}, 100`}
+                              strokeLinecap="round"
+                              strokeWidth="4"
+                              stroke={color}
+                              fill="none"
+                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                            />
+                          </svg>
+                          <span className="absolute text-sm font-black" style={{ color }}>{val}%</span>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs font-bold text-[#161C3A] dark:text-white">{label}</p>
+                          <p className="text-[10px] text-[#6B7494]">{sublabel}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
 
-              {/* Píldoras de rasgos: Optimista, Buena Escucha, Dispuesto */}
-              <div className="flex flex-wrap items-center gap-2">
-                {['Optimista', 'Buena Escucha', 'Dispuesto'].map((trait, idx) => (
-                  <span
-                    key={idx}
-                    className="px-3 py-1 rounded-full bg-[#F7FEE7] dark:bg-[#365314]/20 border border-[#D9F99D] text-[#65A30D] text-xs font-bold"
-                  >
-                    {trait}
-                  </span>
-                ))}
-              </div>
+                  {/* Competencias detalladas */}
+                  {candidate.detailedReport.competencies && candidate.detailedReport.competencies.length > 0 && (
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-bold text-[#161C3A] dark:text-white">Competencias evaluadas</h4>
+                      {candidate.detailedReport.competencies.map((comp, i) => (
+                        <div key={i} className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-xs font-bold text-[#161C3A] dark:text-white">{comp.name}</p>
+                              <p className="text-[10px] text-[#6B7494]">{comp.category}</p>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              comp.level === 'SOBRESALIENTE' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' :
+                              comp.level === 'ADECUADO' ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400' :
+                              comp.level === 'EN_DESARROLLO' ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400' :
+                              'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400'
+                            }`}>
+                              {comp.level === 'SOBRESALIENTE' ? '⭐ Sobresaliente' :
+                               comp.level === 'ADECUADO' ? '✓ Adecuado' :
+                               comp.level === 'EN_DESARROLLO' ? '⚠ En Desarrollo' : '✗ Bajo'}
+                            </span>
+                          </div>
+                          <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-700 ${
+                                comp.level === 'SOBRESALIENTE' ? 'bg-[#2FA58B]' :
+                                comp.level === 'ADECUADO' ? 'bg-[#2F5BA8]' :
+                                comp.level === 'EN_DESARROLLO' ? 'bg-amber-500' : 'bg-rose-500'
+                              }`}
+                              style={{ width: `${comp.score}%` }}
+                            />
+                          </div>
+                          <p className="text-[10px] text-[#6B7494] dark:text-[#9AA5C4]">{comp.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Fortalezas y Áreas de desarrollo */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {candidate.detailedReport.strengths && candidate.detailedReport.strengths.length > 0 && (
+                      <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 p-4 space-y-2">
+                        <h5 className="text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                          <Check className="w-3.5 h-3.5" />
+                          Fortalezas
+                        </h5>
+                        <ul className="space-y-1.5">
+                          {candidate.detailedReport.strengths.map((s, i) => (
+                            <li key={i} className="text-[11px] text-emerald-800 dark:text-emerald-300 flex items-start gap-1.5">
+                              <span className="mt-0.5 shrink-0">•</span>
+                              <span>{s}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {candidate.detailedReport.developmentAreas && candidate.detailedReport.developmentAreas.length > 0 && (
+                      <div className="rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 p-4 space-y-2">
+                        <h5 className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                          <GraduationCap className="w-3.5 h-3.5" />
+                          Áreas de Desarrollo
+                        </h5>
+                        <ul className="space-y-1.5">
+                          {candidate.detailedReport.developmentAreas.map((a, i) => (
+                            <li key={i} className="text-[11px] text-amber-800 dark:text-amber-300 flex items-start gap-1.5">
+                              <span className="mt-0.5 shrink-0">•</span>
+                              <span>{a}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                /* ── SIN RESULTADOS AÚN ── */
+                <>
+                  {/* Encabezado del Resultado: CONCILIADOR (IS)³ */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <h3 className="text-xl sm:text-2xl font-black text-[#1F2A5E] dark:text-white">
+                        Resultado: <span className="text-[#84CC16]">CONCILIADOR (IS)³</span>
+                      </h3>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-xs text-[#6B7494]">
+                      <span className="flex items-center gap-1 font-medium">
+                        <Calendar className="w-3.5 h-3.5 text-[#5844D8]" />
+                        <span>Calificación: 10 octubre 2026</span>
+                      </span>
+
+                      <button type="button" className="p-1 rounded-md hover:bg-slate-100">
+                        <MoreVertical className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Párrafo explicativo del perfil Conciliador */}
+                  <p className="text-xs sm:text-sm text-[#4A5568] dark:text-[#CBD5E1] leading-relaxed">
+                    El Conciliador está orientado a las personas, tiende a ser el mediador del grupo y a buscar la calma
+                    en sus interacciones sociales. Le llena de energía estar rodeado de personas e interactuar con ellas.
+                    Busca mantener la estabilidad, evitando las confrontaciones y las críticas. Se muestra optimista y
+                    alegre. Le motiva aprender de otros y su conocimiento se alimenta de las historias de los demás, de lo
+                    que piensan o sienten ellos.
+                  </p>
+
+                  {/* Píldoras de rasgos: Optimista, Buena Escucha, Dispuesto */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {['Optimista', 'Buena Escucha', 'Dispuesto'].map((trait, idx) => (
+                      <span
+                        key={idx}
+                        className="px-3 py-1 rounded-full bg-[#F7FEE7] dark:bg-[#365314]/20 border border-[#D9F99D] text-[#65A30D] text-xs font-bold"
+                      >
+                        {trait}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
+
 
               {/* ========================================================================= */}
               {/* RUEDA DISC INTERACTIVA (16 SEGMENTOS - EXACTA A CAPTURA 3) */}

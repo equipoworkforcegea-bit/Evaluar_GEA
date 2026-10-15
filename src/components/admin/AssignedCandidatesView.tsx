@@ -19,6 +19,7 @@ import {
 interface AssignedCandidatesViewProps {
   tests: EvaluationTest[];
   onBackToProcesses?: () => void;
+  onSelectCandidate?: (candidateId: string) => void;
 }
 
 interface AssignedCandidateRecord {
@@ -40,7 +41,8 @@ interface AssignedCandidateRecord {
 
 export const AssignedCandidatesView: React.FC<AssignedCandidatesViewProps> = ({
   tests,
-  onBackToProcesses
+  onBackToProcesses,
+  onSelectCandidate
 }) => {
   const [candidatesList, setCandidatesList] = useState<AssignedCandidateRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -357,7 +359,8 @@ export const AssignedCandidatesView: React.FC<AssignedCandidatesViewProps> = ({
                 filteredCandidates.map((cand) => (
                   <tr 
                     key={cand.id} 
-                    className="hover:bg-zinc-50/70 dark:hover:bg-zinc-800/40 transition-colors"
+                    onClick={() => onSelectCandidate?.(cand.id)}
+                    className={`transition-colors ${onSelectCandidate ? 'cursor-pointer hover:bg-[#EEF2FF] dark:hover:bg-[#1F2A5E]/30' : 'hover:bg-zinc-50/70 dark:hover:bg-zinc-800/40'}`}
                   >
                     {/* DNI */}
                     <td className="py-3.5 px-4 font-mono font-bold text-zinc-900 dark:text-zinc-100">

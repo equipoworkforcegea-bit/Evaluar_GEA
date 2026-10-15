@@ -101,7 +101,7 @@ export const InvitationService = {
       
       const whatsappUrl = `https://wa.me/${phoneForWhatsapp}?text=${encodeURIComponent(whatsappMsg)}`;
 
-      // Enviar correo formal de invitación a través del endpoint de Gmail
+      // Enviar correo formal de invitación a través del endpoint de Gmail / Resend
       try {
         EmailInvitationService.sendInvitationEmail({
           to: emailClean,
@@ -113,7 +113,14 @@ export const InvitationService = {
           durationMinutes: data.duracionMinutos || 45,
           customLoginUrl: inviteUrl
         }).catch((err) => {
-          console.warn('[InvitationService] No se pudo enviar correo por Gmail:', err);
+          console.warn('[InvitationService] No se pudo enviar correo por Gmail, probando despacho alternativo:', err);
+          this.despacharCorreoInvitacion({
+            correo: emailClean,
+            nombre: candidateFirstName,
+            proceso: processName,
+            duracionMinutos: data.duracionMinutos,
+            inviteUrl
+          }).catch(fallbackErr => console.warn('[InvitationService] Fallback de correo:', fallbackErr));
         });
       } catch (err) {
         console.warn('[InvitationService] Error al disparar envío de correo:', err);
@@ -134,6 +141,67 @@ export const InvitationService = {
         error: err.message || 'Error al generar la invitación'
       };
     }
+  },
+
+  /**
+   * Despacha el correo electrónico de invitación con fallback automático:
+   * 1. API Serverless Vercel / Middleware Vite local (/api/send-email) usando RESEND_API_KEY
+   * 2. Edge Function de Supabase (invitar-postulante)
+   */
+  async despacharCorreoInvitacion(params: {
+    correo: string;
+    nombre: string;
+    proceso: string;
+    duracionMinutos?: number;
+    inviteUrl: string;
+  }): Promise<{ success: boolean; notice: string }> {
+    const cleanEmail = (params.correo || '').trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      return { success: false, notice: 'Correo inválido o vacío' };
+    }
+
+    // 1. Intento primario: Vercel Serverless Function / Vite Dev Server (/api/send-email)
+    try {
+      const response = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: cleanEmail,
+          candidateName: params.nombre,
+          processTitle: params.proceso,
+          durationMinutes: params.duracionMinutos || 45,
+          inviteUrl: params.inviteUrl
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return { success: true, notice: data.message || 'Despachado vía Vercel Resend API' };
+      }
+    } catch (apiErr) {
+      console.warn('[InvitationService] /api/send-email no disponible, probando Edge Function:', apiErr);
+    }
+
+    // 2. Fallback secundario: Supabase Edge Function
+    try {
+      const { data, error } = await supabase.functions.invoke('invitar-postulante', {
+        body: {
+          correo: cleanEmail,
+          nombre: params.nombre,
+          proceso_id: '',
+          titulo_proceso: params.proceso,
+          duracion_minutos: params.duracionMinutos || 45,
+          invite_url: params.inviteUrl
+        }
+      });
+      if (!error && data?.email_sent) {
+        return { success: true, notice: data?.notice || 'Despachado vía Supabase Edge Function' };
+      }
+    } catch (edgeErr) {
+      console.warn('[InvitationService] Supabase Edge Function no respondió:', edgeErr);
+    }
+
+    return { success: false, notice: 'No se pudo despachar el correo (configure RESEND_API_KEY en Vercel)' };
   },
 
   /**

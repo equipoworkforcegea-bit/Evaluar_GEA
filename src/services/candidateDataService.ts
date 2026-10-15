@@ -888,6 +888,34 @@ export const CandidateDataService = {
         'INFO'
       );
 
+      // 5. Despacho del correo de reenvío de invitación vía API Vercel / Local
+      try {
+        const { data: candData } = await supabase
+          .from('candidatos')
+          .select('correo, nombre_completo, codigo_invitacion, dni, proceso_id, procesos_evaluacion(titulo)')
+          .eq('id', candidateId)
+          .maybeSingle();
+
+        if (candData?.correo) {
+          const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+          const inviteUrl = `${origin}/login?code=${encodeURIComponent(candData.codigo_invitacion || '')}&dni=${encodeURIComponent(candData.dni || '')}&email=${encodeURIComponent(candData.correo)}`;
+          
+          await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: candData.correo,
+              candidateName: candData.nombre_completo || 'Postulante',
+              processTitle: (candData.procesos_evaluacion as any)?.titulo || 'Proceso de Selección GEA',
+              durationMinutes: 45,
+              inviteUrl
+            })
+          }).catch(() => {});
+        }
+      } catch (mailErr) {
+        console.warn('[CandidateDataService] Aviso al reenviar correo:', mailErr);
+      }
+
       return !resetError;
     } catch (err) {
       console.warn('[CandidateDataService] Excepción en resetCandidateForResend:', err);

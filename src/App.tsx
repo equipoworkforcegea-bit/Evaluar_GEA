@@ -15,6 +15,7 @@ import { AdminDashboard, MainAdminTab } from './components/admin/AdminDashboard'
 import { ArchitectureViewer } from './components/architecture/ArchitectureViewer';
 import { ProcesosInvitadosView } from './components/candidate/ProcesosInvitadosView';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { NotificationsPanel } from './components/admin/NotificationsPanel';
 import { CandidateDataService } from './services/candidateDataService';
 import { AuthStorage } from './services/authStorage';
 import { Candidate, AuthSession } from './types';
@@ -35,7 +36,8 @@ const TAB_TO_PATH: Record<MainAdminTab, string> = {
   SEGURIDAD: 'seguridad',
   INFORMES: 'informes',
   CONTRATADOS: 'contratados',
-  NO_DESEADOS: 'no-deseados'
+  NO_DESEADOS: 'no-deseados',
+  USUARIOS: 'usuarios'
 };
 
 const PATH_TO_TAB: Record<string, MainAdminTab> = {
@@ -51,7 +53,8 @@ const PATH_TO_TAB: Record<string, MainAdminTab> = {
   'seguridad': 'SEGURIDAD',
   'informes': 'INFORMES',
   'contratados': 'CONTRATADOS',
-  'no-deseados': 'NO_DESEADOS'
+  'no-deseados': 'NO_DESEADOS',
+  'usuarios': 'USUARIOS'
 };
 
 interface AdminViewProps {
@@ -100,6 +103,10 @@ function AdminView({
      activeTab === 'TRUST' ? 'TRUST' :
      activeTab === 'SEGURIDAD' ? 'SEGURIDAD' : 'TODOS')
   );
+
+  // Estado del panel de notificaciones
+  const [notifPanelOpen, setNotifPanelOpen] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   useEffect(() => {
     if (moduloQuery) {
@@ -152,6 +159,8 @@ function AdminView({
         onOpenArchitecture={() => navigate('/arquitectura')}
         onOpenCandidateView={() => navigate('/examen')}
         onResetProcessDetail={() => handleSelectProcess(null)}
+        onOpenNotifications={() => setNotifPanelOpen(true)}
+        unreadNotifications={unreadNotifications}
       />
 
       {/* ÁREA CENTRAL DE CONTENIDO */}
@@ -168,12 +177,21 @@ function AdminView({
             onSelectProcess={handleSelectProcess}
             activeModuleFilter={activeModuleFilter}
             onSelectModuleFilter={handleSelectModuleFilter}
+            session={session}
           />
         </main>
       </div>
+
+      {/* PANEL DE NOTIFICACIONES (drawer deslizante) */}
+      <NotificationsPanel
+        isOpen={notifPanelOpen}
+        onClose={() => setNotifPanelOpen(false)}
+        onUnreadCountChange={setUnreadNotifications}
+      />
     </div>
   );
 }
+
 
 // Componente estable de Examen de Postulante
 interface CandidateExamViewProps {
