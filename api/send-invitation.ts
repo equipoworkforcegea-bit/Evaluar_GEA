@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { sendEmailInvitation } from './emailHelper';
+import { sendEmailInvitation } from './emailHelper.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS Headers
