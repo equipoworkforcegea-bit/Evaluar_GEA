@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Candidate, EvaluationTest, AuthSession } from '../../types';
-import { CandidateDetailModal } from './CandidateDetailModal';
 import { ExportReportModal } from './ExportReportModal';
 import { InviteCandidateModal } from './InviteCandidateModal';
 import { EvaluarProcessListView, ProcessModuleFilter } from './EvaluarProcessListView';
@@ -100,10 +99,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     onSelectModuleFilterProp?.(filter);
   };
 
-  // Sync prop changes
+  // Sync prop changes & reset selected candidate when navigating away from PROCESOS
   useEffect(() => {
     if (activeTabProp) {
       setInternalTab(activeTabProp);
+      if (activeTabProp !== 'PROCESOS') {
+        setSelectedCandidate(null);
+      }
     }
   }, [activeTabProp]);
 
@@ -668,15 +670,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* MODALS & OVERLAYS                                                         */}
       {/* ========================================================================= */}
 
-      {/* Candidate Detail Modal for other tabs (NOT for PROCESOS or POSTULANTES which use CandidateFullReportView) */}
-      {selectedCandidate && activeTab !== 'PROCESOS' && activeTab !== 'POSTULANTES' && (
-        <CandidateDetailModal
-          candidate={selectedCandidate}
-          onClose={() => setSelectedCandidate(null)}
-          onPromoteToFinalist={handlePromoteCandidate}
-          onResendInvitation={handleResendInvitation}
-        />
-      )}
+
 
       {/* Modal oficial de exportación de reporte a PDF */}
       {reportCandidate && (
