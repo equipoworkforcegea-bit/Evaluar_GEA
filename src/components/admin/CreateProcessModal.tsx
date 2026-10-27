@@ -324,7 +324,7 @@ export const CreateProcessModal: React.FC<CreateProcessModalProps> = ({
   if (launchedSuccess) {
     const isDraft = launchedSuccess.isDraft;
     return (
-      <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-in fade-in">
+      <div className="absolute inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-in fade-in">
         <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl w-full max-w-xl shadow-2xl p-6 sm:p-8 space-y-6 text-center">
           <div className={`w-16 h-16 rounded-full mx-auto flex items-center justify-center ${
             isDraft
@@ -363,11 +363,11 @@ export const CreateProcessModal: React.FC<CreateProcessModalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-[#F8F9FC] dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col p-4 sm:p-8 animate-in fade-in">
+    <div className="absolute inset-0 z-50 overflow-y-auto bg-[#F8F9FC] dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col p-4 sm:p-8 animate-in fade-in">
       
       {/* Modal flotante de lanzamiento: 'Por favor espere...' (Evaluar v4.1.2) */}
       {isSubmitting && (
-        <div className="fixed inset-0 z-60 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+        <div className="absolute inset-0 z-60 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-[#7C3AED] text-white px-7 py-5 rounded-2xl shadow-2xl flex flex-col gap-3 w-80 sm:w-96 animate-in zoom-in-95">
             <span className="text-sm font-semibold tracking-wide">Por favor espere...</span>
             <div className="w-full bg-white/25 h-2.5 rounded-full overflow-hidden p-0.5 relative">

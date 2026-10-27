@@ -11,6 +11,7 @@ import { Header } from './components/common/Header';
 import { AdminSidebar } from './components/admin/AdminSidebar';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { ExamContainer } from './components/candidate/ExamContainer';
+import { DISCExamView } from './components/candidate/DISCExamView';
 import { AdminDashboard, MainAdminTab } from './components/admin/AdminDashboard';
 import { ArchitectureViewer } from './components/architecture/ArchitectureViewer';
 import { ProcesosInvitadosView } from './components/candidate/ProcesosInvitadosView';
@@ -122,7 +123,12 @@ function AdminView({
     }
   }, [moduloQuery, activeTab, rawModulo]);
 
+  const [profileResetTrigger, setProfileResetTrigger] = useState(0);
+
   const handleTabChange = (newTab: MainAdminTab) => {
+    if (newTab === 'PERFILES') {
+      setProfileResetTrigger(prev => prev + 1);
+    }
     const pathSuffix = TAB_TO_PATH[newTab] || 'procesos';
     navigate(`/admin/${pathSuffix}`);
   };
@@ -164,7 +170,7 @@ function AdminView({
       />
 
       {/* ÁREA CENTRAL DE CONTENIDO */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
+      <div className="relative flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1560px] w-full mx-auto focus:outline-hidden">
           <AdminDashboard
             candidates={candidates}
@@ -178,6 +184,7 @@ function AdminView({
             activeModuleFilter={activeModuleFilter}
             onSelectModuleFilter={handleSelectModuleFilter}
             session={session}
+            resetProfilesTrigger={profileResetTrigger}
           />
         </main>
       </div>
@@ -272,6 +279,22 @@ function ProcesosInvitadosViewWrapper({
   onLogout
 }: ProcesosInvitadosViewWrapperProps) {
   const navigate = useNavigate();
+  const [showDISC, setShowDISC] = useState(false);
+
+  // If DISC exam is active, render fullscreen DISC view
+  if (showDISC) {
+    return (
+      <DISCExamView
+        processName={candidate.position || 'Evaluación DISC'}
+        onComplete={(_answers) => {
+          // Mark candidate as completed and go back to processes list
+          setShowDISC(false);
+          navigate('/procesos-invitados');
+        }}
+        onExit={() => setShowDISC(false)}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[var(--bg-page)] text-[var(--text-primary)] font-sans antialiased selection:bg-[#1F2A5E] selection:text-white transition-colors">
@@ -291,7 +314,7 @@ function ProcesosInvitadosViewWrapper({
         <ProcesosInvitadosView
           candidate={candidate}
           onStartExam={(_testId) => {
-            navigate('/examen');
+            setShowDISC(true);
           }}
         />
       </main>

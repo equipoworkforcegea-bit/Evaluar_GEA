@@ -958,39 +958,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 </div>
               </div>
             )}
-
-            {/* Quick Link Access for Android / Apple phone testing */}
-            {activeTab === 'CANDIDATE' && (
-              <div className="mt-3.5 p-3 rounded-2xl bg-white border border-slate-200/90 shadow-2xs text-center">
-                <span className="text-[11px] font-bold text-slate-700 block mb-1.5 flex items-center justify-center gap-1.5">
-                  <Smartphone className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Probar enlace de invitación móvil:</span>
-                </span>
-                <div className="flex flex-wrap items-center justify-center gap-1.5">
-                  {candidates.slice(0, 3).map((cand) => (
-                    <button
-                      key={cand.id}
-                      type="button"
-                      onClick={() => {
-                        setIdentifier(cand.dni);
-                        setPassword(cand.password || 'Gea2026!');
-                        setAccessedViaLink(true);
-                        setError(null);
-                      }}
-                      className={`px-2.5 py-1.5 rounded-xl text-[11px] font-semibold transition-all cursor-pointer border touch-manipulation active:scale-95 ${
-                        identifier === cand.dni
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                      title={`Ingresar como ${cand.fullName}`}
-                    >
-                      {cand.fullName.split(' ')[0]} ({cand.dni})
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
           </div>
 
           {/* Right Footer (Desktop) */}

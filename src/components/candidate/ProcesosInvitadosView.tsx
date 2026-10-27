@@ -11,7 +11,8 @@ import {
   Hourglass, 
   RotateCw, 
   ShieldCheck, 
-  Sparkles 
+  Sparkles,
+  X
 } from 'lucide-react';
 
 interface ProcesosInvitadosViewProps {
@@ -39,6 +40,17 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [realName, setRealName] = useState<string>(candidate.fullName);
   const [realDni, setRealDni] = useState<string>(candidate.dni);
+
+  // DISC instructions modal
+  const [discModalProcId, setDiscModalProcId] = useState<string | null>(null);
+
+  const handleShowDiscModal = (procId: string) => setDiscModalProcId(procId);
+  const handleCloseDiscModal = () => setDiscModalProcId(null);
+  const handleConfirmStart = () => {
+    const id = discModalProcId;
+    setDiscModalProcId(null);
+    onStartExam(id || undefined);
+  };
 
   useEffect(() => {
     setRealName(candidate.fullName);
@@ -180,7 +192,10 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
             return (
               <div
                 key={proc.id}
-                className="p-5 sm:p-6 rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] bg-white dark:bg-[#182044] shadow-2xs hover:shadow-xs transition-all"
+                onClick={() => !isCompleted && handleShowDiscModal(proc.id)}
+                className={`p-5 sm:p-6 rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] bg-white dark:bg-[#182044] shadow-2xs hover:shadow-md transition-all ${
+                  !isCompleted ? 'cursor-pointer hover:border-[#6C3AFF]/60 group' : ''
+                }`}
               >
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
                   
@@ -261,7 +276,7 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
                     ) : isInProgress ? (
                       <button
                         type="button"
-                        onClick={() => onStartExam(proc.id)}
+                      onClick={() => handleShowDiscModal(proc.id)}
                         className="px-6 py-3 rounded-xl bg-[#2F5BA8] hover:bg-[#244988] text-white font-extrabold text-xs sm:text-sm flex items-center gap-2 cursor-pointer shadow-md hover:shadow-lg active:scale-98 transition-all"
                       >
                         <RotateCw className="w-4 h-4" />
@@ -271,7 +286,7 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
                     ) : (
                       <button
                         type="button"
-                        onClick={() => onStartExam(proc.id)}
+                      onClick={() => handleShowDiscModal(proc.id)}
                         className="px-6 py-3 rounded-xl bg-[#1F2A5E] hover:bg-[#182348] text-white font-extrabold text-xs sm:text-sm flex items-center gap-2 cursor-pointer shadow-md hover:shadow-lg active:scale-98 transition-all"
                       >
                         <Rocket className="w-4 h-4 fill-white/20" />
@@ -287,6 +302,64 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
           })
         )}
       </div>
+
+      {/* ──── DISC Instructions Slide-Over Drawer ──── */}
+      {discModalProcId !== null && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs animate-in fade-in duration-200">
+          <div 
+            className="fixed inset-0" 
+            onClick={handleCloseDiscModal}
+          />
+          <div className="relative z-10 bg-white w-full max-w-md h-full shadow-2xl flex flex-col justify-between rounded-l-3xl p-6 sm:p-8 animate-in slide-in-from-right duration-300">
+            {/* Header */}
+            <div>
+              <div className="flex items-center justify-between pb-5 border-b border-zinc-100">
+                <span className="font-bold text-lg text-[#6C3AFF]">DISC</span>
+                <button 
+                  type="button" 
+                  onClick={handleCloseDiscModal} 
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="py-6 space-y-5 text-sm text-zinc-600 leading-relaxed overflow-y-auto max-h-[calc(100vh-180px)] pr-1">
+                <p className="font-bold text-base text-zinc-800">Instrucciones</p>
+
+                <p>
+                  A continuación, se le presentarán dos secciones de evaluación. Cada sección está conformada por 4 bloques de palabras, en donde usted deberá escoger 5 opciones con las que más se identifique.
+                </p>
+
+                <p>
+                  La primera sección está enfocada a las palabras que usted considera que mejor lo describen en su trabajo y la segunda sección está enfocada a las palabras que describen la opinión que tienen sus compañeros sobre USTED.
+                </p>
+
+                <p>
+                  En general, no existen respuestas correctas o incorrectas, porque las personas tienen distintos intereses y actitudes. Conteste con sinceridad; de esta forma se podrá conocer mejor su forma de ser.
+                </p>
+
+                <p>
+                  Aunque la prueba no tiene límite de tiempo, procure no pensar demasiado para decidirse ante una situación.
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="pt-4 border-t border-zinc-100 flex justify-end">
+              <button
+                type="button"
+                onClick={handleConfirmStart}
+                className="flex items-center gap-2.5 px-7 py-3 rounded-xl bg-[#6C3AFF] hover:bg-[#5A2DE0] text-white font-bold text-sm shadow-lg shadow-violet-500/25 transition-all cursor-pointer active:scale-98"
+              >
+                <Rocket className="w-4 h-4 fill-white/20" />
+                <span>Iniciar</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

@@ -89,10 +89,20 @@ function mapRowToProcess(row: any): EvaluationTest {
 
 // Mapeo de fila Supabase `perfiles_puesto` a `EvaluationTest` (catálogo)
 function mapRowToProfile(row: any): EvaluationTest {
-  const compKeys = row.competencias 
-    ? Object.keys(row.competencias).filter(k => !k.startsWith('_')) 
-    : [];
-  const metadata = row.competencias?._metadata || {};
+  let compKeys: string[] = [];
+  if (Array.isArray(row.competencias)) {
+    compKeys = row.competencias.filter((k: any) => typeof k === 'string' && !k.startsWith('_'));
+  } else if (row.competencias && typeof row.competencias === 'object') {
+    if (Array.isArray(row.competencias._metadata?.selectedList)) {
+      compKeys = row.competencias._metadata.selectedList;
+    } else {
+      compKeys = Object.keys(row.competencias).filter(k => !k.startsWith('_'));
+    }
+  }
+
+  const metadata = (row.competencias && typeof row.competencias === 'object' && !Array.isArray(row.competencias))
+    ? (row.competencias._metadata || {})
+    : {};
 
   return {
     id: row.id,
@@ -116,11 +126,7 @@ function mapRowToProfile(row: any): EvaluationTest {
     inProgressCount: 0,
     hiredCount: 0,
     averageScore: 0,
-    selectedCompetencies: compKeys.length > 0 ? compKeys : [
-      'Comunicación Persuasiva',
-      'Autorregulación Emocional',
-      'Orientación a Resultados'
-    ],
+    selectedCompetencies: compKeys,
     stages: metadata.stages || []
   };
 }
@@ -287,6 +293,51 @@ export const ProcessDataService = {
       }
     } catch (err) {
       console.error('[ProcessDataService] Excepción al actualizar activo del perfil:', err);
+    }
+  },
+
+  /**
+   * Actualiza directamente la columna `competencias` de un perfil en Supabase (`perfiles_puesto`)
+   */
+  async updateProfileCompetencies(profileId: string, competencies: string[]): Promise<boolean> {
+    try {
+      const uuid = ensureUuid(profileId);
+      const { data: row } = await supabase
+        .from('perfiles_puesto')
+        .select('competencias')
+        .eq('id', uuid)
+        .maybeSingle();
+
+      const existingMeta = (row?.competencias && typeof row.competencias === 'object' && !Array.isArray(row.competencias))
+        ? (row.competencias._metadata || {})
+        : {};
+
+      const compMap: Record<string, any> = {};
+      competencies.forEach(c => {
+        compMap[c] = 85;
+      });
+      compMap._metadata = {
+        ...existingMeta,
+        selectedList: competencies
+      };
+
+      const { error } = await supabase
+        .from('perfiles_puesto')
+        .update({
+          competencias: compMap,
+          actualizado_en: new Date().toISOString()
+        })
+        .eq('id', uuid);
+
+      if (error) {
+        console.error('[ProcessDataService] Error actualizando competencias en Supabase:', error.message);
+        return false;
+      }
+
+      return true;
+    } catch (err) {
+      console.error('[ProcessDataService] Excepción al actualizar competencias:', err);
+      return false;
     }
   },
 

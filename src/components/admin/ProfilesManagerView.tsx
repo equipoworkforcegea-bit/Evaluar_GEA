@@ -23,7 +23,18 @@ import {
   SlidersHorizontal,
   X,
   MinusCircle,
-  CheckCircle2
+  CheckCircle2,
+  Clock,
+  Trash2,
+  Target,
+  RotateCw,
+  Hourglass,
+  UserX,
+  Armchair,
+  Users,
+  ChevronDown,
+  Layers,
+  FolderArchive
 } from 'lucide-react';
 
 interface ProfilesManagerViewProps {
@@ -32,6 +43,7 @@ interface ProfilesManagerViewProps {
   onToggleActive: (testId: string) => void;
   onCreateNewProfile: () => void;
   onSelectTest: (testId: string) => void;
+  onSelectProfile?: (profile: EvaluationTest) => void;
   onLaunchProcessForProfile?: (profileId: string) => void;
 }
 
@@ -41,6 +53,7 @@ export const ProfilesManagerView: React.FC<ProfilesManagerViewProps> = ({
   onToggleActive,
   onCreateNewProfile,
   onSelectTest,
+  onSelectProfile,
   onLaunchProcessForProfile
 }) => {
   const [tests, setTests] = useState<EvaluationTest[]>(initialTests);
@@ -52,6 +65,7 @@ export const ProfilesManagerView: React.FC<ProfilesManagerViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [filterOnlyActive, setFilterOnlyActive] = useState(false);
   const [filterFavorites, setFilterFavorites] = useState(false);
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
@@ -264,14 +278,14 @@ export const ProfilesManagerView: React.FC<ProfilesManagerViewProps> = ({
             <span>Crear con CopilotAi</span>
           </button>
 
-          {/* Button: Creación manual */}
+          {/* Button: Nuevo Perfil */}
           <button
             type="button"
             onClick={onCreateNewProfile}
             className="px-4 py-2 rounded-xl bg-[#1F2A5E] hover:bg-[#182348] text-white font-medium text-xs sm:text-sm flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs active:scale-98"
           >
-            <Sliders className="w-4 h-4 stroke-[2]" />
-            <span>Creación manual</span>
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>Nuevo Perfil</span>
           </button>
         </div>
       </div>
@@ -331,9 +345,9 @@ export const ProfilesManagerView: React.FC<ProfilesManagerViewProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* 4. LISTADO DE PERFILES (CARDS MATCHING EXACT SCREENSHOT)                   */}
+      {/* 4. LISTADO DE PERFILES (CON SOMBREADO AL HOVER Y SELECCIÓN)               */}
       {/* ========================================================================= */}
-      <div className="space-y-3">
+      <div className="space-y-3 relative">
         {filteredTests.length === 0 ? (
           <div className="py-16 text-center text-zinc-500 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800">
             <User className="w-12 h-12 text-zinc-300 dark:text-zinc-700 mx-auto mb-2" />
@@ -348,11 +362,24 @@ export const ProfilesManagerView: React.FC<ProfilesManagerViewProps> = ({
           filteredTests.map((test) => {
             const isFav = favorites.includes(test.id);
             const isPending = test.processStatus === 'BORRADOR' || test.title.includes('BORRADOR');
+            const isSelected = selectedProfileId === test.id;
 
             return (
               <div
                 key={test.id}
-                className="p-5 rounded-2xl border border-zinc-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs hover:border-zinc-300 dark:hover:border-zinc-700 transition-all relative"
+                onClick={() => {
+                  setSelectedProfileId(test.id);
+                  if (onSelectProfile) {
+                    onSelectProfile(test);
+                  } else {
+                    onSelectTest(test.id);
+                  }
+                }}
+                className={`p-5 rounded-2xl border transition-all duration-200 cursor-pointer relative group z-0 hover:z-10 ${
+                  isSelected
+                    ? 'border-2 border-[#2F5BA8] dark:border-[#5B8AE0] bg-blue-50/40 dark:bg-blue-950/25 shadow-xl shadow-[#2F5BA8]/10 ring-2 ring-[#2F5BA8]/30 dark:ring-[#5B8AE0]/30 scale-[1.004] z-10'
+                    : 'border-zinc-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs hover:shadow-xl hover:shadow-[#1F2A5E]/10 hover:border-[#2F5BA8]/60 hover:bg-slate-50/50 dark:hover:bg-zinc-800/60 hover:-translate-y-0.5'
+                }`}
               >
                 {/* 1. TOP STATUS LINE (Completo | Modificado OR Pendiente + Megaphone) */}
                 <div className="flex items-center justify-between mb-1.5 text-xs">
@@ -372,6 +399,10 @@ export const ProfilesManagerView: React.FC<ProfilesManagerViewProps> = ({
 
                   {/* Megaphone circular icon */}
                   <div 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      showToast(`Comunicados para perfil: "${test.title}"`);
+                    }}
                     className="w-7 h-7 rounded-full bg-[#E9EDF6] text-[#2F5BA8] flex items-center justify-center cursor-pointer hover:bg-[#DDE2EF] transition-colors"
                     title="Comunicados del perfil"
                   >
@@ -382,16 +413,13 @@ export const ProfilesManagerView: React.FC<ProfilesManagerViewProps> = ({
                 {/* 2. TITLE LINE + RIGHT ACTIONS */}
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
-                    <h3 
-                      onClick={() => onSelectTest(test.id)}
-                      className="font-bold text-base text-[#2F5BA8] tracking-tight hover:underline cursor-pointer"
-                    >
+                    <h3 className="font-bold text-base text-[#2F5BA8] tracking-tight group-hover:underline">
                       {test.title}
                     </h3>
                     <button
                       type="button"
                       onClick={(e) => toggleFavorite(test.id, e)}
-                      className="cursor-pointer text-amber-400 hover:scale-110 transition-transform"
+                      className="cursor-pointer text-amber-400 hover:scale-110 transition-transform p-0.5"
                       title={isFav ? 'Quitar de favoritos' : 'Marcar como favorito'}
                     >
                       <Star className={`w-4 h-4 ${isFav ? 'fill-amber-400 text-amber-400' : 'text-amber-400 stroke-[1.8]'}`} />
@@ -403,7 +431,10 @@ export const ProfilesManagerView: React.FC<ProfilesManagerViewProps> = ({
                     {isPending ? (
                       <button
                         type="button"
-                        onClick={() => onToggleActive(test.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleActive(test.id);
+                        }}
                         className="px-4 py-1.5 rounded-xl border border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 font-semibold text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
                       >
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
@@ -412,8 +443,15 @@ export const ProfilesManagerView: React.FC<ProfilesManagerViewProps> = ({
                     ) : (
                       <button
                         type="button"
-                        onClick={() => onLaunchProcessForProfile ? onLaunchProcessForProfile(test.id) : onSelectTest(test.id)}
-                        className="px-4 py-1.5 rounded-xl border border-[#2F5BA8] text-[#2F5BA8] hover:bg-[#2F5BA8]/5 font-semibold text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onLaunchProcessForProfile) {
+                            onLaunchProcessForProfile(test.id);
+                          } else {
+                            onSelectTest(test.id);
+                          }
+                        }}
+                        className="px-4 py-1.5 rounded-xl border border-[#2F5BA8] text-[#2F5BA8] hover:bg-[#2F5BA8]/10 font-semibold text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
                       >
                         <Rocket className="w-3.5 h-3.5 text-[#2F5BA8]" />
                         <span>Lanzar proceso</span>
@@ -421,7 +459,7 @@ export const ProfilesManagerView: React.FC<ProfilesManagerViewProps> = ({
                     )}
 
                     {/* Three dots button */}
-                    <div className="relative">
+                    <div className="relative" onClick={(e) => e.stopPropagation()}>
                       <button
                         type="button"
                         onClick={(e) => {
@@ -438,12 +476,16 @@ export const ProfilesManagerView: React.FC<ProfilesManagerViewProps> = ({
                       {activeMenuId === test.id && (
                         <div 
                           onClick={(e) => e.stopPropagation()}
-                          className="absolute right-0 top-9 z-40 w-52 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl p-1.5 text-xs animate-in fade-in"
+                          className="absolute right-0 top-9 z-50 w-52 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl p-1.5 text-xs animate-in fade-in"
                         >
                           <button
                             type="button"
                             onClick={() => {
-                              setDetailModalTest(test);
+                              if (onSelectProfile) {
+                                onSelectProfile(test);
+                              } else {
+                                setDetailModalTest(test);
+                              }
                               setActiveMenuId(null);
                             }}
                             className="w-full text-left px-3 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-2 cursor-pointer font-medium text-zinc-700 dark:text-zinc-300"
@@ -455,7 +497,11 @@ export const ProfilesManagerView: React.FC<ProfilesManagerViewProps> = ({
                           <button
                             type="button"
                             onClick={() => {
-                              setEditModalTest(test);
+                              if (onSelectProfile) {
+                                onSelectProfile(test);
+                              } else {
+                                setEditModalTest(test);
+                              }
                               setActiveMenuId(null);
                             }}
                             className="w-full text-left px-3 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-2 cursor-pointer font-medium text-zinc-700 dark:text-zinc-300"

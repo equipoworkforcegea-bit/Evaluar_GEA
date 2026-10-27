@@ -11,7 +11,7 @@ import { TalentPoolView } from './TalentPoolView';
 import { TrustView } from './TrustView';
 import { ViralizacionView } from './ViralizacionView';
 import { CreateProcessModal } from './CreateProcessModal';
-import { CreateProfileModal } from './CreateProfileModal';
+import { CreateProfileView } from './CreateProfileView';
 import { ProcessSummaryView } from './ProcessSummaryView';
 import { AssignedCandidatesView } from './AssignedCandidatesView';
 import { InformesView } from './InformesView';
@@ -62,6 +62,7 @@ interface AdminDashboardProps {
   activeModuleFilter?: ProcessModuleFilter;
   onSelectModuleFilter?: (filter: ProcessModuleFilter) => void;
   session?: AuthSession;
+  resetProfilesTrigger?: number;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -75,12 +76,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onSelectProcess,
   activeModuleFilter: activeModuleFilterProp,
   onSelectModuleFilter: onSelectModuleFilterProp,
-  session
+  session,
+  resetProfilesTrigger
 }) => {
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
   const [reportCandidate, setReportCandidate] = useState<Candidate | null>(null);
   const [showInviteModal, setShowInviteModal] = useState<boolean>(false);
   const [showCreateProfileModal, setShowCreateProfileModal] = useState<boolean>(false);
+  const [selectedEditingProfile, setSelectedEditingProfile] = useState<EvaluationTest | null>(null);
   const [showCreateProcessModal, setShowCreateProcessModal] = useState<boolean>(false);
   const [createProcessPreselectedProfileId, setCreateProcessPreselectedProfileId] = useState<string | null>(null);
   const [inviteTargetTestId, setInviteTargetTestId] = useState<string | null>(null);
@@ -99,15 +102,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     onSelectModuleFilterProp?.(filter);
   };
 
-  // Sync prop changes & reset selected candidate when navigating away from PROCESOS
+  // Sync prop changes, reset selected candidate, and close create-process modal when navigating via sidebar
   useEffect(() => {
     if (activeTabProp) {
       setInternalTab(activeTabProp);
       if (activeTabProp !== 'PROCESOS') {
         setSelectedCandidate(null);
       }
+      // Close the "Lanzamiento de proceso" overlay whenever the user navigates to a different tab
+      if (showCreateProcessModal) {
+        setShowCreateProcessModal(false);
+        setCreateProcessPreselectedProfileId(null);
+      }
     }
-  }, [activeTabProp]);
+  }, [activeTabProp]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reset profile creation and return to main profiles list when clicking Perfiles in sidebar
+  useEffect(() => {
+    if (resetProfilesTrigger && resetProfilesTrigger > 0) {
+      setShowCreateProfileModal(false);
+      setSelectedEditingProfile(null);
+    }
+  }, [resetProfilesTrigger]);
 
   const activeTab: MainAdminTab = activeTabProp || internalTab;
   const setActiveTab = (tab: MainAdminTab) => {
@@ -309,7 +325,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleCreateProfile = async (newProfile: EvaluationTest) => {
+  const handleCreateProfile = async (newProfile: EvaluationTest): Promise<EvaluationTest | null> => {
     try {
       const saved = await ProcessDataService.createProfile(newProfile);
       if (saved) {
@@ -320,14 +336,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         } else {
           setProfiles(prev => [saved, ...prev.filter(t => t.id !== saved.id)]);
         }
-        setShowCreateProfileModal(false);
-        showToast(`✓ Nuevo perfil "${saved.title}" guardado en la base de datos.`);
+        showToast(`✓ Perfil "${saved.title}" guardado en la base de datos.`);
+        return saved;
       } else {
         showToast(`⚠️ No se pudo guardar el perfil en la base de datos.`);
+        return null;
       }
     } catch (err) {
       console.error('[AdminDashboard] Error al crear perfil:', err);
       showToast(`⚠️ Error al guardar el perfil en la base de datos.`);
+      return null;
     }
   };
 
@@ -395,24 +413,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         />
       )}
 
-      {/* 2. PERFILES: LISTADO DE PERFILES DE PUESTO Y DESCRIPCIÓN DE CARGO */}
+      {/* 2. PERFILES: CREACIÓN DE PERFIL (VISTA SEGÚN IMÁGENES 3 Y 5) O LISTADO DE PERFILES */}
       {activeTab === 'PERFILES' && (
-        <ProfilesManagerView
-          tests={profiles}
-          candidates={candidates}
-          onToggleActive={handleToggleActive}
-          onCreateNewProfile={() => setShowCreateProfileModal(true)}
-          onLaunchProcessForProfile={(profileId) => {
-            setCreateProcessPreselectedProfileId(profileId);
-            setShowCreateProcessModal(true);
-          }}
-          onSelectTest={(testId) => {
-            setActiveTestId(testId);
-            setFilterByActiveProcess(true);
-            setActiveTab('PROCESOS');
-            showToast(`✓ Convocatoria activa: ${processes.find(t => t.id === testId)?.title || profiles.find(t => t.id === testId)?.title}`);
-          }}
-        />
+        showCreateProfileModal ? (
+          <CreateProfileView
+            initialProfile={selectedEditingProfile}
+            initialStep={selectedEditingProfile ? 2 : 1}
+            onBack={() => {
+              setShowCreateProfileModal(false);
+              setSelectedEditingProfile(null);
+            }}
+            onCreateProfile={handleCreateProfile}
+            onLaunchProcess={(profileId) => {
+              setShowCreateProfileModal(false);
+              setSelectedEditingProfile(null);
+              setCreateProcessPreselectedProfileId(profileId);
+              setShowCreateProcessModal(true);
+            }}
+          />
+        ) : (
+          <ProfilesManagerView
+            tests={profiles}
+            candidates={candidates}
+            onToggleActive={handleToggleActive}
+            onCreateNewProfile={() => {
+              setSelectedEditingProfile(null);
+              setShowCreateProfileModal(true);
+            }}
+            onSelectProfile={(profile) => {
+              setSelectedEditingProfile(profile);
+              setShowCreateProfileModal(true);
+            }}
+            onLaunchProcessForProfile={(profileId) => {
+              setCreateProcessPreselectedProfileId(profileId);
+              setShowCreateProcessModal(true);
+            }}
+            onSelectTest={(testId) => {
+              const prof = profiles.find(t => t.id === testId);
+              if (prof) {
+                setSelectedEditingProfile(prof);
+                setShowCreateProfileModal(true);
+              }
+            }}
+          />
+        )
       )}
 
       {/* 3. PROCESOS: RESUMEN DE PROCESO RECIÉN LANZADO O VISTA DE CONTROL O FICHA DE CANDIDATO O LISTADO */}
@@ -697,13 +741,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         />
       )}
 
-      {/* Create New Profile Modal (Con espacio dedicado para descripción del puesto) */}
-      {showCreateProfileModal && (
-        <CreateProfileModal
-          onClose={() => setShowCreateProfileModal(false)}
-          onCreateProfile={handleCreateProfile}
-        />
-      )}
 
       {/* Launch / Create New Process Modal (Con selección de perfil, correo de candidatos y lanzamiento) */}
       {showCreateProcessModal && (
