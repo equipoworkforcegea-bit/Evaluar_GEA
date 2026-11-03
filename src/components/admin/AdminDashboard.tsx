@@ -381,6 +381,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  if (showCreateProcessModal) {
+    return (
+      <div className="w-full min-h-screen bg-[#F8F9FC] dark:bg-zinc-950">
+        <CreateProcessModal
+          tests={profiles.length > 0 ? profiles : processes}
+          preselectedProfileId={createProcessPreselectedProfileId || undefined}
+          onClose={() => {
+            setShowCreateProcessModal(false);
+            setCreateProcessPreselectedProfileId(null);
+            setActiveTab('PROCESOS');
+          }}
+          onLaunchProcess={handleLaunchProcess}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-[1520px] mx-auto px-4 sm:px-6 py-6 space-y-6">
       
@@ -738,21 +755,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             onAddCandidates(newCands);
             showToast(`✓ ${newCands.length} postulante(s) invitados con credenciales provisorias.`);
           }}
-        />
-      )}
-
-
-      {/* Launch / Create New Process Modal (Con selección de perfil, correo de candidatos y lanzamiento) */}
-      {showCreateProcessModal && (
-        <CreateProcessModal
-          tests={profiles.length > 0 ? profiles : processes}
-          preselectedProfileId={createProcessPreselectedProfileId || undefined}
-          onClose={() => {
-            setShowCreateProcessModal(false);
-            setCreateProcessPreselectedProfileId(null);
-            setActiveTab('PROCESOS');
-          }}
-          onLaunchProcess={handleLaunchProcess}
         />
       )}
 

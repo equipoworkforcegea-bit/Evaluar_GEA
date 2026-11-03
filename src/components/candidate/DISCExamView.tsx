@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { ArrowLeft, ArrowRight, Wifi, LogOut } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, ArrowRight, Wifi, Lock, ShieldCheck } from 'lucide-react';
 import discMirrorImg from '../../assets/disc_mirror.jpg';
 import discColleaguesImg from '../../assets/disc_colleagues.jpg';
+import { EvaluacionesService } from '../../services/evaluacionesService';
 
 const SECTION1_BLOCKS: { left: string[]; right: string[] }[] = [
   // Block 1 (Question 2)
@@ -55,18 +56,33 @@ interface DISCAnswers {
 
 interface DISCExamViewProps {
   processName?: string;
+  candidateId?: string;
+  processId?: string;
   onComplete: (answers: DISCAnswers) => void;
   onExit?: () => void;
 }
 
 export const DISCExamView: React.FC<DISCExamViewProps> = ({
   processName,
+  candidateId,
+  processId,
   onComplete,
   onExit,
 }) => {
   const TOTAL_QUESTIONS = 10;
   const [currentQuestion, setCurrentQuestion] = useState(1);
   const [answers, setAnswers] = useState<DISCAnswers>({});
+
+  // Bloqueo estricto de navegación/cierre mientras la prueba está activa
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = 'La evaluación DISC está en curso. Si sales ahora, tus respuestas se registrarán incompletas.';
+      return e.returnValue;
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
 
   const getBlockKey = (q: number): string => {
     if (q >= 2 && q <= 5) return `s1_b${q - 1}`;
@@ -102,10 +118,45 @@ export const DISCExamView: React.FC<DISCExamViewProps> = ({
     return currentSelected.length === 5;
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (currentQuestion < TOTAL_QUESTIONS) {
       setCurrentQuestion((q) => q + 1);
     } else {
+      // Calcular patrones D, I, S, C a partir de las palabras seleccionadas
+      const dWords = new Set(['Independiente', 'Cuestionador', 'Busca resultados', 'Insistente', 'Tenaz', 'Autosuficiente', 'Ideas firmes', 'Directo', 'Valiente', 'Ambicioso', 'Decidido', 'Audaz', 'Competitivo', 'Dinámico', 'Dominante', 'Seguro', 'Enérgico', 'Impulsivo', 'Rápido', 'Agresivo', 'Fuerte', 'Controlador', 'Exigente', 'Impetuoso']);
+      const iWords = new Set(['Influyente', 'Espontáneo', 'Flexible', 'Negociador', 'Extrovertido', 'Entusiasta', 'Convincente', 'Sociable', 'Optimista', 'Expresivo', 'Creativo', 'Persuasivo', 'Comunicativo', 'Empático', 'Popular', 'Animado', 'Hablador', 'Motivador']);
+      const sWords = new Set(['Autocontrolado', 'Tranquilo', 'Obediente', 'Reflexivo', 'Buena escucha', 'Cooperador', 'Estable', 'Perceptivo', 'Discreto', 'Equilibrado', 'Dispuesto', 'Paciente', 'Leal', 'Servicial', 'Confiado', 'Sincero', 'Tolerante', 'Constante', 'Amigable', 'Comprensivo', 'Colaborativo', 'Confiable']);
+      const cWords = new Set(['Disciplinado', 'Cumplido', 'Meticuloso', 'Preciso', 'Perfeccionista', 'Analítico', 'Exacto', 'Ordenado', 'Formal', 'Cuidadoso', 'Sistemático', 'Detallista', 'Riguroso', 'Concienzudo', 'Cauteloso', 'Metódico', 'Minucioso']);
+
+      let conteoD = 0, conteoI = 0, conteoS = 0, conteoC = 0;
+      Object.values(answers).forEach((wordList) => {
+        wordList.forEach((w) => {
+          if (dWords.has(w)) conteoD++;
+          else if (iWords.has(w)) conteoI++;
+          else if (sWords.has(w)) conteoS++;
+          else if (cWords.has(w)) conteoC++;
+        });
+      });
+
+      const maxVal = Math.max(conteoD, conteoI, conteoS, conteoC);
+      let perfilDominante = 'Equilibrado';
+      if (conteoD === maxVal) perfilDominante = 'D - Dominante / Orientado a Resultados';
+      else if (conteoI === maxVal) perfilDominante = 'I - Influyente / Comunicador';
+      else if (conteoS === maxVal) perfilDominante = 'S - Estable / Cooperador';
+      else if (conteoC === maxVal) perfilDominante = 'C - Concienzudo / Analítico';
+
+      // Guardar en Supabase y respaldo local
+      await EvaluacionesService.guardarResultadoDISC({
+        candidatoId: candidateId || 'cand_invitado',
+        procesoId: processId || 'proc_invitado',
+        respuestas: answers,
+        conteoD,
+        conteoI,
+        conteoS,
+        conteoC,
+        perfilDominante
+      });
+
       onComplete(answers);
     }
   };
@@ -124,11 +175,16 @@ export const DISCExamView: React.FC<DISCExamViewProps> = ({
       }}
     >
       <div className="w-full max-w-4xl bg-white rounded-3xl shadow-xl border border-violet-100 overflow-hidden flex flex-col my-auto">
-        {/* Header inside card */}
+        {/* Header inside card - Sin la palabra evaluar y con salida bloqueada */}
         <div className="flex items-center justify-between px-6 sm:px-8 py-4 border-b border-zinc-100">
-          <div className="flex items-center gap-0.5 select-none">
-            <span className="text-[#E4002B] font-black text-2xl italic tracking-tighter">e</span>
-            <span className="text-[#1F2A5E] font-black text-2xl tracking-tight">valuar</span>
+          <div className="flex items-center gap-2.5 select-none">
+            <div className="w-8 h-8 rounded-xl bg-[#1F2A5E] text-white flex items-center justify-center font-black text-xs tracking-wider shadow-xs">
+              GEA
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-slate-800 leading-none">GEA Internacional</span>
+              <span className="text-[10px] text-slate-400">Evaluación Oficial</span>
+            </div>
           </div>
 
           <div className="flex items-center gap-3">
@@ -139,14 +195,13 @@ export const DISCExamView: React.FC<DISCExamViewProps> = ({
             </span>
           </div>
 
-          <button
-            type="button"
-            onClick={onExit}
-            className="w-10 h-10 rounded-xl border border-red-200 hover:border-red-300 hover:bg-red-50 text-red-500 flex items-center justify-center transition-colors cursor-pointer"
-            title="Salir"
+          <div 
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium cursor-help"
+            title="Por seguridad del proceso de selección, la prueba no se puede pausar ni abandonar hasta finalizarla"
           >
-            <LogOut className="w-4 h-4" />
-          </button>
+            <Lock className="w-3.5 h-3.5 text-amber-600" />
+            <span className="hidden sm:inline">Prueba activa • Salida bloqueada</span>
+          </div>
         </div>
 
         {/* Content Area */}

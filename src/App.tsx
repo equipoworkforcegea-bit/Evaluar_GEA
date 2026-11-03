@@ -12,9 +12,10 @@ import { AdminSidebar } from './components/admin/AdminSidebar';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { ExamContainer } from './components/candidate/ExamContainer';
 import { DISCExamView } from './components/candidate/DISCExamView';
+import { KnowledgeExamView } from './components/candidate/KnowledgeExamView';
 import { AdminDashboard, MainAdminTab } from './components/admin/AdminDashboard';
 import { ArchitectureViewer } from './components/architecture/ArchitectureViewer';
-import { ProcesosInvitadosView } from './components/candidate/ProcesosInvitadosView';
+import { ProcesosInvitadosView, StartExamPayload } from './components/candidate/ProcesosInvitadosView';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { NotificationsPanel } from './components/admin/NotificationsPanel';
 import { CandidateDataService } from './services/candidateDataService';
@@ -279,19 +280,58 @@ function ProcesosInvitadosViewWrapper({
   onLogout
 }: ProcesosInvitadosViewWrapperProps) {
   const navigate = useNavigate();
-  const [showDISC, setShowDISC] = useState(false);
+  const [activeExam, setActiveExam] = useState<StartExamPayload | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  // If DISC exam is active, render fullscreen DISC view
-  if (showDISC) {
+  // 1. Si la prueba activa es DISC
+  if (activeExam?.type === 'DISC') {
     return (
       <DISCExamView
         processName={candidate.position || 'Evaluación DISC'}
+        candidateId={activeExam.candidateId || candidate.id}
+        processId={activeExam.testId}
         onComplete={(_answers) => {
-          // Mark candidate as completed and go back to processes list
-          setShowDISC(false);
+          setRefreshKey(k => k + 1);
+          setActiveExam(null);
           navigate('/procesos-invitados');
         }}
-        onExit={() => setShowDISC(false)}
+        onExit={() => setActiveExam(null)}
+      />
+    );
+  }
+
+  // 2. Si la prueba activa es un cuestionario de Conocimientos (20 preguntas)
+  if (activeExam?.type === 'KNOWLEDGE') {
+    return (
+      <KnowledgeExamView
+        topicName={activeExam.topicName || 'Planificación estratégica'}
+        difficulty={activeExam.difficulty || 'Media'}
+        questionCount={activeExam.questionCount || 20}
+        candidateId={activeExam.candidateId || candidate.id}
+        processId={activeExam.testId}
+        onComplete={(_score, _max, _correct) => {
+          setRefreshKey(k => k + 1);
+          setActiveExam(null);
+          navigate('/procesos-invitados');
+        }}
+      />
+    );
+  }
+
+  // 3. Si la prueba activa es Competencias
+  if (activeExam?.type === 'COMPETENCIAS') {
+    return (
+      <KnowledgeExamView
+        topicName="Evaluación de Competencias Clave"
+        difficulty="Media"
+        questionCount={15}
+        candidateId={activeExam.candidateId || candidate.id}
+        processId={activeExam.testId}
+        onComplete={(_score, _max, _correct) => {
+          setRefreshKey(k => k + 1);
+          setActiveExam(null);
+          navigate('/procesos-invitados');
+        }}
       />
     );
   }
@@ -312,9 +352,10 @@ function ProcesosInvitadosViewWrapper({
 
       <main className="focus:outline-hidden">
         <ProcesosInvitadosView
+          key={refreshKey}
           candidate={candidate}
-          onStartExam={(_testId) => {
-            setShowDISC(true);
+          onStartExam={(payload) => {
+            setActiveExam(payload);
           }}
         />
       </main>
@@ -431,9 +472,16 @@ export default function App() {
 
   // 4. Manejo de Cierre de Sesión seguro
   const handleLogout = () => {
+    const isCandidate = session?.role === 'CANDIDATE';
+    const emailParam = session?.email ? `&email=${encodeURIComponent(session.email)}` : '';
+    const dniParam = session?.dni ? `&dni=${encodeURIComponent(session.dni)}` : '';
     AuthStorage.clearSession();
     setSession(null);
-    navigate('/login', { replace: true });
+    if (isCandidate) {
+      navigate(`/login?portal=candidate${emailParam}${dniParam}`, { replace: true });
+    } else {
+      navigate('/login', { replace: true });
+    }
   };
 
   // Candidato activo para la prueba

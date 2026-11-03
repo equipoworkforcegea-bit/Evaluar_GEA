@@ -650,8 +650,8 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
           </div>
 
           {/* Candidates Table List */}
-          <div className="bg-white dark:bg-[#182044] rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] shadow-2xs overflow-hidden">
-            <div className="overflow-x-auto">
+          <div className="bg-white dark:bg-[#182044] rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] shadow-2xs overflow-visible">
+            <div className="overflow-visible">
               <div className="min-w-[760px] divide-y divide-[#DDE2EF]/70 dark:divide-[#2A3563]/70">
                 {/* Table Header Row */}
                 <div className="px-5 py-3 bg-[#F8FAFC]/80 dark:bg-[#151D3F]/80 flex items-center justify-between text-[11px] font-bold text-[#6B7494] uppercase tracking-wider">
@@ -693,11 +693,15 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
                         ? 'bg-[#B01E68]' 
                         : 'bg-[#5844D8]';
 
+                    const isLastCandidate = index >= displayedCandidates.length - 2 || displayedCandidates.length <= 2;
+
                     return (
                       <div
                         key={c.id}
                         onClick={() => onViewCandidateDetail(c)}
-                        className={`p-4 sm:p-5 flex items-center justify-between gap-4 transition-colors cursor-pointer hover:bg-[#E9EDF6]/30 dark:hover:bg-white/5 ${
+                        className={`p-4 sm:p-5 flex items-center justify-between gap-4 transition-colors cursor-pointer hover:bg-[#E9EDF6]/30 dark:hover:bg-white/5 relative ${
+                          activeMenuCandidateId === c.id ? 'z-50' : 'z-10'
+                        } ${
                           isSelected ? 'bg-[#5844D8]/5' : ''
                         }`}
                       >
@@ -834,7 +838,9 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
 
                             {activeMenuCandidateId === c.id && (
                               <div 
-                                className="absolute right-0 top-full mt-1 z-30 bg-white dark:bg-[#182044] border border-[#DDE2EF] dark:border-[#2A3563] rounded-xl shadow-xl min-w-[190px] py-1 text-xs overflow-hidden"
+                                className={`absolute right-0 ${
+                                  isLastCandidate ? 'bottom-full mb-1' : 'top-full mt-1'
+                                } z-50 bg-white dark:bg-[#182044] border border-[#DDE2EF] dark:border-[#2A3563] rounded-xl shadow-2xl min-w-[200px] py-1 text-xs overflow-hidden animate-in fade-in zoom-in-95`}
                                 onClick={e => e.stopPropagation()}
                               >
                                 <button

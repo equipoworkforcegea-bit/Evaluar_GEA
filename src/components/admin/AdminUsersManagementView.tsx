@@ -329,8 +329,8 @@ export const AdminUsersManagementView: React.FC<AdminUsersManagementViewProps> =
       setCreateError('Ingrese al menos dos palabras (nombre y apellido).');
       return;
     }
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      setCreateError('Ingrese un correo electrónico válido.');
+    if (cleanEmail && !cleanEmail.includes('@')) {
+      setCreateError('Si ingresa un correo, debe ser válido (incluir @).');
       return;
     }
     if (!cleanUsername) {
@@ -818,12 +818,11 @@ export const AdminUsersManagementView: React.FC<AdminUsersManagementViewProps> =
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-[#1F2A5E] dark:text-zinc-200 flex items-center gap-1">
-                    <span>Correo Electrónico *</span>
-                    <span className="text-[10px] font-normal text-[#6B7494]">(email)</span>
+                    <span>Correo Electrónico</span>
+                    <span className="text-[10px] font-normal text-[#6B7494]">(email — opcional)</span>
                   </label>
                   <input
                     type="email"
-                    required
                     value={createEmail}
                     onChange={(e) => handleEmailChange(e.target.value)}
                     placeholder="bryan@geaperu.pe"
@@ -920,13 +919,15 @@ export const AdminUsersManagementView: React.FC<AdminUsersManagementViewProps> =
                     <span>Posición / Cargo</span>
                     <span className="text-[10px] font-normal text-[#6B7494]">(position)</span>
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={createPosition}
                     onChange={(e) => setCreatePosition(e.target.value)}
-                    placeholder="Ej. Líder de Selección"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#DDE2EF] dark:border-zinc-700 text-xs bg-white dark:bg-zinc-800 focus:outline-none focus:border-[#2F5BA8]"
-                  />
+                  >
+                    {SUGGESTED_POSITIONS.map((pos) => (
+                      <option key={pos} value={pos}>{pos}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

@@ -104,6 +104,21 @@ function mapRowToProfile(row: any): EvaluationTest {
     ? (row.competencias._metadata || {})
     : {};
 
+  // Extraer cuestionarios de conocimiento configurados
+  let parsedKnowledgeQuestionnaires: string[] = [];
+  if (Array.isArray(metadata.knowledgeQuestionnaires)) {
+    parsedKnowledgeQuestionnaires = metadata.knowledgeQuestionnaires;
+  } else if (Array.isArray(metadata.stages)) {
+    const knowStage = metadata.stages.find((s: any) => s.id === 'STAGE_CONOCIMIENTOS');
+    if (knowStage?.description && knowStage.description.includes('Cuestionarios: ')) {
+      parsedKnowledgeQuestionnaires = knowStage.description
+        .replace('Cuestionarios: ', '')
+        .split(',')
+        .map((s: string) => s.trim())
+        .filter(Boolean);
+    }
+  }
+
   return {
     id: row.id,
     code: row.codigo || 'PERF-GEA',
@@ -127,6 +142,8 @@ function mapRowToProfile(row: any): EvaluationTest {
     hiredCount: 0,
     averageScore: 0,
     selectedCompetencies: compKeys,
+    knowledgeQuestionnaires: parsedKnowledgeQuestionnaires,
+    knowledgeItems: metadata.knowledgeItems || [],
     stages: metadata.stages || []
   };
 }
@@ -211,11 +228,14 @@ export const ProcessDataService = {
         compMap[c] = 85;
       });
 
-      // Guardar etapas, dificultad y duración en _metadata dentro de competencias (jsonb)
+      // Guardar etapas, dificultad, cuestionarios y duración en _metadata dentro de competencias (jsonb)
       compMap._metadata = {
         difficulty: profile.difficultyLevel || 'MEDIO',
         duration: profile.totalDurationMinutes || 45,
-        stages: profile.stages || []
+        stages: profile.stages || [],
+        knowledgeQuestionnaires: profile.knowledgeQuestionnaires || [],
+        knowledgeItems: (profile as any).knowledgeItems || [],
+        selectedList: profile.selectedCompetencies || []
       };
 
       const targetPosClean = (profile.targetPosition || profile.title || 'GEN')

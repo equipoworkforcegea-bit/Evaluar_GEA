@@ -2,6 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { EvaluationTest, TestStageConfig } from '../../types';
 import { generateSafeUuid, ProcessDataService } from '../../services/processDataService';
 import { 
+  QUESTIONNAIRE_CATALOG, 
+  getQuestionsForTopic, 
+  QuestionData, 
+  QuestionnaireOption 
+} from '../../data/questionnairesData';
+import { 
   ArrowLeft, 
   Sparkles, 
   User, 
@@ -37,7 +43,9 @@ import {
   Heart,
   Banknote,
   BookOpen,
-  ChevronRight
+  ChevronRight,
+  Edit3,
+  Layers
 } from 'lucide-react';
 
 export type DifficultyLevel = 'BAJO' | 'MEDIO' | 'ALTO';
@@ -66,6 +74,7 @@ export interface KnowledgeItemConfig {
   isConfigured: boolean;
   weight: number;
   difficulty: 'Personalizada' | 'Baja' | 'Media' | 'Alta';
+  totalQuestions: number;
   questionsLow: number;
   maxLow: number;
   questionsMed: number;
@@ -77,20 +86,6 @@ export interface KnowledgeItemConfig {
   scoreScale: number;
   questionOrder: 'Predefinido' | 'Aleatorio' | 'Por dificultad';
   instructions: string;
-}
-
-export interface QuestionData {
-  id: number;
-  question: string;
-  options: { text: string; isCorrect: boolean }[];
-}
-
-export interface QuestionnaireOption {
-  id: string;
-  title: string;
-  alta: number;
-  media: number;
-  baja: number;
 }
 
 export interface CompetencyCategory {
@@ -108,11 +103,12 @@ const DEFAULT_KNOWLEDGE_ITEMS: KnowledgeItemConfig[] = [
     isConfigured: false,
     weight: 25,
     difficulty: 'Personalizada',
-    questionsLow: 1,
+    totalQuestions: 20,
+    questionsLow: 5,
     maxLow: 37,
-    questionsMed: 1,
+    questionsMed: 10,
     maxMed: 28,
-    questionsHigh: 1,
+    questionsHigh: 5,
     maxHigh: 14,
     timeControl: true,
     minutes: 2,
@@ -126,11 +122,12 @@ const DEFAULT_KNOWLEDGE_ITEMS: KnowledgeItemConfig[] = [
     isConfigured: false,
     weight: 25,
     difficulty: 'Personalizada',
-    questionsLow: 1,
+    totalQuestions: 20,
+    questionsLow: 6,
     maxLow: 25,
-    questionsMed: 1,
+    questionsMed: 10,
     maxMed: 20,
-    questionsHigh: 1,
+    questionsHigh: 4,
     maxHigh: 10,
     timeControl: true,
     minutes: 3,
@@ -144,11 +141,12 @@ const DEFAULT_KNOWLEDGE_ITEMS: KnowledgeItemConfig[] = [
     isConfigured: false,
     weight: 25,
     difficulty: 'Personalizada',
-    questionsLow: 1,
+    totalQuestions: 20,
+    questionsLow: 5,
     maxLow: 20,
-    questionsMed: 2,
+    questionsMed: 10,
     maxMed: 30,
-    questionsHigh: 1,
+    questionsHigh: 5,
     maxHigh: 15,
     timeControl: true,
     minutes: 2,
@@ -162,11 +160,12 @@ const DEFAULT_KNOWLEDGE_ITEMS: KnowledgeItemConfig[] = [
     isConfigured: true,
     weight: 25,
     difficulty: 'Personalizada',
-    questionsLow: 1,
+    totalQuestions: 20,
+    questionsLow: 5,
     maxLow: 10,
-    questionsMed: 2,
+    questionsMed: 10,
     maxMed: 15,
-    questionsHigh: 1,
+    questionsHigh: 5,
     maxHigh: 8,
     timeControl: true,
     minutes: 4,
@@ -175,121 +174,6 @@ const DEFAULT_KNOWLEDGE_ITEMS: KnowledgeItemConfig[] = [
     instructions: ''
   }
 ];
-
-const QUESTIONS_BY_TOPIC: Record<string, QuestionData[]> = {
-  'Planificación estratégica': [
-    {
-      id: 1,
-      question: '1. Como proceso, la Planificación Estratégica permite no sólo establecer los objetivos de la organización, sino también, definir los procedimientos adecuados que la organización deberá emprender para alcanzarlos',
-      options: [
-        { text: 'VERDADERO', isCorrect: true },
-        { text: 'FALSO', isCorrect: false }
-      ]
-    },
-    {
-      id: 2,
-      question: '2. ¿Cuál de las siguientes alternativas corresponde a las fases del proceso de Planificación Estratégica?',
-      options: [
-        { text: 'Normativa, táctico-situacional, operativa y estratégica', isCorrect: false },
-        { text: 'Filosófica, explicativa, analítica, operativa y situacional.', isCorrect: false },
-        { text: 'Filosófica, analítica, programática, operativa y cuantitativa', isCorrect: true },
-        { text: 'Diagnóstica, filosófica, analítica, operativa y programática', isCorrect: false }
-      ]
-    },
-    {
-      id: 3,
-      question: '3. A nivel conceptual no existen diferencias entre lo que se entiende por Planificación Estratégica como proceso y Planificación Estratégica como instrumento.',
-      options: [
-        { text: 'VERDADERO', isCorrect: false },
-        { text: 'FALSO', isCorrect: true }
-      ]
-    },
-    {
-      id: 4,
-      question: '4. ¿Qué elemento de la Planificación Estratégica define el rumbo y la aspiración futura de la organización a largo plazo?',
-      options: [
-        { text: 'Visión', isCorrect: true },
-        { text: 'Misión', isCorrect: false },
-        { text: 'Presupuesto', isCorrect: false },
-        { text: 'Plan de acción diario', isCorrect: false }
-      ]
-    },
-    {
-      id: 5,
-      question: '5. En el análisis FODA, ¿cuáles representan factores del entorno externo a la organización?',
-      options: [
-        { text: 'Fortalezas y Debilidades', isCorrect: false },
-        { text: 'Oportunidades y Amenazas', isCorrect: true },
-        { text: 'Objetivos y Metas', isCorrect: false },
-        { text: 'Valores corporativos', isCorrect: false }
-      ]
-    }
-  ],
-  'Español nivel basico': [
-    {
-      id: 1,
-      question: '1. Identifique la opción que presenta adecuada concordancia gramatical:',
-      options: [
-        { text: 'El grupo de colaboradores asistió puntualmente a la reunión.', isCorrect: true },
-        { text: 'El grupo de colaboradores asistieron puntualmente a la reunión.', isCorrect: false },
-        { text: 'Habían muchas dudas sobre el procedimiento.', isCorrect: false },
-        { text: 'La acta fue redactada ayer.', isCorrect: false }
-      ]
-    },
-    {
-      id: 2,
-      question: '2. ¿Cuál de las siguientes palabras requiere tilde diacrítica según el contexto?',
-      options: [
-        { text: 'Él entregó el informe a tiempo.', isCorrect: true },
-        { text: 'El informe fue archivado.', isCorrect: false },
-        { text: 'Tu oficina está en el tercer piso.', isCorrect: false },
-        { text: 'Mi proyecto concluyó con éxito.', isCorrect: false }
-      ]
-    }
-  ],
-  'Negociación': [
-    {
-      id: 1,
-      question: '1. El concepto de MAAN (Mejor Alternativa a un Acuerdo Negociado) se utiliza para evaluar si conviene aceptar un acuerdo propuesto.',
-      options: [
-        { text: 'VERDADERO', isCorrect: true },
-        { text: 'FALSO', isCorrect: false }
-      ]
-    },
-    {
-      id: 2,
-      question: '2. ¿Cuál es el objetivo principal de la negociación integrativa?',
-      options: [
-        { text: 'Maximizar el beneficio mutuo (ganar-ganar)', isCorrect: true },
-        { text: 'Obtener la mayor ganancia a expensas de la otra parte', isCorrect: false },
-        { text: 'Ceder en todas las posiciones para evitar el conflicto', isCorrect: false },
-        { text: 'Dilatar el acuerdo indefinidamente', isCorrect: false }
-      ]
-    }
-  ],
-  'Psicometría': [
-    {
-      id: 1,
-      question: '1. La confiabilidad de un instrumento de medición psicométrica evalúa:',
-      options: [
-        { text: 'La consistencia y reproducibilidad de las puntuaciones obtenidas', isCorrect: true },
-        { text: 'El costo económico de la aplicación del test', isCorrect: false },
-        { text: 'La duración total de la sesión de evaluación', isCorrect: false },
-        { text: 'El grado de agrado del evaluado al responder', isCorrect: false }
-      ]
-    },
-    {
-      id: 2,
-      question: '2. ¿Qué mide el coeficiente Alfa de Cronbach?',
-      options: [
-        { text: 'La consistencia interna de una escala psicométrica', isCorrect: true },
-        { text: 'La correlación bivariada entre dos variables continuas', isCorrect: false },
-        { text: 'La normalidad de la distribución muestral', isCorrect: false },
-        { text: 'El error tipo I en contraste de hipótesis', isCorrect: false }
-      ]
-    }
-  ]
-};
 
 const COMPETENCY_CATEGORIES: CompetencyCategory[] = [
   {
@@ -527,16 +411,7 @@ const COMPETENCY_CATEGORIES: CompetencyCategory[] = [
   }
 ];
 
-const QUESTIONNAIRE_CATALOG: QuestionnaireOption[] = [
-  { id: 'q1', title: 'Mercadeo', alta: 42, media: 42, baja: 20 },
-  { id: 'q2', title: 'Merchandising', alta: 27, media: 50, baja: 107 },
-  { id: 'q3', title: 'Negociación', alta: 0, media: 100, baja: 0 },
-  { id: 'q4', title: 'Psicometría', alta: 3, media: 4, baja: 3 },
-  { id: 'q5', title: 'Planificación Estratégica', alta: 14, media: 28, baja: 37 },
-  { id: 'q6', title: 'Ventas', alta: 0, media: 15, baja: 0 },
-  { id: 'q7', title: 'Atención al Cliente', alta: 15, media: 40, baja: 25 },
-  { id: 'q8', title: 'Liderazgo & Supervisión', alta: 10, media: 30, baja: 15 }
-];
+
 
 const FILTER_QUESTIONS_CATALOG = [
   '¿Cuentas con disponibilidad para turnos completos y rotativos?',
@@ -573,17 +448,47 @@ export const CreateProfileView: React.FC<CreateProfileViewProps> = ({
   const [step, setStep] = useState<1 | 2>(initialStep);
 
   // Step 1 State
-  const [profileName, setProfileName] = useState(initialProfile?.title || 'PERFILPRUEBA');
+  const [profileName, setProfileName] = useState(initialProfile?.title || '');
   const [difficultyLevel, setDifficultyLevel] = useState<DifficultyLevel>(
     (initialProfile?.difficultyLevel as DifficultyLevel) || 'MEDIO'
   );
-  const [description, setDescription] = useState(initialProfile?.description || DEFAULT_DESCRIPTION);
+  const [description, setDescription] = useState(initialProfile?.description || '');
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isCopilotGenerating, setIsCopilotGenerating] = useState(false);
 
   // Helper para mapear components iniciales
   const buildInitialComponents = (prof?: EvaluationTest | null): ComponentItem[] => {
+    // Si es un perfil nuevo, empezar completamente vacío para que el reclutador lo configure desde cero
+    if (!prof) {
+      return [];
+    }
+
     const comps = prof?.selectedCompetencies || [];
+    const savedStages = prof?.stages || [];
+
+    // Si tiene stages configuradas, reconstruir los componentes correspondientes
+    if (savedStages.length > 0) {
+      return savedStages.map((stage, idx) => {
+        let type: ComponentType = 'CONOCIMIENTOS';
+        if (stage.id.includes('DISC') || stage.category === 'EMOTIONAL') type = 'DISC';
+        else if (stage.id.includes('COMPETENCIAS') || stage.category === 'COMPETENCIES') type = 'COMPETENCIAS';
+        else if (stage.id.includes('PREGUNTAS') || stage.id.includes('FILTRO')) type = 'PREGUNTAS_FILTRO';
+        else if (stage.id.includes('CV')) type = 'CV';
+        else if (stage.id.includes('VIDEO')) type = 'VIDEO_ENTREVISTA';
+
+        return {
+          id: `comp_${type.toLowerCase()}_${idx}`,
+          type,
+          title: stage.name,
+          isComplete: true,
+          durationMinutes: stage.durationMinutes || 15,
+          weightPercent: stage.weightPercent || 20,
+          selectedItems: type === 'COMPETENCIAS' ? comps : undefined
+        };
+      });
+    }
+
+    // Perfil existente sin stages personalizadas
     return [
       {
         id: 'comp_disc',
@@ -620,9 +525,26 @@ export const CreateProfileView: React.FC<CreateProfileViewProps> = ({
   const [isAccordionOpen, setIsAccordionOpen] = useState(false);
   const [showAdvancedConfig, setShowAdvancedConfig] = useState(false);
 
-  // Conocimiento State & Items
-  const [knowledgeItems, setKnowledgeItems] = useState<KnowledgeItemConfig[]>(DEFAULT_KNOWLEDGE_ITEMS);
+  // Conocimiento State & Items (si es perfil nuevo, arranca vacío)
+  const [knowledgeItems, setKnowledgeItems] = useState<KnowledgeItemConfig[]>(() => {
+    if (!initialProfile) return [];
+    if (initialProfile.knowledgeQuestionnaires && initialProfile.knowledgeQuestionnaires.length > 0) {
+      const qWeight = Math.round(100 / initialProfile.knowledgeQuestionnaires.length);
+      return initialProfile.knowledgeQuestionnaires.map((qName, idx) => ({
+        id: `k_${idx + 1}`,
+        name: qName,
+        weight: idx === initialProfile.knowledgeQuestionnaires!.length - 1 
+          ? (100 - qWeight * (initialProfile.knowledgeQuestionnaires!.length - 1)) 
+          : qWeight,
+        isConfigured: true,
+        difficulty: 'MEDIO',
+        totalQuestions: 20
+      }));
+    }
+    return DEFAULT_KNOWLEDGE_ITEMS;
+  });
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [openSectionMenuId, setOpenSectionMenuId] = useState<string | null>(null);
   const [activeConfigItem, setActiveConfigItem] = useState<KnowledgeItemConfig | null>(null);
   const [activePreviewItem, setActivePreviewItem] = useState<KnowledgeItemConfig | null>(null);
 
@@ -647,22 +569,28 @@ export const CreateProfileView: React.FC<CreateProfileViewProps> = ({
   // Re-sync si initialProfile o initialStep cambian
   useEffect(() => {
     if (initialProfile) {
-      setProfileName(initialProfile.title || 'PERFILPRUEBA');
+      setProfileName(initialProfile.title || '');
       setDifficultyLevel((initialProfile.difficultyLevel as DifficultyLevel) || 'MEDIO');
-      setDescription(initialProfile.description || DEFAULT_DESCRIPTION);
+      setDescription(initialProfile.description || '');
       setStep(initialStep || 2);
+      setComponents(buildInitialComponents(initialProfile));
+
       if (initialProfile.selectedCompetencies) {
         setSelectedCompetencies(initialProfile.selectedCompetencies);
-        setComponents(prev => prev.map(c => {
-          if (c.type === 'COMPETENCIAS') {
-            return {
-              ...c,
-              isComplete: (initialProfile.selectedCompetencies?.length || 0) > 0,
-              selectedItems: initialProfile.selectedCompetencies
-            };
-          }
-          return c;
-        }));
+      }
+
+      if (initialProfile.knowledgeQuestionnaires && initialProfile.knowledgeQuestionnaires.length > 0) {
+        const qWeight = Math.round(100 / initialProfile.knowledgeQuestionnaires.length);
+        setKnowledgeItems(initialProfile.knowledgeQuestionnaires.map((qName, idx) => ({
+          id: `k_${idx + 1}`,
+          name: qName,
+          weight: idx === initialProfile.knowledgeQuestionnaires!.length - 1 
+            ? (100 - qWeight * (initialProfile.knowledgeQuestionnaires!.length - 1)) 
+            : qWeight,
+          isConfigured: true,
+          difficulty: 'MEDIO',
+          totalQuestions: 20
+        })));
       }
     }
   }, [initialProfile, initialStep]);
@@ -671,10 +599,11 @@ export const CreateProfileView: React.FC<CreateProfileViewProps> = ({
   useEffect(() => {
     const handleDocumentClick = () => {
       if (openMenuId) setOpenMenuId(null);
+      if (openSectionMenuId) setOpenSectionMenuId(null);
     };
     document.addEventListener('click', handleDocumentClick);
     return () => document.removeEventListener('click', handleDocumentClick);
-  }, [openMenuId]);
+  }, [openMenuId, openSectionMenuId]);
 
   // Generador de descripción con CopilotAI
   const handleCopilotGenerate = () => {
@@ -785,15 +714,24 @@ Requisitos:
     setComponents(prev => prev.filter(c => c.id !== id));
   };
 
-  // Ajustar peso de un item de conocimiento
+  // Ajustar peso de un item de conocimiento (NUNCA superará el 100%)
   const handleAdjustWeight = (itemId: string, delta: number) => {
-    setKnowledgeItems(prev => prev.map(item => {
-      if (item.id === itemId) {
-        const next = Math.max(0, Math.min(100, item.weight + delta));
-        return { ...item, weight: next };
-      }
-      return item;
-    }));
+    setKnowledgeItems(prev => {
+      const currentTotal = prev.reduce((sum, it) => sum + it.weight, 0);
+      return prev.map(item => {
+        if (item.id === itemId) {
+          if (delta > 0) {
+            const maxAllowed = Math.max(0, 100 - currentTotal);
+            const actualDelta = Math.min(delta, maxAllowed);
+            return { ...item, weight: item.weight + actualDelta };
+          } else {
+            const next = Math.max(0, item.weight + delta);
+            return { ...item, weight: next };
+          }
+        }
+        return item;
+      });
+    });
   };
 
   // Guardar configuración del item de conocimiento
@@ -811,26 +749,41 @@ Requisitos:
     setActiveConfigItem(null);
   };
 
-  // Eliminar item de conocimiento
+  // Eliminar item de conocimiento y redistribuir equitativamente para mantener siempre el 100%
   const handleDeleteKnowledgeItem = (itemId: string) => {
-    setKnowledgeItems(prev => prev.filter(it => it.id !== itemId));
+    setKnowledgeItems(prev => {
+      const remaining = prev.filter(it => it.id !== itemId);
+      if (remaining.length === 0) return [];
+      const count = remaining.length;
+      const baseWeight = Math.floor(100 / count);
+      const remainder = 100 % count;
+      return remaining.map((it, idx) => ({
+        ...it,
+        weight: baseWeight + (idx < remainder ? 1 : 0)
+      }));
+    });
     setOpenMenuId(null);
   };
 
-  // Añadir cuestionario desde el catálogo
+  // Añadir cuestionario desde el catálogo distribuyendo equitativamente sin superar el 100%
   const handleAddQuestionnaireFromCatalog = (qTitle: string) => {
     if (knowledgeItems.some(k => k.name.toLowerCase() === qTitle.toLowerCase())) return;
+    const newCount = knowledgeItems.length + 1;
+    const baseWeight = Math.floor(100 / newCount);
+    const remainder = 100 % newCount;
+
     const newItem: KnowledgeItemConfig = {
       id: `k_${Date.now()}`,
       name: qTitle,
       isConfigured: false,
-      weight: 25,
+      weight: baseWeight,
       difficulty: 'Personalizada',
-      questionsLow: 1,
+      totalQuestions: 20,
+      questionsLow: 5,
       maxLow: 30,
-      questionsMed: 1,
+      questionsMed: 10,
       maxMed: 25,
-      questionsHigh: 1,
+      questionsHigh: 5,
       maxHigh: 15,
       timeControl: true,
       minutes: 2,
@@ -838,7 +791,13 @@ Requisitos:
       questionOrder: 'Predefinido',
       instructions: ''
     };
-    setKnowledgeItems(prev => [...prev, newItem]);
+
+    const rebalanced = [...knowledgeItems, newItem].map((item, idx) => ({
+      ...item,
+      weight: baseWeight + (idx < remainder ? 1 : 0)
+    }));
+
+    setKnowledgeItems(rebalanced);
   };
 
   // Toggle competencia individual con guardado automático en perfiles_puesto
@@ -893,16 +852,24 @@ Requisitos:
     const totalDuration = components.reduce((acc, c) => acc + c.durationMinutes, 0) || 45;
     const baseWeight = Math.round(100 / components.length);
 
-    const stages: TestStageConfig[] = components.map((c, index) => ({
-      id: `STAGE_${c.type}`,
-      category: c.type === 'DISC' ? 'EMOTIONAL' : (c.type === 'CONOCIMIENTOS' ? 'PSYCHOLOGICAL' : 'COMPETENCIES'),
-      name: c.title,
-      description: `Componente ${c.title} para evaluación de ${profileName}`,
-      durationMinutes: c.durationMinutes,
-      questionCount: 10,
-      weightPercent: index === components.length - 1 ? (100 - baseWeight * (components.length - 1)) : baseWeight,
-      isEnabled: true
-    }));
+    const stages: TestStageConfig[] = components.map((c, index) => {
+      let desc = `Componente ${c.title} para evaluación de ${profileName}`;
+      if (c.type === 'CONOCIMIENTOS' && knowledgeItems.length > 0) {
+        desc = `Cuestionarios: ${knowledgeItems.map(k => k.name).join(', ')}`;
+      } else if (c.type === 'COMPETENCIAS' && selectedCompetencies.length > 0) {
+        desc = `Competencias: ${selectedCompetencies.slice(0, 4).join(', ')}`;
+      }
+      return {
+        id: `STAGE_${c.type}`,
+        category: c.type === 'DISC' ? 'EMOTIONAL' : (c.type === 'CONOCIMIENTOS' ? 'PSYCHOLOGICAL' : 'COMPETENCIES'),
+        name: c.title,
+        description: desc,
+        durationMinutes: c.durationMinutes,
+        questionCount: c.type === 'CONOCIMIENTOS' ? knowledgeItems.reduce((acc, k) => acc + (k.totalQuestions || 20), 0) : 10,
+        weightPercent: index === components.length - 1 ? (100 - baseWeight * (components.length - 1)) : baseWeight,
+        isEnabled: true
+      };
+    });
 
     const newProfile: EvaluationTest = {
       id: uniqueId,
@@ -927,14 +894,41 @@ Requisitos:
       inProgressCount: initialProfile?.inProgressCount || 0,
       difficultyLevel,
       selectedCompetencies,
+      knowledgeQuestionnaires: knowledgeItems.map(k => k.name),
+      knowledgeItems: knowledgeItems,
       stages
-    };
+    } as any;
 
     try {
       const saved = await onCreateProfile(newProfile);
       const resultingId = (saved as any)?.id || uniqueId;
-      // Guardado explícito y garantizado en la columna competencias de la tabla perfiles_puesto
-      await ProcessDataService.updateProfileCompetencies(resultingId, selectedCompetencies);
+      
+      // Actualizar explícitamente competencias y _metadata completo en perfiles_puesto
+      try {
+        const compMap: Record<string, any> = {};
+        selectedCompetencies.forEach(c => {
+          compMap[c] = 85;
+        });
+        compMap._metadata = {
+          difficulty: difficultyLevel,
+          duration: totalDuration,
+          stages,
+          knowledgeQuestionnaires: knowledgeItems.map(k => k.name),
+          knowledgeItems,
+          selectedList: selectedCompetencies
+        };
+
+        await supabase
+          .from('perfiles_puesto')
+          .update({
+            competencias: compMap,
+            actualizado_en: new Date().toISOString()
+          })
+          .eq('id', resultingId);
+      } catch (e) {
+        console.warn('Error syncing profile metadata:', e);
+      }
+
       setSavedProfileId(resultingId);
       setIsSubmitting(false);
       setShowSuccessModal(true);
@@ -1051,8 +1045,8 @@ Requisitos:
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 pt-1">
-            <div className="md:col-span-2 space-y-1.5">
+          <div className="pt-1">
+            <div className="space-y-1.5">
               <label className="block text-xs sm:text-sm font-semibold text-slate-800">
                 Nombre
               </label>
@@ -1066,25 +1060,6 @@ Requisitos:
                 placeholder="Nombre que tendrá el perfil"
                 className="w-full px-4 py-2.5 sm:py-3 rounded-xl border border-slate-200 text-slate-800 placeholder:text-slate-400 text-xs sm:text-sm focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-100 transition-all bg-white"
               />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs sm:text-sm font-semibold text-slate-800 flex items-center gap-1.5">
-                <span>Nivel</span>
-                <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" title="Nivel de exigencia" />
-              </label>
-              <div className="relative">
-                <select
-                  value={difficultyLevel}
-                  onChange={(e) => setDifficultyLevel(e.target.value as DifficultyLevel)}
-                  className="w-full appearance-none px-4 py-2.5 sm:py-3 rounded-xl border border-slate-200 text-amber-500 font-medium text-xs sm:text-sm focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-100 transition-all bg-white pr-10 cursor-pointer"
-                >
-                  <option value="Bajo" className="text-slate-800">Bajo</option>
-                  <option value="Medio" className="text-slate-800">Medio</option>
-                  <option value="Alto" className="text-slate-800">Alto</option>
-                </select>
-                <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
             </div>
           </div>
 
@@ -1170,7 +1145,8 @@ Requisitos:
                 rows={9}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="w-full p-4 text-xs sm:text-sm text-slate-700 leading-relaxed font-normal bg-white focus:outline-none resize-y"
+                placeholder={DEFAULT_DESCRIPTION}
+                className="w-full p-4 text-xs sm:text-sm text-slate-700 placeholder:text-slate-400 placeholder:leading-relaxed leading-relaxed font-normal bg-white focus:outline-none resize-y"
               />
             </div>
           </div>
@@ -1202,7 +1178,14 @@ Requisitos:
   // PASO 2: COMPONENTES DEL PERFIL (Imágenes 1 a 5)
   // =========================================================================
   const filteredQuestionnaires = QUESTIONNAIRE_CATALOG.filter(q => 
-    q.title.toLowerCase().includes(searchQuestionnaire.toLowerCase())
+    q.title.toLowerCase().includes(searchQuestionnaire.toLowerCase()) ||
+    (q.category && q.category.toLowerCase().includes(searchQuestionnaire.toLowerCase()))
+  );
+  const ITEMS_PER_PAGE = 6;
+  const totalPages = Math.max(1, Math.ceil(filteredQuestionnaires.length / ITEMS_PER_PAGE));
+  const paginatedQuestionnaires = filteredQuestionnaires.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
   );
 
   return (
@@ -1243,10 +1226,10 @@ Requisitos:
             </div>
             <div>
               <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                Perfil {profileName.trim().toUpperCase() || 'PERFILPRUEBA'}
+                Perfil {profileName.trim().toUpperCase() || 'NUEVO PERFIL'}
               </h3>
               <p className="text-xs text-slate-500">
-                Detalles de la vacante {profileName.trim().toUpperCase() || 'PERFILPRUEBA'}
+                Detalles de la vacante {profileName.trim().toUpperCase() || 'NUEVO PERFIL'}
               </p>
             </div>
           </div>
@@ -1263,16 +1246,10 @@ Requisitos:
 
         {isAccordionOpen && (
           <div className="pt-4 mt-4 border-t border-slate-100 text-xs sm:text-sm text-slate-600 space-y-2 animate-in fade-in">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-slate-800">Nivel de evaluación:</span>
-              <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-600 font-medium text-xs border border-amber-200">
-                {difficultyLevel}
-              </span>
-            </div>
             <div>
               <span className="font-semibold text-slate-800 block mb-1">Descripción:</span>
               <p className="whitespace-pre-line text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-200/80 text-xs leading-relaxed max-h-36 overflow-y-auto">
-                {description}
+                {description || 'Sin descripción detallada especificada.'}
               </p>
             </div>
           </div>
@@ -1281,6 +1258,30 @@ Requisitos:
 
       {/* Lista de Componentes del Perfil */}
       <div className="space-y-4">
+        {components.length === 0 && (
+          <div className="bg-white rounded-3xl border-2 border-dashed border-slate-200 p-8 sm:p-12 text-center flex flex-col items-center justify-center space-y-4">
+            <div className="w-16 h-16 rounded-2xl bg-[#5235E8]/10 text-[#5235E8] flex items-center justify-center">
+              <Layers className="w-8 h-8" />
+            </div>
+            <div className="max-w-md space-y-1">
+              <h3 className="text-base font-bold text-slate-800">
+                No hay componentes configurados en este perfil
+              </h3>
+              <p className="text-xs text-slate-500">
+                Comienza agregando las evaluaciones que formarán este perfil (como DISC, Pruebas de Conocimiento o Competencias laborales).
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAddComponentModal(true)}
+              className="mt-2 inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold text-white bg-[#5235E8] hover:bg-[#432bc4] shadow-md shadow-[#5235E8]/20 transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Agregar componentes ahora</span>
+            </button>
+          </div>
+        )}
+
         {components.map((comp) => {
           const isDisc = comp.type === 'DISC';
           const isConocimiento = comp.type === 'CONOCIMIENTOS';
@@ -1356,12 +1357,54 @@ Requisitos:
                   <div className="relative">
                     <button
                       type="button"
-                      onClick={() => handleRemoveComponent(comp.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenSectionMenuId(openSectionMenuId === comp.id ? null : comp.id);
+                      }}
                       className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-                      title="Opciones"
+                      title="Opciones de sección"
                     >
                       <MoreVertical className="w-4 h-4" />
                     </button>
+
+                    {openSectionMenuId === comp.id && (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute right-0 top-full mt-1.5 w-44 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-40 animate-in fade-in zoom-in-95"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenSectionMenuId(null);
+                            if (isCompetencias) {
+                              setShowCompetenciesDrawer(true);
+                            } else if (isConocimiento) {
+                              setActiveDrawer('CONOCIMIENTOS');
+                            } else if (isDisc) {
+                              setActiveDrawer('DISC');
+                            } else {
+                              setActiveDrawer(comp.type);
+                            }
+                          }}
+                          className="w-full text-left px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-purple-50 hover:text-[#6355A4] flex items-center gap-2 cursor-pointer transition-colors"
+                        >
+                          <Edit3 className="w-3.5 h-3.5 text-[#6355A4]" />
+                          <span>Editar sección</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenSectionMenuId(null);
+                            handleRemoveComponent(comp.id);
+                          }}
+                          className="w-full text-left px-3.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2 cursor-pointer transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Eliminar sección</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1392,6 +1435,13 @@ Requisitos:
 
                   {/* Lista de temas de conocimiento */}
                   <div className="divide-y divide-slate-100 border border-slate-100 rounded-xl overflow-visible">
+                    {knowledgeItems.length === 0 && (
+                      <div className="p-6 text-center text-slate-500 text-xs flex flex-col items-center justify-center gap-2">
+                        <BookOpen className="w-6 h-6 text-indigo-400 stroke-[1.5]" />
+                        <p className="font-medium text-slate-700">No hay cuestionarios añadidos aún</p>
+                        <p className="text-[11px] text-slate-400">Haz clic en "+ Añadir cuestionarios" abajo para seleccionar temas del catálogo.</p>
+                      </div>
+                    )}
                     {knowledgeItems.map((kItem) => (
                       <div
                         key={kItem.id}
@@ -1429,9 +1479,14 @@ Requisitos:
                             </span>
                             <button
                               type="button"
+                              disabled={totalKnowledgeWeight >= 100}
                               onClick={() => handleAdjustWeight(kItem.id, 5)}
-                              className="w-5 h-5 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer transition-colors"
-                              title="Aumentar peso"
+                              className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                                totalKnowledgeWeight >= 100
+                                  ? 'text-slate-300 cursor-not-allowed'
+                                  : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer'
+                              }`}
+                              title={totalKnowledgeWeight >= 100 ? "La sumatoria ya alcanzó el 100%" : "Aumentar peso"}
                             >
                               +
                             </button>
@@ -1807,7 +1862,35 @@ Requisitos:
                 <div className="relative">
                   <select
                     value={activeConfigItem.difficulty}
-                    onChange={(e) => setActiveConfigItem({ ...activeConfigItem, difficulty: e.target.value as any })}
+                    onChange={(e) => {
+                      const newDiff = e.target.value as 'Personalizada' | 'Baja' | 'Media' | 'Alta';
+                      const total = activeConfigItem.totalQuestions || 20;
+                      let low = activeConfigItem.questionsLow;
+                      let med = activeConfigItem.questionsMed;
+                      let high = activeConfigItem.questionsHigh;
+
+                      if (newDiff === 'Baja') {
+                        low = Math.max(1, Math.round(total * 0.7));
+                        med = Math.max(1, Math.round(total * 0.2));
+                        high = Math.max(0, total - low - med);
+                      } else if (newDiff === 'Media') {
+                        low = Math.max(1, Math.round(total * 0.25));
+                        med = Math.max(1, Math.round(total * 0.5));
+                        high = Math.max(1, total - low - med);
+                      } else if (newDiff === 'Alta') {
+                        low = Math.max(0, Math.round(total * 0.1));
+                        med = Math.max(1, Math.round(total * 0.3));
+                        high = Math.max(1, total - low - med);
+                      }
+
+                      setActiveConfigItem({
+                        ...activeConfigItem,
+                        difficulty: newDiff,
+                        questionsLow: low,
+                        questionsMed: med,
+                        questionsHigh: high
+                      });
+                    }}
                     className="w-full appearance-none px-4 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-[#6355A4] focus:ring-1 focus:ring-purple-200 bg-white cursor-pointer pr-10"
                   >
                     <option value="Personalizada">Personalizada</option>
@@ -1819,10 +1902,113 @@ Requisitos:
                 </div>
               </div>
 
+              {/* Cantidad de preguntas a evaluar */}
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs sm:text-sm font-semibold text-slate-800">
+                    Cantidad de preguntas a evaluar
+                  </label>
+                  <span className="text-[11px] font-semibold text-[#6355A4] bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
+                    Mínimo 20 por cuestionario
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min="5"
+                    max="50"
+                    value={activeConfigItem.totalQuestions || 20}
+                    onChange={(e) => {
+                      const val = Math.max(1, Number(e.target.value) || 20);
+                      let low = activeConfigItem.questionsLow;
+                      let med = activeConfigItem.questionsMed;
+                      let high = activeConfigItem.questionsHigh;
+                      if (activeConfigItem.difficulty === 'Baja') {
+                        low = Math.max(1, Math.round(val * 0.7));
+                        med = Math.max(1, Math.round(val * 0.2));
+                        high = Math.max(0, val - low - med);
+                      } else if (activeConfigItem.difficulty === 'Media') {
+                        low = Math.max(1, Math.round(val * 0.25));
+                        med = Math.max(1, Math.round(val * 0.5));
+                        high = Math.max(1, val - low - med);
+                      } else if (activeConfigItem.difficulty === 'Alta') {
+                        low = Math.max(0, Math.round(val * 0.1));
+                        med = Math.max(1, Math.round(val * 0.3));
+                        high = Math.max(1, val - low - med);
+                      } else {
+                        const currentSum = low + med + high || 1;
+                        low = Math.round((low / currentSum) * val);
+                        med = Math.round((med / currentSum) * val);
+                        high = Math.max(0, val - low - med);
+                      }
+                      setActiveConfigItem({
+                        ...activeConfigItem,
+                        totalQuestions: val,
+                        questionsLow: low,
+                        questionsMed: med,
+                        questionsHigh: high
+                      });
+                    }}
+                    className="w-24 px-3 py-2 rounded-xl border border-slate-200 text-center text-xs sm:text-sm font-bold text-slate-800 focus:outline-none focus:border-[#6355A4] focus:ring-1 focus:ring-purple-200 bg-white"
+                  />
+
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {[10, 15, 20, 25].map(qNum => (
+                      <button
+                        key={qNum}
+                        type="button"
+                        onClick={() => {
+                          const val = qNum;
+                          let low = activeConfigItem.questionsLow;
+                          let med = activeConfigItem.questionsMed;
+                          let high = activeConfigItem.questionsHigh;
+                          if (activeConfigItem.difficulty === 'Baja') {
+                            low = Math.max(1, Math.round(val * 0.7));
+                            med = Math.max(1, Math.round(val * 0.2));
+                            high = Math.max(0, val - low - med);
+                          } else if (activeConfigItem.difficulty === 'Media') {
+                            low = Math.max(1, Math.round(val * 0.25));
+                            med = Math.max(1, Math.round(val * 0.5));
+                            high = Math.max(1, val - low - med);
+                          } else if (activeConfigItem.difficulty === 'Alta') {
+                            low = Math.max(0, Math.round(val * 0.1));
+                            med = Math.max(1, Math.round(val * 0.3));
+                            high = Math.max(1, val - low - med);
+                          } else {
+                            const currentSum = low + med + high || 1;
+                            low = Math.round((low / currentSum) * val);
+                            med = Math.round((med / currentSum) * val);
+                            high = Math.max(0, val - low - med);
+                          }
+                          setActiveConfigItem({
+                            ...activeConfigItem,
+                            totalQuestions: val,
+                            questionsLow: low,
+                            questionsMed: med,
+                            questionsHigh: high
+                          });
+                        }}
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+                          (activeConfigItem.totalQuestions || 20) === qNum
+                            ? 'bg-[#6355A4] text-white border-[#6355A4]'
+                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {qNum} preg.
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Total de preguntas que el postulante visualizará y responderá en esta prueba técnica.
+                </p>
+              </div>
+
               {/* Preguntas y dificultad */}
               <div className="space-y-3 pt-1">
                 <label className="block text-xs sm:text-sm font-semibold text-slate-800">
-                  Preguntas y dificultad
+                  Desglose de preguntas por dificultad
                 </label>
 
                 {/* Bajas */}
@@ -1836,7 +2022,14 @@ Requisitos:
                       min="0"
                       max={activeConfigItem.maxLow}
                       value={activeConfigItem.questionsLow}
-                      onChange={(e) => setActiveConfigItem({ ...activeConfigItem, questionsLow: Math.max(0, Number(e.target.value)) })}
+                      onChange={(e) => {
+                        const lowVal = Math.max(0, Number(e.target.value));
+                        setActiveConfigItem({
+                          ...activeConfigItem,
+                          questionsLow: lowVal,
+                          totalQuestions: lowVal + activeConfigItem.questionsMed + activeConfigItem.questionsHigh
+                        });
+                      }}
                       className="w-24 px-3 py-2 rounded-xl border border-slate-200 text-center text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
                     />
                     <span className="text-xs text-slate-400 min-w-[36px] text-right font-medium">
@@ -1856,7 +2049,14 @@ Requisitos:
                       min="0"
                       max={activeConfigItem.maxMed}
                       value={activeConfigItem.questionsMed}
-                      onChange={(e) => setActiveConfigItem({ ...activeConfigItem, questionsMed: Math.max(0, Number(e.target.value)) })}
+                      onChange={(e) => {
+                        const medVal = Math.max(0, Number(e.target.value));
+                        setActiveConfigItem({
+                          ...activeConfigItem,
+                          questionsMed: medVal,
+                          totalQuestions: activeConfigItem.questionsLow + medVal + activeConfigItem.questionsHigh
+                        });
+                      }}
                       className="w-24 px-3 py-2 rounded-xl border border-slate-200 text-center text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:border-amber-500"
                     />
                     <span className="text-xs text-slate-400 min-w-[36px] text-right font-medium">
@@ -1876,7 +2076,14 @@ Requisitos:
                       min="0"
                       max={activeConfigItem.maxHigh}
                       value={activeConfigItem.questionsHigh}
-                      onChange={(e) => setActiveConfigItem({ ...activeConfigItem, questionsHigh: Math.max(0, Number(e.target.value)) })}
+                      onChange={(e) => {
+                        const highVal = Math.max(0, Number(e.target.value));
+                        setActiveConfigItem({
+                          ...activeConfigItem,
+                          questionsHigh: highVal,
+                          totalQuestions: activeConfigItem.questionsLow + activeConfigItem.questionsMed + highVal
+                        });
+                      }}
                       className="w-24 px-3 py-2 rounded-xl border border-slate-200 text-center text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:border-rose-500"
                     />
                     <span className="text-xs text-slate-400 min-w-[36px] text-right font-medium">
@@ -2010,78 +2217,115 @@ Requisitos:
       {/* ========================================================================= */}
       {/* DRAWER 2: VER CUESTIONARIO (Imagen 4)                                     */}
       {/* ========================================================================= */}
-      {activePreviewItem && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="fixed inset-0" onClick={() => setActivePreviewItem(null)} />
-          <div className="relative z-10 w-full sm:w-[540px] h-full bg-white shadow-2xl flex flex-col justify-between animate-in slide-in-from-right duration-300">
-            {/* Header */}
-            <div>
-              <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <FileText className="w-5 h-5 text-[#6355A4]" />
-                  <h3 className="font-bold text-base sm:text-lg text-slate-900">
-                    Ver cuestionario
-                  </h3>
+      {activePreviewItem && (() => {
+        const previewQuestions = getQuestionsForTopic(
+          activePreviewItem.name,
+          activePreviewItem.difficulty,
+          activePreviewItem.totalQuestions || 20
+        );
+
+        return (
+          <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs animate-in fade-in duration-200">
+            <div className="fixed inset-0" onClick={() => setActivePreviewItem(null)} />
+            <div className="relative z-10 w-full sm:w-[580px] h-full bg-white shadow-2xl flex flex-col justify-between animate-in slide-in-from-right duration-300">
+              {/* Header */}
+              <div>
+                <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <FileText className="w-5 h-5 text-[#6355A4]" />
+                    <h3 className="font-bold text-base sm:text-lg text-slate-900">
+                      Ver cuestionario
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActivePreviewItem(null)}
+                    className="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center cursor-pointer text-base"
+                  >
+                    ✕
+                  </button>
                 </div>
+
+                <div className="px-6 py-3 bg-slate-50/70 border-b border-slate-100 space-y-1.5">
+                  <p className="text-xs text-slate-500">
+                    Previsualiza las preguntas y respuestas configuradas para <strong className="text-slate-800">{activePreviewItem.name}</strong>.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px]">
+                    <span className="px-2.5 py-0.5 rounded-full font-semibold bg-purple-100 text-[#6355A4] border border-purple-200">
+                      Dificultad: {activePreviewItem.difficulty}
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      {previewQuestions.length} preguntas configuradas
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                      Escala: {activePreviewItem.scoreScale} pts
+                    </span>
+                    {activePreviewItem.timeControl && (
+                      <span className="px-2.5 py-0.5 rounded-full font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                        {activePreviewItem.minutes} min
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Questions List (Imagen 4) */}
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 text-sm text-slate-700 divide-y divide-slate-100">
+                {previewQuestions.map((q, idx) => (
+                  <div key={q.id} className={`${idx > 0 ? 'pt-6' : ''} space-y-3`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="font-semibold text-slate-800 leading-relaxed text-xs sm:text-sm">
+                        {q.question}
+                      </p>
+                      {q.difficulty && (
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold shrink-0 border ${
+                          q.difficulty === 'Baja'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : q.difficulty === 'Media'
+                            ? 'bg-amber-50 text-amber-700 border-amber-200'
+                            : 'bg-rose-50 text-rose-700 border-rose-200'
+                        }`}>
+                          {q.difficulty}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="space-y-2 pt-1 pl-1">
+                      {q.options.map((opt, oIdx) => (
+                        <div key={oIdx} className="flex items-start gap-3 text-xs sm:text-sm text-slate-700">
+                          <div className={`w-4 h-4 rounded-full border flex items-center justify-center mt-0.5 shrink-0 ${
+                            opt.isCorrect 
+                              ? 'border-[#6355A4] bg-white' 
+                              : 'border-slate-300 bg-white'
+                          }`}>
+                            {opt.isCorrect && (
+                              <div className="w-2 h-2 rounded-full bg-[#6355A4]" />
+                            )}
+                          </div>
+                          <span className={`${opt.isCorrect ? 'font-medium text-slate-900' : 'text-slate-600'}`}>
+                            {opt.text}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 border-t border-slate-100 flex items-center justify-end shrink-0">
                 <button
                   type="button"
                   onClick={() => setActivePreviewItem(null)}
-                  className="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center cursor-pointer text-base"
+                  className="px-6 py-2 rounded-xl bg-[#6355A4] hover:bg-[#534493] text-white text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
                 >
-                  ✕
+                  Cerrar
                 </button>
               </div>
-
-              <div className="px-6 py-2 bg-slate-50/50 border-b border-slate-100">
-                <p className="text-xs text-slate-500">
-                  Previsualiza las preguntas y respuestas configuradas para <strong className="text-slate-700">{activePreviewItem.name}</strong>.
-                </p>
-              </div>
-            </div>
-
-            {/* Questions List (Imagen 4) */}
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 text-sm text-slate-700 divide-y divide-slate-100">
-              {(QUESTIONS_BY_TOPIC[activePreviewItem.name] || QUESTIONS_BY_TOPIC['Planificación estratégica']).map((q, idx) => (
-                <div key={q.id} className={`${idx > 0 ? 'pt-6' : ''} space-y-3`}>
-                  <p className="font-semibold text-slate-800 leading-relaxed text-xs sm:text-sm">
-                    {q.question}
-                  </p>
-
-                  <div className="space-y-2 pt-1 pl-1">
-                    {q.options.map((opt, oIdx) => (
-                      <div key={oIdx} className="flex items-start gap-3 text-xs sm:text-sm text-slate-700">
-                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center mt-0.5 shrink-0 ${
-                          opt.isCorrect 
-                            ? 'border-[#6355A4] bg-white' 
-                            : 'border-slate-300 bg-white'
-                        }`}>
-                          {opt.isCorrect && (
-                            <div className="w-2 h-2 rounded-full bg-[#6355A4]" />
-                          )}
-                        </div>
-                        <span className={`${opt.isCorrect ? 'font-medium text-slate-900' : 'text-slate-600'}`}>
-                          {opt.text}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Footer */}
-            <div className="p-4 border-t border-slate-100 flex items-center justify-end shrink-0">
-              <button
-                type="button"
-                onClick={() => setActivePreviewItem(null)}
-                className="px-6 py-2 rounded-xl bg-[#6355A4] hover:bg-[#534493] text-white text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
-              >
-                Cerrar
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ========================================================================= */}
       {/* DRAWER 3: LISTADO DE COMPETENCIAS (Imagen 5)                              */}
@@ -2245,21 +2489,28 @@ Requisitos:
               </div>
             </div>
 
-            {/* Lista */}
+            {/* Lista con paginación real */}
             <div className="flex-1 overflow-y-auto divide-y divide-slate-100 px-4">
-              {filteredQuestionnaires.map((q) => {
+              {paginatedQuestionnaires.map((q) => {
                 const isSelected = knowledgeItems.some(k => k.name.toLowerCase() === q.title.toLowerCase());
                 return (
                   <div key={q.id} className="py-3.5 flex items-center justify-between gap-3">
-                    <div className="flex items-start gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
                       <div className="w-5 h-5 rounded-full bg-pink-50 border border-pink-200 flex items-center justify-center mt-0.5 shrink-0">
                         <Check className="w-3 h-3 text-pink-600 stroke-[3]" />
                       </div>
-                      <div>
-                        <h4 className="text-xs sm:text-sm font-semibold text-slate-800 leading-tight">
-                          {q.title}
-                        </h4>
-                        <div className="text-[11px] font-medium mt-0.5 space-x-1.5">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-xs sm:text-sm font-semibold text-slate-800 leading-tight">
+                            {q.title}
+                          </h4>
+                          {q.category && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-purple-50 text-[#6355A4] font-medium border border-purple-100 shrink-0">
+                              {q.category}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] font-medium mt-1 space-x-1.5">
                           <span className="text-rose-500 font-semibold">{q.alta} alta,</span>
                           <span className="text-amber-500 font-semibold">{q.media} media,</span>
                           <span className="text-emerald-600 font-semibold">{q.baja} baja</span>
@@ -2284,18 +2535,19 @@ Requisitos:
               })}
             </div>
 
-            {/* Footer */}
+            {/* Footer con paginación dinámica completa */}
             <div className="p-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 shrink-0">
               <button
                 type="button"
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                className="p-1 hover:text-slate-800 disabled:opacity-30 cursor-pointer"
+                className="p-1.5 hover:text-slate-800 disabled:opacity-30 cursor-pointer font-bold"
+                title="Página anterior"
               >
                 ⟨
               </button>
-              <div className="flex items-center gap-2">
-                {[1, 2, 3, 4, 5, 6].map(page => (
+              <div className="flex items-center gap-1.5">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
                   <button
                     key={page}
                     type="button"
@@ -2312,11 +2564,106 @@ Requisitos:
               </div>
               <button
                 type="button"
-                disabled={currentPage === 6}
-                onClick={() => setCurrentPage(prev => Math.min(6, prev + 1))}
-                className="p-1 hover:text-slate-800 disabled:opacity-30 cursor-pointer"
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                className="p-1.5 hover:text-slate-800 disabled:opacity-30 cursor-pointer font-bold"
+                title="Página siguiente"
               >
                 ⟩
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* DRAWER 5: CONFIGURACIÓN DE DISC                                           */}
+      {/* ========================================================================= */}
+      {activeDrawer === 'DISC' && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="fixed inset-0" onClick={() => setActiveDrawer(null)} />
+          <div className="relative z-10 w-full sm:w-[480px] h-full bg-white shadow-2xl flex flex-col justify-between animate-in slide-in-from-right duration-300">
+            {/* Header */}
+            <div>
+              <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center">
+                    <Check className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-slate-900">
+                      Configuración de Prueba DISC
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Evaluación conductual y estilos de personalidad
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveDrawer(null)}
+                  className="w-7 h-7 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center cursor-pointer text-sm"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="p-6 space-y-5">
+                <div className="p-4 rounded-xl bg-purple-50/60 border border-purple-100 space-y-1.5">
+                  <span className="text-xs font-bold text-[#6355A4]">Perfil DISC Activo</span>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Evalúa los 4 factores conductuales: Dominancia (D), Influencia (I), Estabilidad (S) y Cumplimiento (C).
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs sm:text-sm font-semibold text-slate-800">
+                    Duración recomendada (minutos)
+                  </label>
+                  <input
+                    type="number"
+                    min="5"
+                    max="30"
+                    defaultValue={10}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-[#6355A4]"
+                  />
+                  <span className="text-[11px] text-slate-400">
+                    Tiempo sugerido: 10 minutos (24 reactivos conductuales de 4 opciones cada uno).
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs sm:text-sm font-semibold text-slate-800">
+                    Enfoque del perfil objetivo
+                  </label>
+                  <select className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-[#6355A4] bg-white">
+                    <option value="COMERCIAL">Comercial y Atención al Cliente (Alta I y S)</option>
+                    <option value="OPERATIVO">Operaciones y Soporte (Alta S y C)</option>
+                    <option value="LIDERAZGO">Liderazgo y Supervisión (Alta D e I)</option>
+                    <option value="ANALITICO">Análisis y Auditoría (Alta C y S)</option>
+                  </select>
+                </div>
+
+                <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                    <span>Estado del componente</span>
+                    <span className="text-emerald-600 font-bold">Activo y calibrado</span>
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    Genera automáticamente los gráficos de perfil Natural vs. Perfil Adaptado con informe psicológico para el reclutador.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-100 flex items-center justify-end gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setActiveDrawer(null)}
+                className="px-5 py-2 rounded-xl bg-[#6355A4] hover:bg-[#534493] text-white text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
+              >
+                Aceptar
               </button>
             </div>
           </div>

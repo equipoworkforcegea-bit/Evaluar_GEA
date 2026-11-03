@@ -194,6 +194,7 @@ export interface EvaluationTest {
   totalDurationMinutes: number;
   stages: TestStageConfig[];
   selectedCompetencies: string[]; // Competencias específicas elegidas para evaluar al postulante
+  knowledgeQuestionnaires?: string[]; // Nombres de cuestionarios de conocimientos configurados
   difficultyLevel?: 'BAJO' | 'MEDIO' | 'ALTO';
   candidateCount: number;
   completedCount: number;

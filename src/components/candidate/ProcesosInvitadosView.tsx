@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabaseClient';
-import { Candidate, EvaluationTest } from '../../types';
+import { Candidate } from '../../types';
 import { 
   Rocket, 
   Clock, 
@@ -12,16 +12,44 @@ import {
   RotateCw, 
   ShieldCheck, 
   Sparkles,
-  X
+  BookOpen,
+  GraduationCap,
+  Award,
+  Check,
+  AlertTriangle,
+  Lock,
+  X,
+  FileCheck
 } from 'lucide-react';
+import { EvaluacionesService } from '../../services/evaluacionesService';
+
+export interface StartExamPayload {
+  type: 'DISC' | 'KNOWLEDGE' | 'COMPETENCIAS';
+  testId?: string;
+  candidateId?: string;
+  topicName?: string;
+  difficulty?: 'Personalizada' | 'Baja' | 'Media' | 'Alta';
+  questionCount?: number;
+}
 
 interface ProcesosInvitadosViewProps {
   candidate: Candidate;
-  onStartExam: (testId?: string) => void;
+  onStartExam: (payload: StartExamPayload) => void;
 }
 
-interface InvitedProcess {
+export interface KnowledgeQuestionnaireItem {
   id: string;
+  title: string;
+  questionCount: number;
+  difficulty: 'Personalizada' | 'Baja' | 'Media' | 'Alta';
+  durationMinutes: number;
+  score?: number;
+  isCompleted: boolean;
+}
+
+interface InvitedProcessDetailed {
+  id: string;
+  candidateIdInProcess: string;
   codigo: string;
   titulo: string;
   empresa: string;
@@ -30,115 +58,315 @@ interface InvitedProcess {
   duracion_minutos: number;
   fecha_limite: string;
   estado_postulante: 'PENDIENTE' | 'EN_PROGRESO' | 'FINALIZADO';
+  // Banderas de activación según configuración del perfil
+  hasDisc: boolean;
+  hasKnowledge: boolean;
+  hasCompetencies: boolean;
+  // 1. DISC
+  discConfig: {
+    title: string;
+    description: string;
+    durationMinutes: number;
+    isCompleted: boolean;
+  };
+  // 2. Cuestionarios de Conocimientos individuales
+  knowledgeQuestionnaires: KnowledgeQuestionnaireItem[];
+  // 3. Competencias
+  competenciesConfig: {
+    title: string;
+    description: string;
+    items: string[];
+    durationMinutes: number;
+    isCompleted: boolean;
+  };
 }
+
+const normalizeTopicString = (str: string) => {
+  return (str || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+};
 
 export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
   candidate,
   onStartExam
 }) => {
-  const [invitedProcesses, setInvitedProcesses] = useState<InvitedProcess[]>([]);
+  const [invitedProcesses, setInvitedProcesses] = useState<InvitedProcessDetailed[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [realName, setRealName] = useState<string>(candidate.fullName);
   const [realDni, setRealDni] = useState<string>(candidate.dni);
 
-  // DISC instructions modal
-  const [discModalProcId, setDiscModalProcId] = useState<string | null>(null);
+  // Modal de Advertencia Previa Estricta antes de Iniciar la Prueba
+  const [warningModalTarget, setWarningModalTarget] = useState<{
+    processId: string;
+    processTitle: string;
+    payload: StartExamPayload;
+    testTitle: string;
+    questionCountDesc: string;
+    durationMinutes: number;
+  } | null>(null);
 
-  const handleShowDiscModal = (procId: string) => setDiscModalProcId(procId);
-  const handleCloseDiscModal = () => setDiscModalProcId(null);
-  const handleConfirmStart = () => {
-    const id = discModalProcId;
-    setDiscModalProcId(null);
-    onStartExam(id || undefined);
-  };
+  const [hasAcknowledgedLockWarning, setHasAcknowledgedLockWarning] = useState(false);
 
   useEffect(() => {
     setRealName(candidate.fullName);
     setRealDni(candidate.dni);
   }, [candidate.fullName, candidate.dni]);
 
-  useEffect(() => {
-    async function loadInvitedProcesses() {
+  const loadProcessAndResults = async () => {
+    try {
+      const dni = (candidate.dni || '').trim();
+      const email = (candidate.email || '').trim().toLowerCase();
+      const currentId = candidate.id;
+
+      // 1. Consultar todos los registros de candidato asociados en Supabase
+      let candRows: any[] = [];
       try {
-        let targetProcessId = candidate.testId;
+        const orFilters: string[] = [];
+        if (currentId && !currentId.startsWith('cand-')) orFilters.push(`id.eq.${currentId}`);
+        if (dni) orFilters.push(`dni.eq.${dni}`);
+        if (email) orFilters.push(`correo.eq.${email}`);
 
-        // 1. Si candidate.id existe, buscar el proceso_id real del candidato en Supabase
-        if (candidate.id) {
-          const { data: candDb } = await supabase
+        if (orFilters.length > 0) {
+          const { data } = await supabase
             .from('candidatos')
-            .select('id, nombre_completo, dni, proceso_id, estado, iniciado_en, completado_en')
-            .eq('id', candidate.id)
-            .maybeSingle();
-
-          if (candDb) {
-            if (candDb.nombre_completo) setRealName(candDb.nombre_completo);
-            if (candDb.dni) setRealDni(candDb.dni);
-            if (candDb.proceso_id) {
-              targetProcessId = candDb.proceso_id;
-            }
-          }
+            .select('id, nombre_completo, dni, correo, proceso_id, estado, iniciado_en, completado_en')
+            .or(orFilters.join(','));
+          candRows = data || [];
         }
+      } catch (e) {
+        console.warn('[ProcesosInvitadosView] Error consultando filas de candidatos:', e);
+      }
 
-        // 2. Determinar estado del postulante
+      // Si no encontró en Supabase pero tenemos candidate.testId
+      if (candRows.length === 0 && candidate.testId) {
+        candRows = [{
+          id: candidate.id || 'cand_fallback',
+          nombre_completo: candidate.fullName,
+          dni: candidate.dni,
+          correo: candidate.email,
+          proceso_id: candidate.testId,
+          estado: candidate.status || 'PENDIENTE'
+        }];
+      }
+
+      // Actualizar nombre y DNI con el registro más completo
+      const bestName = candRows.find(r => r.nombre_completo && r.nombre_completo.length > 2)?.nombre_completo || candidate.fullName;
+      const bestDni = candRows.find(r => r.dni && r.dni.length >= 7)?.dni || candidate.dni;
+      setRealName(bestName);
+      setRealDni(bestDni);
+
+      // 2. Extraer todos los proceso_id únicos (manteniendo la fila de candidato respectiva)
+      const processCandMap = new Map<string, any>();
+      candRows.forEach(r => {
+        if (r.proceso_id && !processCandMap.has(r.proceso_id)) {
+          processCandMap.set(r.proceso_id, r);
+        }
+      });
+
+      const uniqueProcessIds = Array.from(processCandMap.keys());
+      if (uniqueProcessIds.length === 0 && candidate.testId) {
+        uniqueProcessIds.push(candidate.testId);
+      }
+
+      const builtProcessList: InvitedProcessDetailed[] = [];
+
+      // 3. Procesar cada proceso al que fue invitado el candidato (uno debajo del otro)
+      for (const procId of uniqueProcessIds) {
+        const candRow = processCandMap.get(procId);
+        const candIdForThisProcess = candRow?.id || candidate.id || 'cand_invitado';
+
+        // Determinar estado en este proceso
         let status: 'PENDIENTE' | 'EN_PROGRESO' | 'FINALIZADO' = 'PENDIENTE';
-        if (candidate.status === 'SCORED' || candidate.status === 'FINALIST' || candidate.status === 'EVALUADO' || candidate.status === 'FINALISTA') {
+        const candStatus = candRow?.estado || candidate.status;
+        if (candStatus === 'SCORED' || candStatus === 'FINALIST' || candStatus === 'EVALUADO' || candStatus === 'FINALISTA') {
           status = 'FINALIZADO';
-        } else if (candidate.status === 'IN_PROGRESS' || candidate.status === 'EN_CURSO' || candidate.startedAt) {
+        } else if (candStatus === 'IN_PROGRESS' || candStatus === 'EN_CURSO' || candRow?.iniciado_en) {
           status = 'EN_PROGRESO';
         }
 
-        // 3. Consultar ÚNICAMENTE el proceso específico de este candidato
-        if (targetProcessId) {
-          const { data, error } = await supabase
-            .from('procesos_evaluacion')
-            .select('*')
-            .eq('id', targetProcessId)
-            .maybeSingle();
+        // Consultar resultados DISC y Conocimientos para este proceso y candidato
+        const [completedDisc, completedKnowledgeList] = await Promise.all([
+          EvaluacionesService.obtenerResultadoDISC(candIdForThisProcess, procId),
+          EvaluacionesService.obtenerResultadosConocimientos(candIdForThisProcess, procId)
+        ]);
 
-          if (!error && data) {
-            setInvitedProcesses([{
-              id: data.id,
-              codigo: data.codigo || 'GEA-PROC-2026',
-              titulo: data.titulo || `Convocatoria ${data.puesto_objetivo || candidate.position || 'GEA Perú'}`,
-              empresa: data.empresa || 'GEA Internacional SAC • GEA Perú',
-              puesto_objetivo: data.puesto_objetivo || candidate.position || 'Asesor Operativo',
-              descripcion: data.descripcion || 'Evaluación integral psicotécnica, clima emocional y resolución de casos reales.',
-              duracion_minutos: data.duracion_total_minutos || 45,
-              fecha_limite: data.fecha_fin ? new Date(data.fecha_fin).toLocaleDateString('es-PE') : '31/12/2026',
-              estado_postulante: status
-            }]);
-            return;
+        const isDiscDone = Boolean(completedDisc);
+        const knowledgeScoresMap: Record<string, number> = {};
+        completedKnowledgeList.forEach((k: any) => {
+          if (k.tema) {
+            const raw = k.tema.trim().toLowerCase();
+            const norm = normalizeTopicString(k.tema);
+            const scoreNum = Number(k.puntaje ?? 0);
+            knowledgeScoresMap[raw] = scoreNum;
+            knowledgeScoresMap[norm] = scoreNum;
+            const baseNorm = norm.replace(/\([^)]*\)/g, '').trim();
+            if (baseNorm) knowledgeScoresMap[baseNorm] = scoreNum;
+          }
+        });
+
+        // Consultar detalle del proceso y perfil en Supabase
+        const { data: procData } = await supabase
+          .from('procesos_evaluacion')
+          .select('*, perfiles_puesto(*)')
+          .eq('id', procId)
+          .maybeSingle();
+
+        const perfil = procData?.perfiles_puesto;
+        const meta = perfil?.competencias?._metadata || {};
+        const stages: any[] = Array.isArray(meta.stages) ? meta.stages : [];
+        const hasCustomStages = stages.length > 0;
+
+        // Determinar qué componentes fueron realmente activados en este perfil
+        const hasDisc = hasCustomStages
+          ? stages.some(s => s.id === 'STAGE_DISC' || s.category === 'EMOTIONAL' || String(s.name || '').toLowerCase().includes('disc'))
+          : true;
+
+        const hasKnowledge = hasCustomStages
+          ? stages.some(s => s.id === 'STAGE_CONOCIMIENTOS' || s.category === 'PSYCHOLOGICAL' || String(s.name || '').toLowerCase().includes('conocimiento'))
+          : true;
+
+        // Competencias configuradas en el perfil
+        let compList: string[] = [];
+        if (Array.isArray(meta.selectedList)) {
+          compList = meta.selectedList;
+        } else if (perfil?.competencias && typeof perfil.competencias === 'object') {
+          compList = Object.keys(perfil.competencias).filter(k => !k.startsWith('_'));
+        }
+
+        const hasCompetencies = hasCustomStages
+          ? stages.some(s => s.id === 'STAGE_COMPETENCIAS' || s.category === 'COMPETENCIES' || String(s.name || '').toLowerCase().includes('competencia')) && compList.length > 0
+          : compList.length > 0;
+
+        // Cuestionarios específicos de conocimiento configurados en el perfil
+        let rawKnowledgeList: string[] = [];
+        if (Array.isArray(meta.knowledgeQuestionnaires) && meta.knowledgeQuestionnaires.length > 0) {
+          rawKnowledgeList = meta.knowledgeQuestionnaires;
+        } else if (Array.isArray(meta.knowledgeItems) && meta.knowledgeItems.length > 0) {
+          rawKnowledgeList = meta.knowledgeItems.map((k: any) => typeof k === 'string' ? k : k.name).filter(Boolean);
+        } else if (hasCustomStages) {
+          const knowStage = stages.find(s => s.id === 'STAGE_CONOCIMIENTOS');
+          if (knowStage?.description && knowStage.description.includes('Cuestionarios: ')) {
+            rawKnowledgeList = knowStage.description
+              .replace('Cuestionarios: ', '')
+              .split(',')
+              .map((x: string) => x.trim())
+              .filter(Boolean);
           }
         }
 
-        // 4. Fallback seguro: exclusivamente la convocatoria para el puesto asignado del candidato
-        setInvitedProcesses([
-          {
-            id: targetProcessId || candidate.testId || 'proc-gea',
-            codigo: 'GEA-PROC-2026-01',
-            titulo: `Convocatoria Oficial: ${candidate.position || 'Asesor Operativo'}`,
-            empresa: 'GEA Internacional SAC • GEA Perú',
-            puesto_objetivo: candidate.position || 'Asesor Operativo',
-            descripcion: 'Evaluación integral psicotécnica, clima emocional y resolución de casos reales.',
-            duracion_minutos: 45,
-            fecha_limite: '31/12/2026',
-            estado_postulante: status
-          }
-        ]);
-      } catch (err) {
-        console.warn('[ProcesosInvitadosView] Error al cargar proceso:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    }
+        // Si no se especificaron cuestionarios personalizados y el componente está activo, fallback seguro
+        if (rawKnowledgeList.length === 0 && hasKnowledge) {
+          rawKnowledgeList = [
+            'Planificación estratégica',
+            'Español nivel basico',
+            'Negociación',
+            'Psicometria'
+          ];
+        }
 
-    loadInvitedProcesses();
+        const configuredKnowledgeItems: KnowledgeQuestionnaireItem[] = hasKnowledge ? rawKnowledgeList.map((topicTitle, idx) => {
+          const rawTitle = topicTitle.trim().toLowerCase();
+          const normTitle = normalizeTopicString(topicTitle);
+          const baseNormTitle = normTitle.replace(/\([^)]*\)/g, '').trim();
+          
+          let scoreVal = knowledgeScoresMap[normTitle] ?? knowledgeScoresMap[rawTitle] ?? knowledgeScoresMap[baseNormTitle];
+          
+          if (scoreVal === undefined) {
+            const foundKey = Object.keys(knowledgeScoresMap).find(k => 
+              k.includes(normTitle) || normTitle.includes(k) || (baseNormTitle && k.includes(baseNormTitle))
+            );
+            if (foundKey) scoreVal = knowledgeScoresMap[foundKey];
+          }
+
+          const isCompleted = scoreVal !== undefined;
+          return {
+            id: `k_${idx}_${normTitle}`,
+            title: topicTitle,
+            questionCount: 20, // 20 preguntas por cuestionario
+            difficulty: 'Media',
+            durationMinutes: 15,
+            isCompleted,
+            score: scoreVal
+          };
+        }) : [];
+
+        builtProcessList.push({
+          id: procId,
+          candidateIdInProcess: candIdForThisProcess,
+          codigo: procData?.codigo || `PROC-${procId.slice(0, 8).toUpperCase()}`,
+          titulo: procData?.titulo || `Convocatoria ${procData?.puesto_objetivo || candidate.position || 'GEA Perú'}`,
+          empresa: procData?.empresa || 'GEA Internacional SAC • GEA Perú',
+          puesto_objetivo: procData?.puesto_objetivo || candidate.position || 'Asesor Operativo',
+          descripcion: procData?.descripcion || 'Evaluación integral psicotécnica, clima emocional y resolución de casos reales.',
+          duracion_minutos: procData?.duracion_total_minutos || 45,
+          fecha_limite: procData?.fecha_fin ? new Date(procData.fecha_fin).toLocaleDateString('es-PE') : '31/12/2026',
+          estado_postulante: status,
+          hasDisc,
+          hasKnowledge: hasKnowledge && configuredKnowledgeItems.length > 0,
+          hasCompetencies,
+          discConfig: {
+            title: 'Prueba DISC (Conducta y Estilo Laboral)',
+            description: 'Evalúa tu perfil conductual, estilo de comunicación y adaptación bajo presión.',
+            durationMinutes: 15,
+            isCompleted: isDiscDone
+          },
+          knowledgeQuestionnaires: configuredKnowledgeItems,
+          competenciesConfig: {
+            title: 'Evaluación de Competencias Clave',
+            description: 'Medición de aptitudes y desempeño profesional orientadas a la vacante.',
+            items: compList,
+            durationMinutes: 10,
+            isCompleted: false
+          }
+        });
+      }
+
+      setInvitedProcesses(builtProcessList);
+    } catch (err) {
+      console.warn('[ProcesosInvitadosView] Error al cargar procesos:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProcessAndResults();
   }, [candidate]);
+
+  // Manejador del clic en iniciar una prueba específica: abre modal de advertencia previa
+  const handleOpenWarningModal = (
+    process: InvitedProcessDetailed,
+    payload: StartExamPayload,
+    testTitle: string,
+    questionCountDesc: string,
+    durationMinutes: number
+  ) => {
+    setHasAcknowledgedLockWarning(false);
+    setWarningModalTarget({
+      processId: process.id,
+      processTitle: process.titulo,
+      payload,
+      testTitle,
+      questionCountDesc,
+      durationMinutes
+    });
+  };
+
+  const handleConfirmStartExam = () => {
+    if (!warningModalTarget) return;
+    const { payload } = warningModalTarget;
+    setWarningModalTarget(null);
+    onStartExam(payload);
+  };
 
   return (
     <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 font-sans animate-in fade-in">
       
-      {/* 1. TOP HEADER BANNER (REUSING GEA BRAND BANNER STYLE) */}
+      {/* 1. TOP HEADER BANNER (GEA BRAND BANNER) */}
       <div className="p-5 sm:p-7 rounded-3xl bg-white dark:bg-[#182044] border border-[#DDE2EF] dark:border-[#2A3563] shadow-2xs relative overflow-hidden">
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
@@ -167,7 +395,7 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
         <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-[#2F5BA8]/10 blur-3xl pointer-events-none" />
       </div>
 
-      {/* 2. PROCESS CARDS LIST (EXACT PROCESS CARD STYLE FROM EVALUAR) */}
+      {/* 2. TARJETA ÚNICA DEL PROCESO CON EVALUACIONES UNA DEBAJO DE LA OTRA */}
       <div className="space-y-4">
         {isLoading ? (
           <div className="py-16 text-center text-zinc-400 bg-white dark:bg-[#182044] rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563]">
@@ -186,177 +414,362 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
           </div>
         ) : (
           invitedProcesses.map((proc) => {
-            const isCompleted = proc.estado_postulante === 'FINALIZADO';
-            const isInProgress = proc.estado_postulante === 'EN_PROGRESO';
-
             return (
               <div
                 key={proc.id}
-                onClick={() => !isCompleted && handleShowDiscModal(proc.id)}
-                className={`p-5 sm:p-6 rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] bg-white dark:bg-[#182044] shadow-2xs hover:shadow-md transition-all ${
-                  !isCompleted ? 'cursor-pointer hover:border-[#6C3AFF]/60 group' : ''
-                }`}
+                className="p-6 sm:p-8 rounded-3xl border border-[#DDE2EF] dark:border-[#2A3563] bg-white dark:bg-[#182044] shadow-xs space-y-6"
               >
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-                  
-                  {/* LEFT: Process Info, Company, Metadata & Badges */}
-                  <div className="space-y-2.5 max-w-2xl">
-                    
-                    {/* Title */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-extrabold text-base sm:text-lg text-[#2F5BA8] dark:text-[#5B8AE0] tracking-wide">
-                        {proc.titulo}
+                {/* 2.1 CABECERA DE LA TARJETA: TÍTULO, METADATA Y DESCRIPCIÓN */}
+                <div className="space-y-3 pb-6 border-b border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h2 className="font-extrabold text-lg sm:text-xl text-[#2F5BA8] dark:text-[#5B8AE0] tracking-tight">
+                      {proc.titulo}
+                    </h2>
+                    <span className="px-2.5 py-0.5 rounded-md bg-[#1F2A5E]/10 dark:bg-white/10 text-[#1F2A5E] dark:text-white font-mono font-bold text-xs">
+                      {proc.codigo}
+                    </span>
+                  </div>
+
+                  <div className="text-xs text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-y-2 gap-x-5">
+                    <div className="flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span>Empresa: <strong className="text-slate-800 dark:text-slate-200 font-semibold">{proc.empresa}</strong></span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span>Duración estimada total: <strong className="text-slate-700 dark:text-slate-300">{proc.duracion_minutos} minutos</strong></span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span>Fecha de vencimiento: <strong className="text-slate-700 dark:text-slate-300">{proc.fecha_limite}</strong></span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-semibold text-[11px] flex items-center gap-1">
+                        <Hourglass className="w-3 h-3" />
+                        <span>Puesto: {proc.puesto_objetivo}</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed pt-1">
+                    {proc.descripcion}
+                  </p>
+                </div>
+
+                {/* 2.2 EVALUACIONES UNA DEBAJO DE LA OTRA (LISTA VERTICAL CON BOTÓN INDIVIDUAL) */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                        Evaluaciones asignadas a tu proceso
                       </h3>
-                      <span className="px-2 py-0.5 rounded-md bg-[#1F2A5E]/10 dark:bg-white/10 text-[#1F2A5E] dark:text-white font-mono font-bold text-[10px]">
-                        {proc.codigo}
-                      </span>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Rinde cada prueba de forma independiente. Recuerda que una vez iniciada cada prueba, no podrás salirte hasta completarla.
+                      </p>
                     </div>
-
-                    {/* Company and Position */}
-                    <div className="text-xs text-zinc-500 dark:text-zinc-400 space-y-1">
-                      <div className="flex items-center gap-1.5">
-                        <Building2 className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                        <span>Empresa: <strong className="text-zinc-800 dark:text-zinc-200 font-semibold">{proc.empresa}</strong></span>
-                      </div>
-
-                      <div className="flex items-center gap-4 flex-wrap text-zinc-500">
-                        <div className="flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                          <span>Duración estimada: <strong className="text-zinc-700 dark:text-zinc-300">{proc.duracion_minutos} minutos</strong></span>
-                        </div>
-
-                        <div className="flex items-center gap-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                          <span>Fecha de vencimiento: <strong className="text-zinc-700 dark:text-zinc-300">{proc.fecha_limite}</strong></span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-                      {proc.descripcion}
-                    </p>
-
-                    {/* Status Badge */}
-                    <div className="flex items-center gap-2 pt-1">
-                      {isCompleted ? (
-                        <span className="px-3 py-1 rounded-full bg-[#2FA58B]/10 text-[#2FA58B] border border-[#2FA58B]/25 font-bold text-xs flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Evaluación Completada</span>
-                        </span>
-                      ) : isInProgress ? (
-                        <span className="px-3 py-1 rounded-full bg-[#F28C28]/15 text-[#F28C28] border border-[#F28C28]/35 font-bold text-xs flex items-center gap-1.5">
-                          <RotateCw className="w-3.5 h-3.5 animate-spin" />
-                          <span>En Progreso</span>
-                        </span>
-                      ) : (
-                        <span className="px-3 py-1 rounded-full bg-[#E4572E]/10 text-[#E4572E] border border-[#E4572E]/25 font-bold text-xs flex items-center gap-1.5">
-                          <Hourglass className="w-3.5 h-3.5" />
-                          <span>Pendiente de Inicio</span>
-                        </span>
-                      )}
-
-                      <span className="text-[11px] text-zinc-400">
-                        Puesto: {proc.puesto_objetivo}
-                      </span>
-                    </div>
-
                   </div>
 
-                  {/* RIGHT: Action Button */}
-                  <div className="shrink-0 self-start lg:self-center">
-                    {isCompleted ? (
-                      <button
-                        type="button"
-                        disabled
-                        className="px-6 py-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 font-bold text-xs sm:text-sm flex items-center gap-2 cursor-default shadow-2xs"
-                      >
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                        <span>Completado</span>
-                      </button>
-                    ) : isInProgress ? (
-                      <button
-                        type="button"
-                      onClick={() => handleShowDiscModal(proc.id)}
-                        className="px-6 py-3 rounded-xl bg-[#2F5BA8] hover:bg-[#244988] text-white font-extrabold text-xs sm:text-sm flex items-center gap-2 cursor-pointer shadow-md hover:shadow-lg active:scale-98 transition-all"
-                      >
-                        <RotateCw className="w-4 h-4" />
-                        <span>Continuar Evaluación</span>
-                        <ArrowRight className="w-4 h-4" />
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                      onClick={() => handleShowDiscModal(proc.id)}
-                        className="px-6 py-3 rounded-xl bg-[#1F2A5E] hover:bg-[#182348] text-white font-extrabold text-xs sm:text-sm flex items-center gap-2 cursor-pointer shadow-md hover:shadow-lg active:scale-98 transition-all"
-                      >
-                        <Rocket className="w-4 h-4 fill-white/20" />
-                        <span>Iniciar Evaluación</span>
-                        <ArrowRight className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
+                  {/* ============================================================== */}
+                  {/* PRUEBA 1: DISC (SOLO SI FUE CONFIGURADO EN EL PERFIL)          */}
+                  {/* ============================================================== */}
+                  {proc.hasDisc && (
+                    <div className="p-4 sm:p-5 rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all">
+                      <div className="flex items-start gap-3.5">
+                        <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
+                          DISC
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-bold text-sm text-slate-900 dark:text-white">
+                              {proc.discConfig.title}
+                            </h4>
+                            {proc.discConfig.isCompleted && (
+                              <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                <span>Completada</span>
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                            {proc.discConfig.description}
+                          </p>
+                          <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400 pt-0.5">
+                            <span>⏱ {proc.discConfig.durationMinutes} minutos</span>
+                            <span>•</span>
+                            <span>2 secciones de bloques conductuales</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 self-end md:self-center">
+                        {proc.discConfig.isCompleted ? (
+                          <div className="px-5 py-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-300 font-bold text-xs flex items-center gap-1.5 shadow-2xs">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                            <span>Prueba Rendida</span>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenWarningModal(
+                              proc,
+                              { type: 'DISC', testId: proc.id, candidateId: proc.candidateIdInProcess },
+                              proc.discConfig.title,
+                              '2 secciones conductuales (10 preguntas)',
+                              proc.discConfig.durationMinutes
+                            )}
+                            className="px-5 py-2.5 rounded-xl bg-[#6D28D9] hover:bg-[#5B21B6] text-white font-bold text-xs flex items-center gap-2 cursor-pointer shadow-sm transition-all active:scale-98"
+                          >
+                            <Rocket className="w-3.5 h-3.5 fill-white/20" />
+                            <span>Iniciar Prueba DISC</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ============================================================== */}
+                  {/* PRUEBA 2: CUESTIONARIOS DE CONOCIMIENTOS (SOLO LOS CONFIGURADOS)*/}
+                  {/* ============================================================== */}
+                  {proc.hasKnowledge && proc.knowledgeQuestionnaires.length > 0 && (
+                    <div className="p-4 sm:p-5 rounded-2xl border border-purple-200 dark:border-purple-900/60 bg-purple-50/40 dark:bg-purple-950/20 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-[#6D28D9] text-white flex items-center justify-center shadow-xs shrink-0">
+                            <BookOpen className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-sm text-slate-900 dark:text-white">
+                              Prueba de Conocimientos ({proc.knowledgeQuestionnaires.length} {proc.knowledgeQuestionnaires.length === 1 ? 'tema configurado' : 'temas configurados'})
+                            </h4>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              Cada tema cuenta con 20 preguntas especializadas según la configuración de la vacante.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Sub-lista vertical de temas de conocimiento */}
+                      <div className="space-y-2.5 pt-1">
+                        {proc.knowledgeQuestionnaires.map((kItem) => (
+                          <div
+                            key={kItem.id}
+                            className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs hover:border-purple-300 transition-colors"
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100">
+                                  {kItem.title}
+                                </span>
+                                <span className="px-2 py-0.5 rounded-md bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-bold text-[10px]">
+                                  {kItem.questionCount} preguntas
+                                </span>
+                                <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px]">
+                                  Dificultad: {kItem.difficulty}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                                <span>⏱ Tiempo: {kItem.durationMinutes} min</span>
+                                {kItem.isCompleted && kItem.score !== undefined && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="font-bold text-emerald-600">
+                                      Nota obtenida: {kItem.score} / 20 pts ({Math.round((kItem.score / 20) * 100)}%)
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="shrink-0 self-end sm:self-center">
+                              {kItem.isCompleted ? (
+                                <div className="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-300 font-bold text-xs flex items-center gap-1.5 shadow-2xs">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                  <span>Completado ({kItem.score ?? 20}/20)</span>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenWarningModal(
+                                    proc,
+                                    {
+                                      type: 'KNOWLEDGE',
+                                      testId: proc.id,
+                                      candidateId: proc.candidateIdInProcess,
+                                      topicName: kItem.title,
+                                      difficulty: kItem.difficulty,
+                                      questionCount: kItem.questionCount
+                                    },
+                                    `Cuestionario: ${kItem.title}`,
+                                    `${kItem.questionCount} preguntas obligatorias`,
+                                    kItem.durationMinutes
+                                  )}
+                                  className="px-4 py-2 rounded-xl bg-[#1F2A5E] hover:bg-[#182348] text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-all active:scale-98"
+                                >
+                                  <Rocket className="w-3.5 h-3.5 fill-white/20" />
+                                  <span>Iniciar Cuestionario</span>
+                                  <ArrowRight className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ============================================================== */}
+                  {/* PRUEBA 3: COMPETENCIAS (SOLO SI FUE CONFIGURADA EN EL PERFIL)  */}
+                  {/* ============================================================== */}
+                  {proc.hasCompetencies && proc.competenciesConfig.items.length > 0 && (
+                    <div className="p-4 sm:p-5 rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all">
+                      <div className="flex items-start gap-3.5">
+                        <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
+                          <GraduationCap className="w-5 h-5" />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-bold text-sm text-slate-900 dark:text-white">
+                              {proc.competenciesConfig.title}
+                            </h4>
+                          </div>
+                          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                            {proc.competenciesConfig.description}
+                          </p>
+                          <div className="flex flex-wrap gap-1 pt-1">
+                            {proc.competenciesConfig.items.map((comp, idx) => (
+                              <span 
+                                key={idx}
+                                className="text-[10px] px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 font-semibold"
+                              >
+                                {comp}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 self-end md:self-center">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenWarningModal(
+                            proc,
+                            {
+                              type: 'COMPETENCIAS',
+                              testId: proc.id,
+                              candidateId: proc.candidateIdInProcess,
+                              topicName: 'Evaluación de Competencias'
+                            },
+                            proc.competenciesConfig.title,
+                            `${proc.competenciesConfig.items.length} competencias clave`,
+                            proc.competenciesConfig.durationMinutes
+                          )}
+                          className="px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-2 cursor-pointer shadow-sm transition-all active:scale-98"
+                        >
+                          <Rocket className="w-3.5 h-3.5 fill-white/20" />
+                          <span>Iniciar Competencias</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                 </div>
+
               </div>
             );
           })
         )}
       </div>
 
-      {/* ──── DISC Instructions Slide-Over Drawer ──── */}
-      {discModalProcId !== null && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs animate-in fade-in duration-200">
-          <div 
-            className="fixed inset-0" 
-            onClick={handleCloseDiscModal}
-          />
-          <div className="relative z-10 bg-white w-full max-w-md h-full shadow-2xl flex flex-col justify-between rounded-l-3xl p-6 sm:p-8 animate-in slide-in-from-right duration-300">
-            {/* Header */}
-            <div>
-              <div className="flex items-center justify-between pb-5 border-b border-zinc-100">
-                <span className="font-bold text-lg text-[#6C3AFF]">DISC</span>
-                <button 
-                  type="button" 
-                  onClick={handleCloseDiscModal} 
-                  className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-colors cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+      {/* 3. MODAL DE ADVERTENCIA PREVIA ESTRICTA: NO SE PERMITE SALIR DE LA PRUEBA */}
+      {warningModalTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-slate-200 dark:border-zinc-800 space-y-5 animate-in zoom-in-95 text-zinc-900 dark:text-zinc-100">
+            
+            {/* Header del Modal */}
+            <div className="flex items-start gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 flex items-center justify-center shrink-0 shadow-xs">
+                <AlertTriangle className="w-6 h-6" />
               </div>
-
-              {/* Body */}
-              <div className="py-6 space-y-5 text-sm text-zinc-600 leading-relaxed overflow-y-auto max-h-[calc(100vh-180px)] pr-1">
-                <p className="font-bold text-base text-zinc-800">Instrucciones</p>
-
-                <p>
-                  A continuación, se le presentarán dos secciones de evaluación. Cada sección está conformada por 4 bloques de palabras, en donde usted deberá escoger 5 opciones con las que más se identifique.
-                </p>
-
-                <p>
-                  La primera sección está enfocada a las palabras que usted considera que mejor lo describen en su trabajo y la segunda sección está enfocada a las palabras que describen la opinión que tienen sus compañeros sobre USTED.
-                </p>
-
-                <p>
-                  En general, no existen respuestas correctas o incorrectas, porque las personas tienen distintos intereses y actitudes. Conteste con sinceridad; de esta forma se podrá conocer mejor su forma de ser.
-                </p>
-
-                <p>
-                  Aunque la prueba no tiene límite de tiempo, procure no pensar demasiado para decidirse ante una situación.
-                </p>
+              <div className="space-y-0.5">
+                <span className="text-[11px] font-bold text-amber-600 uppercase tracking-widest block">
+                  Aviso importante de seguridad
+                </span>
+                <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
+                  ¿Listo para comenzar la evaluación?
+                </h3>
               </div>
             </div>
 
-            {/* Footer */}
-            <div className="pt-4 border-t border-zinc-100 flex justify-end">
+            {/* Caja de Advertencia Estricta */}
+            <div className="p-4 rounded-2xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 text-xs sm:text-sm text-amber-900 dark:text-amber-200 space-y-2">
+              <div className="flex items-center gap-1.5 font-bold text-amber-800 dark:text-amber-300">
+                <Lock className="w-4 h-4 text-amber-700" />
+                <span>Salida Bloqueada durante el Examen</span>
+              </div>
+              <p className="leading-relaxed text-xs">
+                Por políticas del proceso de selección oficial de <strong>GEA Perú</strong>, <strong>una vez iniciada la prueba NO se permite salir, pausar ni reiniciar el intento</strong>.
+              </p>
+              <p className="leading-relaxed text-xs">
+                Si cierras la ventana, navegas a otra página o recargas el navegador, tu intento quedará registrado con las respuestas contestadas hasta ese momento.
+              </p>
+            </div>
+
+            {/* Resumen de la prueba a iniciar */}
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200 dark:border-zinc-700 text-xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Evaluación:</span>
+                <strong className="text-slate-800 dark:text-slate-200">{warningModalTarget.testTitle}</strong>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Reactivos:</span>
+                <span className="font-semibold text-purple-700 dark:text-purple-300">{warningModalTarget.questionCountDesc}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Tiempo aproximado:</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{warningModalTarget.durationMinutes} minutos</span>
+              </div>
+            </div>
+
+            {/* Checkbox de Aceptación */}
+            <label className="flex items-start gap-2.5 cursor-pointer pt-1">
+              <input
+                type="checkbox"
+                checked={hasAcknowledgedLockWarning}
+                onChange={(e) => setHasAcknowledgedLockWarning(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-slate-300 text-[#6D28D9] focus:ring-purple-500 cursor-pointer"
+              />
+              <span className="text-xs text-slate-600 dark:text-slate-300 select-none leading-normal">
+                Comprendo que la prueba no se puede pausar ni abandonar, y confirmo que dispongo del tiempo y conexión requeridos.
+              </span>
+            </label>
+
+            {/* Botones de Acción */}
+            <div className="pt-2 flex items-center justify-end gap-3">
               <button
                 type="button"
-                onClick={handleConfirmStart}
-                className="flex items-center gap-2.5 px-7 py-3 rounded-xl bg-[#6C3AFF] hover:bg-[#5A2DE0] text-white font-bold text-sm shadow-lg shadow-violet-500/25 transition-all cursor-pointer active:scale-98"
+                onClick={() => setWarningModalTarget(null)}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-400 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
               >
-                <Rocket className="w-4 h-4 fill-white/20" />
-                <span>Iniciar</span>
+                Cancelar y Volver
+              </button>
+
+              <button
+                type="button"
+                disabled={!hasAcknowledgedLockWarning}
+                onClick={handleConfirmStartExam}
+                className="px-6 py-2.5 rounded-xl bg-[#6D28D9] hover:bg-[#5B21B6] text-white font-bold text-xs sm:text-sm shadow-md transition-all cursor-pointer active:scale-98 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+              >
+                <Rocket className="w-3.5 h-3.5 fill-white/20" />
+                <span>Comenzar Evaluación Ahora</span>
               </button>
             </div>
+
           </div>
         </div>
       )}

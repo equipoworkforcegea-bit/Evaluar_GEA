@@ -126,6 +126,36 @@ export const CreateProcessModal: React.FC<CreateProcessModalProps> = ({
   const [enableTrustTest, setEnableTrustTest] = useState<boolean>(true);
   const [showAdvancedConfig, setShowAdvancedConfig] = useState<boolean>(false);
 
+  const startDateInputRef = useRef<HTMLInputElement>(null);
+  const endDateInputRef = useRef<HTMLInputElement>(null);
+
+  const handleOpenStartCalendar = () => {
+    try {
+      startDateInputRef.current?.showPicker();
+    } catch {
+      startDateInputRef.current?.focus();
+    }
+  };
+
+  const handleOpenEndCalendar = () => {
+    try {
+      endDateInputRef.current?.showPicker();
+    } catch {
+      endDateInputRef.current?.focus();
+    }
+  };
+
+  const addDaysToEndDate = (days: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hours = String(d.getHours()).padStart(2, '0');
+    const mins = String(d.getMinutes()).padStart(2, '0');
+    setEndDateTime(`${year}-${month}-${day}T${hours}:${mins}`);
+  };
+
   // Advanced Config state
   const [durationMinutes, setDurationMinutes] = useState<number>(selectedProfile?.totalDurationMinutes || 45);
   const [launchedBy, setLaunchedBy] = useState<string>('Tania León (Selección)');
@@ -240,12 +270,9 @@ export const CreateProcessModal: React.FC<CreateProcessModalProps> = ({
         profileName: selectedProfile?.title || targetPos,
         hiredCount: 0,
         inProgressCount: 0,
-        selectedCompetencies: selectedProfile?.selectedCompetencies || [
-          'Orientación a Resultados & Eficiencia',
-          'Autorregulación Emocional bajo Presión',
-          'Toma de Decisiones en Contingencias'
-        ],
-        stages: selectedProfile?.stages || [
+        selectedCompetencies: selectedProfile ? (selectedProfile.selectedCompetencies || []) : [],
+        knowledgeQuestionnaires: selectedProfile ? (selectedProfile.knowledgeQuestionnaires || []) : [],
+        stages: selectedProfile ? (selectedProfile.stages || []) : [
           {
             id: 'STAGE_1_PSYCHO',
             category: 'PSYCHOLOGICAL',
@@ -363,7 +390,7 @@ export const CreateProcessModal: React.FC<CreateProcessModalProps> = ({
   }
 
   return (
-    <div className="absolute inset-0 z-50 overflow-y-auto bg-[#F8F9FC] dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col p-4 sm:p-8 animate-in fade-in">
+    <div className="w-full min-h-screen bg-[#F8F9FC] dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col p-4 sm:p-8 animate-in fade-in">
       
       {/* Modal flotante de lanzamiento: 'Por favor espere...' (Evaluar v4.1.2) */}
       {isSubmitting && (
@@ -795,28 +822,81 @@ export const CreateProcessModal: React.FC<CreateProcessModalProps> = ({
 
                 {/* 2. Fecha y hora de inicio */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                    Fecha y hora de inicio
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={startDateTime}
-                    onChange={(e) => setStartDateTime(e.target.value)}
-                    className="w-full px-4 py-2.5 text-xs sm:text-sm rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:ring-1 focus:ring-[#7C3AED] outline-none"
-                  />
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                      Fecha y hora de inicio
+                    </label>
+                    <span className="text-[10px] text-zinc-400">Escribe o abre el calendario</span>
+                  </div>
+                  <div className="relative flex items-center">
+                    <input
+                      ref={startDateInputRef}
+                      type="datetime-local"
+                      value={startDateTime}
+                      onChange={(e) => setStartDateTime(e.target.value)}
+                      className="w-full pl-4 pr-11 py-2.5 text-xs sm:text-sm rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:ring-1 focus:ring-[#7C3AED] outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleOpenStartCalendar}
+                      className="absolute right-2.5 p-1.5 rounded-lg text-[#7C3AED] hover:bg-purple-50 dark:hover:bg-purple-950/40 transition-colors cursor-pointer"
+                      title="Abrir mini calendario"
+                    >
+                      <Calendar className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* 3. Fecha y hora de fin */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                    Fecha y hora de fin
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={endDateTime}
-                    onChange={(e) => setEndDateTime(e.target.value)}
-                    className="w-full px-4 py-2.5 text-xs sm:text-sm rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:ring-1 focus:ring-[#7C3AED] outline-none"
-                  />
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                      Fecha y hora de fin
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => addDaysToEndDate(7)}
+                        className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 hover:bg-purple-100 hover:text-purple-700 text-zinc-600 dark:text-zinc-400 cursor-pointer transition-colors"
+                        title="Vence en 7 días"
+                      >
+                        +7d
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => addDaysToEndDate(15)}
+                        className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 hover:bg-purple-100 hover:text-purple-700 text-zinc-600 dark:text-zinc-400 cursor-pointer transition-colors"
+                        title="Vence en 15 días"
+                      >
+                        +15d
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => addDaysToEndDate(30)}
+                        className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 hover:bg-purple-100 hover:text-purple-700 text-zinc-600 dark:text-zinc-400 cursor-pointer transition-colors"
+                        title="Vence en 30 días"
+                      >
+                        +30d
+                      </button>
+                    </div>
+                  </div>
+                  <div className="relative flex items-center">
+                    <input
+                      ref={endDateInputRef}
+                      type="datetime-local"
+                      value={endDateTime}
+                      onChange={(e) => setEndDateTime(e.target.value)}
+                      className="w-full pl-4 pr-11 py-2.5 text-xs sm:text-sm rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:ring-1 focus:ring-[#7C3AED] outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleOpenEndCalendar}
+                      className="absolute right-2.5 p-1.5 rounded-lg text-[#7C3AED] hover:bg-purple-50 dark:hover:bg-purple-950/40 transition-colors cursor-pointer"
+                      title="Abrir mini calendario"
+                    >
+                      <Calendar className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
               </div>

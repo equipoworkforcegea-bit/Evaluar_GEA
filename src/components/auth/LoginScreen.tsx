@@ -48,6 +48,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<'identifier' | 'password' | 'dni' | 'nombre' | 'apellido' | 'usuario' | 'numero' | null>(null);
   const [accessedViaLink, setAccessedViaLink] = useState(false);
+  const [isCandidateOnlyPortal, setIsCandidateOnlyPortal] = useState(false);
 
   // Invitation & Registration State
   const [invitationDetected, setInvitationDetected] = useState(false);
@@ -81,6 +82,23 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       const rawCode = searchParams.get('code') || searchParams.get('token') || searchParams.get('invitacion');
       const rawEmail = searchParams.get('email');
       const rawDni = searchParams.get('dni') || searchParams.get('doc');
+      const rawPortal = searchParams.get('portal');
+      const isCandidatePortal = rawPortal === 'candidate';
+
+      if (isCandidatePortal) {
+        setIsCandidateOnlyPortal(true);
+        setActiveTab('CANDIDATE');
+        if (rawEmail) {
+          setBlockedEmail(rawEmail);
+          setIdentifier(rawDni || rawEmail);
+          setInvitationDetected(true);
+          setCandidateHasAccount(true);
+        } else if (rawDni) {
+          setIdentifier(rawDni);
+          setInvitationDetected(true);
+          setCandidateHasAccount(true);
+        }
+      }
 
       if (rawCode || rawDni || rawEmail) {
         setActiveTab('CANDIDATE');
@@ -508,8 +526,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               </div>
             )}
 
-            {/* Role Tabs with Touch Targets (Ocultos si llegó con token de invitación específico) */}
-            {!invitationDetected && (
+            {/* Role Tabs with Touch Targets (Ocultos si llegó con token de invitación específico o portal exclusivo) */}
+            {!invitationDetected && !isCandidateOnlyPortal && (
               <div className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-slate-100 border border-slate-200 mt-4 sm:mt-5">
                 <button
                   type="button"
