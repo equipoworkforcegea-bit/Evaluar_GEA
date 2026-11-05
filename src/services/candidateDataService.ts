@@ -237,14 +237,16 @@ function mapSupabaseToCandidate(row: any): Candidate {
   // Normalizar estado desde la base de datos (español o inglés) al tipo CandidateStageStatus
   let status: any = 'INVITED';
   const rawStatus = String(row.estado || row.status || '').toUpperCase();
-  if (rawStatus === 'EN_CURSO' || rawStatus === 'IN_PROGRESS' || rawStatus === 'EN_PROCESO') {
-    status = 'IN_PROGRESS';
-  } else if (rawStatus === 'EVALUADO' || rawStatus === 'SCORED' || rawStatus === 'COMPLETADO') {
+  const hasCompletedDate = Boolean(row.completado_en || row.completed_at);
+
+  if (rawStatus === 'EVALUADO' || rawStatus === 'SCORED' || rawStatus === 'COMPLETADO' || hasCompletedDate) {
     status = 'SCORED';
   } else if (rawStatus === 'FINALISTA' || rawStatus === 'FINALIST') {
     status = 'FINALIST';
   } else if (rawStatus === 'RECHAZADO' || rawStatus === 'REJECTED') {
     status = 'REJECTED';
+  } else if (rawStatus === 'EN_CURSO' || rawStatus === 'IN_PROGRESS' || rawStatus === 'EN_PROCESO') {
+    status = hasCompletedDate ? 'SCORED' : 'IN_PROGRESS';
   } else {
     const rawStage = String(row.etapa_actual || row.current_stage || '').toUpperCase();
     if (row.consentimiento_firmado || row.iniciado_en || rawStage.includes('ETAPA_2') || rawStage.includes('STAGE_2') || rawStage.includes('ETAPA_3') || rawStage.includes('STAGE_3')) {
@@ -399,6 +401,46 @@ export const CandidateDataService = {
         }
       } catch (errNotas) {
         console.warn('[CandidateDataService] Advertencia al obtener notas_candidato:', errNotas);
+      }
+
+      // Obtener evaluaciones de conocimientos para calcular puntajes y estado completado
+      try {
+        const { data: kList } = await supabase
+          .from('evaluaciones_conocimientos')
+          .select('candidato_id, puntaje, puntaje_maximo, completado_en');
+
+        if (kList && kList.length > 0) {
+          const kMap = new Map<string, { totalPct: number; count: number; lastDate: string }>();
+          kList.forEach((k: any) => {
+            if (!k.candidato_id) return;
+            const sc = Number(k.puntaje || 0);
+            const mx = Number(k.puntaje_maximo || 20);
+            const pct = Math.round((sc / mx) * 100);
+            const cur = kMap.get(k.candidato_id) || { totalPct: 0, count: 0, lastDate: k.completado_en };
+            kMap.set(k.candidato_id, { 
+              totalPct: cur.totalPct + pct, 
+              count: cur.count + 1,
+              lastDate: k.completado_en || cur.lastDate 
+            });
+          });
+
+          candidatesData = candidatesData.map((c: any) => {
+            const stats = kMap.get(c.id);
+            if (stats && stats.count > 0) {
+              const avgPct = Math.round(stats.totalPct / stats.count);
+              const isEvaluated = c.estado === 'EVALUADO' || Boolean(c.completado_en);
+              return {
+                ...c,
+                puntaje: c.puntaje || avgPct,
+                estado: isEvaluated ? 'EVALUADO' : c.estado,
+                completado_en: c.completado_en || (isEvaluated ? stats.lastDate : null)
+              };
+            }
+            return c;
+          });
+        }
+      } catch (errK) {
+        console.warn('[CandidateDataService] Error cargando evaluaciones_conocimientos:', errK);
       }
 
       if (!candidatesData || candidatesData.length === 0) {

@@ -84,6 +84,13 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
       setActiveTab(initialTab);
     }
   }, [initialTab]);
+
+  // Si no hay candidatos en progreso pero sí hay finalizados, cambiar automáticamente a la pestaña FINALIZADOS
+  useEffect(() => {
+    if (statusFilter === 'EN_PROGRESO' && inProgressList.length === 0 && finalizedList.length > 0) {
+      setStatusFilter('FINALIZADOS');
+    }
+  }, [inProgressList.length, finalizedList.length, statusFilter]);
   const [statusFilter, setStatusFilter] = useState<StatusPillFilter>('FINALIZADOS');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'ranking' | 'nombre' | 'fecha'>('ranking');
@@ -143,19 +150,28 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
     return processCandidates.filter(c => {
       if (noDeseadosCandidateIds.has(c.id)) return false;
       const s = String(c.status || '').toUpperCase();
-      return s === 'FINALIST' || s === 'FINALISTA' || s === 'SCORED' || s === 'EVALUADO' || s === 'COMPLETADO' || (c.scores && (c.scores.overall || 0) > 0);
+      return (
+        s === 'FINALIST' || 
+        s === 'FINALISTA' || 
+        s === 'SCORED' || 
+        s === 'EVALUADO' || 
+        s === 'COMPLETADO' || 
+        Boolean(c.completedAt) || 
+        (c.scores && (c.scores.overall || 0) > 0)
+      );
     });
   }, [processCandidates, noDeseadosCandidateIds]);
 
   const inProgressList = useMemo(() => {
     return processCandidates.filter(c => {
       if (noDeseadosCandidateIds.has(c.id)) return false;
+      const isFin = finalizedList.some(f => f.id === c.id);
+      if (isFin) return false;
       const s = String(c.status || '').toUpperCase();
       const stage = String(c.currentStage || '').toUpperCase();
-      const isFin = s === 'FINALIST' || s === 'FINALISTA' || s === 'SCORED' || s === 'EVALUADO' || s === 'COMPLETADO' || (c.scores && (c.scores.overall || 0) > 0);
-      return !isFin && (s === 'IN_PROGRESS' || s === 'EN_CURSO' || s === 'EN_PROCESO' || Boolean(c.startedAt) || stage.includes('ETAPA_2') || stage.includes('ETAPA_3'));
+      return (s === 'IN_PROGRESS' || s === 'EN_CURSO' || s === 'EN_PROCESO' || Boolean(c.startedAt) || stage.includes('ETAPA_2') || stage.includes('ETAPA_3'));
     });
-  }, [processCandidates, noDeseadosCandidateIds]);
+  }, [processCandidates, finalizedList, noDeseadosCandidateIds]);
 
   const disqualifiedList = useMemo(() => {
     return processCandidates.filter(c => {
@@ -678,7 +694,7 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
                   displayedCandidates.map((c, index) => {
                     const isSelected = selectedCandidateIds.has(c.id);
                     const isPreselected = preselectedCandidateIds.has(c.id);
-                    const scoreVal = c.scores?.overall || (c.status === 'SCORED' || c.status === 'FINALIST' ? 87 : 0);
+                    const scoreVal = c.scores?.overall || (c as any).puntaje || (c.status === 'SCORED' || c.status === 'FINALIST' ? 87 : 0);
                     const initials = (c.fullName || 'JA')
                       .split(' ')
                       .filter(Boolean)

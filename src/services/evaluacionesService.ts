@@ -79,13 +79,14 @@ export const EvaluacionesService = {
       }
       console.log('✓ [EvaluacionesService] Respuestas de Conocimientos guardadas con éxito en Supabase:', payload.tema);
 
-      // Actualizar estado del candidato en Supabase si tiene candidato_id válido
+      // Actualizar estado del candidato en Supabase a EVALUADO y registrar completado_en
       if (safeCandId && !safeCandId.startsWith('cand_')) {
         try {
           await supabase
             .from('candidatos')
             .update({
-              estado: 'EN_CURSO',
+              estado: 'EVALUADO',
+              completado_en: new Date().toISOString(),
               actualizado_en: new Date().toISOString()
             })
             .eq('id', safeCandId);
@@ -137,13 +138,14 @@ export const EvaluacionesService = {
       }
       console.log('✓ [EvaluacionesService] Respuestas de DISC guardadas con éxito en Supabase');
 
-      // Actualizar estado del candidato en Supabase si tiene candidato_id válido
+      // Actualizar estado del candidato en Supabase a EVALUADO y registrar completado_en
       if (payload.candidatoId && !payload.candidatoId.startsWith('cand_')) {
         try {
           await supabase
             .from('candidatos')
             .update({
-              estado: 'EN_CURSO',
+              estado: 'EVALUADO',
+              completado_en: new Date().toISOString(),
               actualizado_en: new Date().toISOString()
             })
             .eq('id', payload.candidatoId);
