@@ -410,28 +410,27 @@ export const CandidateDataService = {
           .select('candidato_id, puntaje, puntaje_maximo, completado_en');
 
         if (kList && kList.length > 0) {
-          const kMap = new Map<string, { totalPct: number; count: number; lastDate: string }>();
+          const statsMap = new Map<string, { totalScore: number; totalMax: number; lastDate: string }>();
           kList.forEach((k: any) => {
             if (!k.candidato_id) return;
             const sc = Number(k.puntaje || 0);
             const mx = Number(k.puntaje_maximo || 20);
-            const pct = Math.round((sc / mx) * 100);
-            const cur = kMap.get(k.candidato_id) || { totalPct: 0, count: 0, lastDate: k.completado_en };
-            kMap.set(k.candidato_id, { 
-              totalPct: cur.totalPct + pct, 
-              count: cur.count + 1,
-              lastDate: k.completado_en || cur.lastDate 
+            const cur = statsMap.get(k.candidato_id) || { totalScore: 0, totalMax: 0, lastDate: k.completado_en };
+            statsMap.set(k.candidato_id, {
+              totalScore: cur.totalScore + sc,
+              totalMax: cur.totalMax + mx,
+              lastDate: k.completado_en || cur.lastDate
             });
           });
 
           candidatesData = candidatesData.map((c: any) => {
-            const stats = kMap.get(c.id);
-            if (stats && stats.count > 0) {
-              const avgPct = Math.round(stats.totalPct / stats.count);
+            const stats = statsMap.get(c.id);
+            if (stats && stats.totalMax > 0) {
+              const avgScore = Math.round((stats.totalScore / stats.totalMax) * 100);
               const isEvaluated = c.estado === 'EVALUADO' || Boolean(c.completado_en);
               return {
                 ...c,
-                puntaje: c.puntaje || avgPct,
+                puntaje: avgScore,
                 estado: isEvaluated ? 'EVALUADO' : c.estado,
                 completado_en: c.completado_en || (isEvaluated ? stats.lastDate : null)
               };

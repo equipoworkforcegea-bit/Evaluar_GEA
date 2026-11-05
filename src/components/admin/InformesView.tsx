@@ -38,15 +38,21 @@ export const InformesView: React.FC<InformesViewProps> = ({
       try {
         const { data } = await supabase.from('evaluaciones_conocimientos').select('candidato_id, puntaje, puntaje_maximo');
         if (data && data.length > 0 && isMounted) {
-          const map: Record<string, number> = {};
+          const statsMap: Record<string, { totalScore: number; totalMax: number }> = {};
           data.forEach(item => {
+            if (!item.candidato_id) return;
             const sc = Number(item.puntaje || 0);
             const mx = Number(item.puntaje_maximo || 20);
-            const pct = Math.round((sc / mx) * 100);
-            // Guardar el puntaje más alto o reciente
-            if (!map[item.candidato_id] || pct > map[item.candidato_id]) {
-              map[item.candidato_id] = pct;
-            }
+            const cur = statsMap[item.candidato_id] || { totalScore: 0, totalMax: 0 };
+            statsMap[item.candidato_id] = {
+              totalScore: cur.totalScore + sc,
+              totalMax: cur.totalMax + mx
+            };
+          });
+          const map: Record<string, number> = {};
+          Object.keys(statsMap).forEach(candId => {
+            const st = statsMap[candId];
+            map[candId] = st.totalMax > 0 ? Math.round((st.totalScore / st.totalMax) * 100) : 0;
           });
           setCandidateScores(map);
         }

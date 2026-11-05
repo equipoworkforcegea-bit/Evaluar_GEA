@@ -470,14 +470,18 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
 
                 {/* Perfil Conductual DISC si existe */}
                 {discResult && (
-                  <div className="p-3 rounded-xl bg-lime-50 border border-lime-200 flex items-center justify-between">
-                    <div>
+                  <div className="p-3.5 rounded-2xl bg-lime-50 border border-lime-200 space-y-1.5">
+                    <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold text-lime-800 uppercase tracking-wider block">Perfil Conductual DISC</span>
-                      <span className="text-xs font-black text-lime-900">{discResult.perfil_dominante || 'Completado'}</span>
+                      <span className="text-[10px] font-bold text-lime-700 bg-lime-100 px-2 py-0.5 rounded-md">Evaluado</span>
                     </div>
-                    <span className="text-[10px] text-lime-700 font-semibold">
-                      D:{discResult.conteo_d ?? 0} I:{discResult.conteo_i ?? 0} S:{discResult.conteo_s ?? 0} C:{discResult.conteo_c ?? 0}
-                    </span>
+                    <div className="text-sm font-black text-lime-900">{discResult.perfil_dominante}</div>
+                    <div className="flex items-center gap-2 pt-1 text-[11px] font-bold text-lime-800">
+                      <span className="px-2 py-0.5 rounded-md bg-white border border-lime-200">D: {discResult.conteo_d ?? 0}</span>
+                      <span className="px-2 py-0.5 rounded-md bg-white border border-lime-200">I: {discResult.conteo_i ?? 0}</span>
+                      <span className="px-2 py-0.5 rounded-md bg-white border border-lime-200">S: {discResult.conteo_s ?? 0}</span>
+                      <span className="px-2 py-0.5 rounded-md bg-white border border-lime-200">C: {discResult.conteo_c ?? 0}</span>
+                    </div>
                   </div>
                 )}
 

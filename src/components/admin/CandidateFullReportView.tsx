@@ -969,9 +969,9 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
           {/* Gauge Circular de Adecuación - Puntaje Real */}
           <div className="flex flex-col items-center justify-center pt-3 space-y-4">
             {(candidate.scores && candidate.scores.overall > 0) || hasKnowledge ? (
-              <>
-                {/* Círculo con promedio final */}
-                <div className="relative w-28 h-28 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-3 py-2 w-full">
+                {/* Círculo con puntaje porcentaje final */}
+                <div className="relative w-32 h-32 flex items-center justify-center">
                   <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
                     <path
                       className="text-slate-100 dark:text-slate-800"
@@ -991,51 +991,13 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                     />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className={`text-2xl font-black tracking-tight ${scoreVal >= 80 ? 'text-[#2FA58B]' : scoreVal >= 60 ? 'text-amber-500' : 'text-rose-500'}`}>
+                    <span className={`text-3xl font-black tracking-tight ${scoreVal >= 80 ? 'text-[#2FA58B]' : scoreVal >= 60 ? 'text-amber-500' : 'text-rose-500'}`}>
                       {scoreVal}%
                     </span>
-                    <span className="text-[9px] text-[#6B7494] font-semibold mt-0.5">Promedio</span>
+                    <span className="text-[10px] text-[#6B7494] font-semibold mt-0.5">Puntaje Final</span>
                   </div>
                 </div>
-
-                {/* Barras por etapa */}
-                <div className="w-full space-y-2.5">
-                  {[
-                    { label: 'Psicotécnica', val: hasKnowledge ? avgKnowledgePercent : (candidate.scores?.stage1Psycho ?? 0), color: '#6355DE' },
-                    { label: 'Emocional', val: hasDisc ? 100 : (candidate.scores?.stage2Emotional ?? 0), color: '#2F5BA8' },
-                    { label: 'Casos Lab.', val: candidate.scores?.stage3WorkCases ?? 0, color: '#2FA58B' }
-                  ].map(({ label, val, color }) => (
-                    <div key={label} className="w-full space-y-1">
-                      <div className="flex items-center justify-between text-[11px] font-semibold">
-                        <span className="text-[#6B7494] dark:text-[#9AA5C4]">{label}</span>
-                        <span style={{ color }} className="font-bold">{val}%</span>
-                      </div>
-                      <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all duration-700"
-                          style={{ width: `${val}%`, backgroundColor: color }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Barra general */}
-                  <div className="w-full space-y-1 pt-1 border-t border-[#DDE2EF]/60 dark:border-[#2A3563]/60">
-                    <div className="flex items-center justify-between text-xs font-bold">
-                      <span className="text-[#161C3A] dark:text-white">Puntaje Final</span>
-                      <span className={scoreVal >= 80 ? 'text-[#2FA58B]' : scoreVal >= 60 ? 'text-amber-500' : 'text-rose-500'}>
-                        {scoreVal}%
-                      </span>
-                    </div>
-                    <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-700 ${scoreVal >= 80 ? 'bg-[#2FA58B]' : scoreVal >= 60 ? 'bg-amber-500' : 'bg-rose-500'}`}
-                        style={{ width: `${scoreVal}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </>
+              </div>
             ) : (
               /* Sin puntaje - examen pendiente */
               <div className="w-full flex flex-col items-center gap-3 py-3">
@@ -1148,6 +1110,26 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                   </div>
                 ) : (
                   <>
+                    {/* Dictamen: RECOMENDADO o NO RECOMENDADO */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white dark:bg-[#182044] border border-[#DDE2EF] dark:border-[#2A3563] shadow-2xs">
+                      <div>
+                        <span className="text-[10px] font-bold text-[#6B7494] uppercase tracking-wider block">Dictamen de Evaluación Técnica</span>
+                        <h3 className="text-xl sm:text-2xl font-black text-[#1F2A5E] dark:text-white flex items-center gap-2">
+                          <span>Resultado:</span>
+                          <span className={scoreVal >= 70 ? 'text-[#2FA58B]' : scoreVal >= 60 ? 'text-amber-500' : 'text-rose-500'}>
+                            {scoreVal >= 70 ? 'RECOMENDADO' : scoreVal >= 60 ? 'RECOMENDADO CON OBSERVACIONES' : 'NO RECOMENDADO'}
+                          </span>
+                        </h3>
+                      </div>
+                      <div className={`px-4 py-1.5 rounded-full text-xs font-black border uppercase tracking-wider self-start sm:self-center ${
+                        scoreVal >= 70 ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300' :
+                        scoreVal >= 60 ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300' :
+                        'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300'
+                      }`}>
+                        {scoreVal >= 70 ? 'RECOMENDADO' : scoreVal >= 60 ? 'OBSERVADO' : 'NO RECOMENDADO'}
+                      </div>
+                    </div>
+
                     {/* Resumen general */}
                     <div className="p-4 rounded-2xl bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900 flex items-center justify-between">
                       <div>
@@ -1219,454 +1201,173 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
 
             {activeMainTab === 'DISC' && (
             <div className="space-y-6 animate-in fade-in">
-              
-              {candidate.scores && candidate.scores.overall > 0 && candidate.detailedReport ? (
-                /* ── RESULTADOS REALES DE LA EVALUACIÓN ── */
-                <>
-                  {/* Encabezado con recomendación real */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              {loadingResults ? (
+                <p className="text-xs text-slate-400 text-center py-8">Cargando resultados DISC...</p>
+              ) : !hasDisc ? (
+                <div className="text-center py-12 space-y-3 bg-white dark:bg-[#182044] rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] p-8">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/20 text-amber-500 mx-auto flex items-center justify-center">
+                    <HelpCircle className="w-6 h-6" />
+                  </div>
+                  <h4 className="text-base font-bold text-slate-800 dark:text-white">Prueba DISC Pendiente</h4>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    El postulante aún no ha rendido la evaluación psicométrica de estilos conductuales DISC.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Encabezado con perfil DISC real del postulante */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-5 rounded-2xl bg-white dark:bg-[#182044] border border-[#DDE2EF] dark:border-[#2A3563] shadow-2xs">
                     <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-[#6B7494] uppercase tracking-wider block">Perfil Conductual Evaluado</span>
                       <h3 className="text-xl sm:text-2xl font-black text-[#1F2A5E] dark:text-white">
-                        Resultado:{' '}
-                        <span className={
-                          candidate.detailedReport.psychologistRecommendation === 'RECOMENDADO_FINALISTA' ? 'text-[#2FA58B]' :
-                          candidate.detailedReport.psychologistRecommendation === 'RECOMENDADO_CON_OBSERVACIONES' ? 'text-amber-500' :
-                          'text-rose-500'
-                        }>
-                          {candidate.detailedReport.psychologistRecommendation === 'RECOMENDADO_FINALISTA' ? 'RECOMENDADO FINALISTA' :
-                           candidate.detailedReport.psychologistRecommendation === 'RECOMENDADO_CON_OBSERVACIONES' ? 'RECOMENDADO CON OBSERVACIONES' :
-                           'NO RECOMENDADO'}
-                        </span>
+                        Resultado: <span className="text-[#84CC16]">{discResult.perfil_dominante || 'Dominante'}</span>
                       </h3>
                       <p className="text-xs text-[#6B7494] dark:text-[#9AA5C4]">
-                        Adecuación al perfil: <strong className="text-[#1F2A5E] dark:text-white">{candidate.detailedReport.jobFitPercentage}%</strong>
+                        Estilo de toma de decisiones, ritmo de trabajo y respuesta bajo presión
                       </p>
                     </div>
 
                     <div className="flex items-center gap-2 text-xs text-[#6B7494]">
-                      <span className="flex items-center gap-1 font-medium">
+                      <span className="flex items-center gap-1 font-medium bg-slate-50 dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
                         <Calendar className="w-3.5 h-3.5 text-[#5844D8]" />
-                        <span>Evaluado: {candidate.detailedReport.evaluationDate || candidate.completedAt?.slice(0, 10) || '—'}</span>
+                        <span>Evaluado: {new Date(discResult.completado_en || Date.now()).toLocaleDateString('es-PE', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
                       </span>
-                      <button type="button" className="p-1 rounded-md hover:bg-slate-100">
-                        <MoreVertical className="w-3.5 h-3.5" />
-                      </button>
                     </div>
                   </div>
 
-                  {/* Resumen del dictamen */}
-                  <p className="text-xs sm:text-sm text-[#4A5568] dark:text-[#CBD5E1] leading-relaxed bg-slate-50 dark:bg-[#151D3F] rounded-xl p-4 border border-[#DDE2EF] dark:border-[#2A3563]">
-                    {candidate.detailedReport.recommendationSummary}
-                  </p>
-
-                  {/* Puntajes por etapa - tarjetas visuales */}
-                  <div className="grid grid-cols-3 gap-3">
+                  {/* 4 Tarjetas de Puntos D, I, S, C Reales */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
-                      { label: 'Psicotécnica', sublabel: 'Etapa 1', val: candidate.scores?.stage1Psycho, color: '#6355DE', bg: 'bg-[#6355DE]/8 dark:bg-[#6355DE]/15' },
-                      { label: 'Emocional', sublabel: 'Etapa 2', val: candidate.scores?.stage2Emotional, color: '#2F5BA8', bg: 'bg-[#2F5BA8]/8 dark:bg-[#2F5BA8]/15' },
-                      { label: 'Casos Lab.', sublabel: 'Etapa 3', val: candidate.scores?.stage3WorkCases, color: '#2FA58B', bg: 'bg-[#2FA58B]/8 dark:bg-[#2FA58B]/15' }
-                    ].map(({ label, sublabel, val, color, bg }) => (
-                      <div key={label} className={`rounded-2xl p-4 ${bg} border border-[#DDE2EF]/60 dark:border-[#2A3563] flex flex-col items-center gap-2`}>
-                        <div className="relative w-16 h-16 flex items-center justify-center">
-                          <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                            <path strokeWidth="4" stroke="#E2E8F0" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                            <path
-                              strokeDasharray={`${val}, 100`}
-                              strokeLinecap="round"
-                              strokeWidth="4"
-                              stroke={color}
-                              fill="none"
-                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      { letter: 'D', label: 'Dominancia', val: discResult.conteo_d ?? 0, color: '#DC2626', desc: 'Metas, firmeza y resolución' },
+                      { letter: 'I', label: 'Influencia', val: discResult.conteo_i ?? 0, color: '#EA580C', desc: 'Comunicación y persuasión' },
+                      { letter: 'S', label: 'Estabilidad', val: discResult.conteo_s ?? 0, color: '#16A34A', desc: 'Paciencia y lealtad' },
+                      { letter: 'C', label: 'Cumplimiento', val: discResult.conteo_c ?? 0, color: '#2563EB', desc: 'Análisis y apego a normas' }
+                    ].map(({ letter, label, val, color, desc }) => (
+                      <div key={letter} className="rounded-2xl p-4 text-center border border-[#DDE2EF] dark:border-[#2A3563] bg-white dark:bg-[#182044] shadow-2xs space-y-1">
+                        <div className="text-2xl font-black" style={{ color }}>{letter}</div>
+                        <div className="text-2xl font-black text-slate-800 dark:text-white">{val} pts</div>
+                        <div className="text-xs font-bold text-slate-700 dark:text-slate-200">{label}</div>
+                        <div className="text-[10px] text-slate-400">{desc}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* RUEDA DISC INTERACTIVA CON PIN DEL POSTULANTE */}
+                  <div className="bg-white dark:bg-[#182044] rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] p-6 shadow-2xs flex flex-col items-center justify-center">
+                    <div className="relative w-80 h-80 sm:w-96 sm:h-96 flex items-center justify-center">
+                      
+                      {/* Ejes Cardinales */}
+                      <span className="absolute top-0 text-xs font-bold text-[#6B7494]">Extrovertido</span>
+                      <span className="absolute bottom-0 text-xs font-bold text-[#6B7494]">Introvertido</span>
+                      <span className="absolute left-0 text-xs font-bold text-[#6B7494]">Tareas</span>
+                      <span className="absolute right-0 text-xs font-bold text-[#6B7494]">Personas</span>
+
+                      {/* Vértices */}
+                      <span className="absolute top-6 left-6 text-[11px] font-semibold text-[#9AA5C4] -rotate-45">Dominante</span>
+                      <span className="absolute top-6 right-6 text-[11px] font-semibold text-[#9AA5C4] rotate-45">Influyente</span>
+                      <span className="absolute bottom-6 right-6 text-[11px] font-semibold text-[#9AA5C4] -rotate-45">Servicial</span>
+                      <span className="absolute bottom-6 left-6 text-[11px] font-semibold text-[#9AA5C4] rotate-45">Cumplido</span>
+
+                      {/* SVG Rueda Circular DISC */}
+                      <svg viewBox="0 0 300 300" className="w-64 h-64 sm:w-72 sm:h-72">
+                        <defs>
+                          <filter id="shadowDiscActual" x="-10%" y="-10%" width="120%" height="120%">
+                            <feDropShadow dx="0" dy="1" stdDeviation="1.5" floodOpacity="0.15" />
+                          </filter>
+                        </defs>
+
+                        {/* Círculos base */}
+                        <circle cx="150" cy="150" r="130" fill="#FAFAFA" stroke="#E2E8F0" strokeWidth="1.5" />
+                        <circle cx="150" cy="150" r="85" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1" />
+                        <circle cx="150" cy="150" r="40" fill="#FAFAFA" stroke="#E2E8F0" strokeWidth="1" />
+
+                        {/* 16 Líneas divisorias */}
+                        {Array.from({ length: 16 }).map((_, i) => {
+                          const angle = (i * 360) / 16;
+                          const rad = (angle * Math.PI) / 180;
+                          const x2 = 150 + 130 * Math.cos(rad);
+                          const y2 = 150 + 130 * Math.sin(rad);
+                          return (
+                            <line
+                              key={i}
+                              x1="150"
+                              y1="150"
+                              x2={x2}
+                              y2={y2}
+                              stroke="#E2E8F0"
+                              strokeWidth="1.2"
                             />
-                          </svg>
-                          <span className="absolute text-sm font-black" style={{ color }}>{val}%</span>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-xs font-bold text-[#161C3A] dark:text-white">{label}</p>
-                          <p className="text-[10px] text-[#6B7494]">{sublabel}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                          );
+                        })}
 
-                  {/* Competencias detalladas */}
-                  {candidate.detailedReport.competencies && candidate.detailedReport.competencies.length > 0 && (
-                    <div className="space-y-3">
-                      <h4 className="text-sm font-bold text-[#161C3A] dark:text-white">Competencias evaluadas</h4>
-                      {candidate.detailedReport.competencies.map((comp, i) => (
-                        <div key={i} className="space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-xs font-bold text-[#161C3A] dark:text-white">{comp.name}</p>
-                              <p className="text-[10px] text-[#6B7494]">{comp.category}</p>
-                            </div>
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              comp.level === 'SOBRESALIENTE' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' :
-                              comp.level === 'ADECUADO' ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400' :
-                              comp.level === 'EN_DESARROLLO' ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400' :
-                              'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400'
-                            }`}>
-                              {comp.level === 'SOBRESALIENTE' ? '⭐ Sobresaliente' :
-                               comp.level === 'ADECUADO' ? '✓ Adecuado' :
-                               comp.level === 'EN_DESARROLLO' ? '⚠ En Desarrollo' : '✗ Bajo'}
-                            </span>
-                          </div>
-                          <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all duration-700 ${
-                                comp.level === 'SOBRESALIENTE' ? 'bg-[#2FA58B]' :
-                                comp.level === 'ADECUADO' ? 'bg-[#2F5BA8]' :
-                                comp.level === 'EN_DESARROLLO' ? 'bg-amber-500' : 'bg-rose-500'
-                              }`}
-                              style={{ width: `${comp.score}%` }}
-                            />
-                          </div>
-                          <p className="text-[10px] text-[#6B7494] dark:text-[#9AA5C4]">{comp.description}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Fortalezas y Áreas de desarrollo */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {candidate.detailedReport.strengths && candidate.detailedReport.strengths.length > 0 && (
-                      <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 p-4 space-y-2">
-                        <h5 className="text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
-                          <Check className="w-3.5 h-3.5" />
-                          Fortalezas
-                        </h5>
-                        <ul className="space-y-1.5">
-                          {candidate.detailedReport.strengths.map((s, i) => (
-                            <li key={i} className="text-[11px] text-emerald-800 dark:text-emerald-300 flex items-start gap-1.5">
-                              <span className="mt-0.5 shrink-0">•</span>
-                              <span>{s}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {candidate.detailedReport.developmentAreas && candidate.detailedReport.developmentAreas.length > 0 && (
-                      <div className="rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 p-4 space-y-2">
-                        <h5 className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
-                          <GraduationCap className="w-3.5 h-3.5" />
-                          Áreas de Desarrollo
-                        </h5>
-                        <ul className="space-y-1.5">
-                          {candidate.detailedReport.developmentAreas.map((a, i) => (
-                            <li key={i} className="text-[11px] text-amber-800 dark:text-amber-300 flex items-start gap-1.5">
-                              <span className="mt-0.5 shrink-0">•</span>
-                              <span>{a}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                </>
-              ) : (
-                /* ── SIN RESULTADOS AÚN ── */
-                <>
-                  {/* Encabezado del Resultado: CONCILIADOR (IS)³ */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="space-y-1">
-                      <h3 className="text-xl sm:text-2xl font-black text-[#1F2A5E] dark:text-white">
-                        Resultado: <span className="text-[#84CC16]">{discResult?.perfil_dominante || 'Sin datos'}³</span>
-                      </h3>
-                    </div>
-
-                    <div className="flex items-center gap-2 text-xs text-[#6B7494]">
-                      <span className="flex items-center gap-1 font-medium">
-                        <Calendar className="w-3.5 h-3.5 text-[#5844D8]" />
-                        <span>Calificación: 10 octubre 2026</span>
-                      </span>
-
-                      <button type="button" className="p-1 rounded-md hover:bg-slate-100">
-                        <MoreVertical className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Párrafo explicativo del perfil Conciliador */}
-                  <p className="text-xs sm:text-sm text-[#4A5568] dark:text-[#CBD5E1] leading-relaxed">
-                    El Conciliador está orientado a las personas, tiende a ser el mediador del grupo y a buscar la calma
-                    en sus interacciones sociales. Le llena de energía estar rodeado de personas e interactuar con ellas.
-                    Busca mantener la estabilidad, evitando las confrontaciones y las críticas. Se muestra optimista y
-                    alegre. Le motiva aprender de otros y su conocimiento se alimenta de las historias de los demás, de lo
-                    que piensan o sienten ellos.
-                  </p>
-
-                  {/* Píldoras de rasgos: Optimista, Buena Escucha, Dispuesto */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    {['Optimista', 'Buena Escucha', 'Dispuesto'].map((trait, idx) => (
-                      <span
-                        key={idx}
-                        className="px-3 py-1 rounded-full bg-[#F7FEE7] dark:bg-[#365314]/20 border border-[#D9F99D] text-[#65A30D] text-xs font-bold"
-                      >
-                        {trait}
-                      </span>
-                    ))}
-                  </div>
-                </>
-              )}
-
-
-              {/* ========================================================================= */}
-              {/* RUEDA DISC INTERACTIVA (16 SEGMENTOS - EXACTA A CAPTURA 3) */}
-              {/* ========================================================================= */}
-              <div className="py-6 flex flex-col items-center justify-center">
-                <div className="relative w-80 h-80 sm:w-96 sm:h-96 flex items-center justify-center">
-                  
-                  {/* Ejes Cardinales */}
-                  <span className="absolute top-0 text-xs font-bold text-[#6B7494]">Extrovertido</span>
-                  <span className="absolute bottom-0 text-xs font-bold text-[#6B7494]">Introvertido</span>
-                  <span className="absolute left-0 text-xs font-bold text-[#6B7494]">Tareas</span>
-                  <span className="absolute right-0 text-xs font-bold text-[#6B7494]">Personas</span>
-
-                  {/* Vértices */}
-                  <span className="absolute top-6 left-6 text-[11px] font-semibold text-[#9AA5C4] -rotate-45">Dominante</span>
-                  <span className="absolute top-6 right-6 text-[11px] font-semibold text-[#9AA5C4] rotate-45">Influyente</span>
-                  <span className="absolute bottom-6 right-6 text-[11px] font-semibold text-[#9AA5C4] -rotate-45">Servicial</span>
-                  <span className="absolute bottom-6 left-6 text-[11px] font-semibold text-[#9AA5C4] rotate-45">Cumplido</span>
-
-                  {/* SVG Rueda Circular DISC */}
-                  <svg viewBox="0 0 300 300" className="w-64 h-64 sm:w-72 sm:h-72">
-                    <defs>
-                      <filter id="shadowDisc2" x="-10%" y="-10%" width="120%" height="120%">
-                        <feDropShadow dx="0" dy="1" stdDeviation="1.5" floodOpacity="0.1" />
-                      </filter>
-                    </defs>
-
-                    {/* Círculos base */}
-                    <circle cx="150" cy="150" r="130" fill="#FAFAFA" stroke="#E2E8F0" strokeWidth="1.5" />
-                    <circle cx="150" cy="150" r="85" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1" />
-                    <circle cx="150" cy="150" r="40" fill="#FAFAFA" stroke="#E2E8F0" strokeWidth="1" />
-
-                    {/* 16 Líneas divisorias */}
-                    {Array.from({ length: 16 }).map((_, i) => {
-                      const angle = (i * 360) / 16;
-                      const rad = (angle * Math.PI) / 180;
-                      const x2 = 150 + 130 * Math.cos(rad);
-                      const y2 = 150 + 130 * Math.sin(rad);
-                      return (
-                        <line
-                          key={i}
-                          x1="150"
-                          y1="150"
-                          x2={x2}
-                          y2={y2}
-                          stroke="#E2E8F0"
-                          strokeWidth="1.2"
-                        />
-                      );
-                    })}
-
-                    {/* Sector IS resaltado en VERDE LIMA */}
-                    <path
-                      d="M 150 150 L 270 150 A 130 130 0 0 1 261 199 Z"
-                      fill="#84CC16"
-                      opacity="0.9"
-                    />
-
-                    {/* Sectores etiquetas */}
-                    <text x="145" y="45" fontSize="9" fontWeight="bold" fill="#DC2626">D</text>
-                    <text x="175" y="55" fontSize="8" fontWeight="bold" fill="#EA580C">Di</text>
-                    <text x="205" y="75" fontSize="8" fontWeight="bold" fill="#D97706">DI</text>
-                    <text x="225" y="105" fontSize="8" fontWeight="bold" fill="#CA8A04">Id</text>
-                    <text x="240" y="135" fontSize="9" fontWeight="bold" fill="#EAB308">I</text>
-                    <text x="235" y="165" fontSize="8" fontWeight="bold" fill="#84CC16">Is</text>
-                    <text x="230" y="185" fontSize="9" fontWeight="900" fill="#FFFFFF">IS</text>
-                    <text x="205" y="225" fontSize="8" fontWeight="bold" fill="#16A34A">Si</text>
-                    <text x="175" y="245" fontSize="9" fontWeight="bold" fill="#10B981">S</text>
-                    <text x="140" y="250" fontSize="8" fontWeight="bold" fill="#0D9488">Sc</text>
-                    <text x="105" y="240" fontSize="8" fontWeight="bold" fill="#0D9488">SC</text>
-                    <text x="75" y="220" fontSize="8" fontWeight="bold" fill="#0284C7">Cs</text>
-                    <text x="55" y="190" fontSize="9" fontWeight="bold" fill="#2563EB">C</text>
-                    <text x="50" y="155" fontSize="8" fontWeight="bold" fill="#4F46E5">Cd</text>
-                    <text x="60" y="125" fontSize="8" fontWeight="bold" fill="#7C3AED">CD</text>
-                    <text x="80" y="95" fontSize="8" fontWeight="bold" fill="#9333EA">Dc</text>
-
-                    {/* Pin del postulante "JA 3" */}
-                    <g transform="translate(195, 160)">
-                      <circle cx="0" cy="0" r="14" fill="#1F2A5E" stroke="#FFFFFF" strokeWidth="2" filter="url(#shadowDisc2)" />
-                      <text x="0" y="4" textAnchor="middle" fontSize="9" fontWeight="bold" fill="#FFFFFF">JA</text>
-                      <circle cx="8" cy="8" r="5" fill="#84CC16" />
-                      <text x="8" y="11" textAnchor="middle" fontSize="6" fontWeight="bold" fill="#FFFFFF">3</text>
-                    </g>
-                  </svg>
-
-                </div>
-              </div>
-
-              {/* Sub-pestañas: Arquetipo vs Perfil DISC */}
-              <div className="flex items-center gap-4 border-b border-[#DDE2EF] dark:border-[#2A3563] pt-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveDiscSubTab('ARQUETIPO')}
-                  className={`pb-2 px-3 border-b-2 font-bold text-xs flex items-center gap-1.5 cursor-pointer ${
-                    activeDiscSubTab === 'ARQUETIPO'
-                      ? 'border-[#5844D8] text-[#5844D8] dark:text-[#8B7CFF]'
-                      : 'border-transparent text-[#6B7494]'
-                  }`}
-                >
-                  <Smile className="w-3.5 h-3.5" />
-                  <span>Arquetipo</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveDiscSubTab('PERFIL_DISC')}
-                  className={`pb-2 px-3 border-b-2 font-bold text-xs flex items-center gap-1.5 cursor-pointer ${
-                    activeDiscSubTab === 'PERFIL_DISC'
-                      ? 'border-[#5844D8] text-[#5844D8] dark:text-[#8B7CFF]'
-                      : 'border-transparent text-[#6B7494]'
-                  }`}
-                >
-                  <div className="w-3.5 h-3.5 rounded-full border border-current" />
-                  <span>Perfil DISC</span>
-                </button>
-              </div>
-
-              {/* SECCIÓN: INTENSIDAD DEL ARQUETIPO */}
-              <div className="bg-[#FAFAFA] dark:bg-[#151D3F] rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] p-5 space-y-5">
-                <h4 className="text-sm font-bold text-[#161C3A] dark:text-white">
-                  Intensidad del Arquetipo
-                </h4>
-
-                <div className="space-y-2 pt-2">
-                  <div className="relative h-6 flex items-center">
-                    <div className="absolute left-0 top-1 h-3 rounded-r-md bg-[#E11D48] w-[30%]" />
-                    <div className="absolute right-0 top-1.5 w-2 h-2 rounded-full bg-slate-300" />
-                  </div>
-
-                  <div className="flex justify-between text-xs text-[#9AA5C4] font-medium px-0.5 border-t border-slate-200 dark:border-slate-700 pt-1">
-                    {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
-                      <span key={num}>{num}</span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
-                  <div className="space-y-2 text-xs leading-relaxed text-[#6B7494] dark:text-[#9AA5C4]">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-[#161C3A] dark:text-white">Valores menores que 5</span>
-                      <span className="px-2 py-0.5 rounded-md bg-purple-50 text-[#5844D8] font-bold text-[10px]">
-                        Adaptable
-                      </span>
-                    </div>
-                    <p>
-                      La persona no presenta patrones de conducta muy definidos. Esto se puede presentar porque
-                      es capaz de adaptar su comportamiento a diferentes tipos de trabajo y relaciones laborales,
-                      o porque ha podido desarrollar aquellos comportamientos en su carrera que no corresponden
-                      con su patrón natural.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2 text-xs leading-relaxed text-[#6B7494] dark:text-[#9AA5C4]">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-[#161C3A] dark:text-white">Valores mayores que 5</span>
-                      <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[#6B7494] font-bold text-[10px]">
-                        Definido
-                      </span>
-                    </div>
-                    <p>
-                      La persona presenta patrones de conducta muy definidos y constantes. Casi siempre sus
-                      comportamientos corresponden con aquellos descritos en su arquetipo. Le puede resultar
-                      difícil adaptarse a trabajos y relaciones laborales que requieran comportamientos diferentes
-                      a sus patrones naturales.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* SECCIÓN: DESCRIPCIÓN (10 PREGUNTAS ACORDEÓN) */}
-              <div className="space-y-3 pt-2">
-                <h4 className="text-base font-extrabold text-[#1F2A5E] dark:text-white">
-                  Descripción
-                </h4>
-
-                <div className="divide-y divide-[#DDE2EF]/70 dark:divide-[#2A3563]/70 border border-[#DDE2EF] dark:border-[#2A3563] rounded-2xl overflow-hidden bg-white dark:bg-[#182044]">
-                  {ACCORDION_QUESTIONS.map((item, idx) => {
-                    const isOpen = openAccordions.has(idx);
-                    return (
-                      <div key={idx} className="transition-colors">
-                        <button
-                          type="button"
-                          onClick={() => toggleAccordion(idx)}
-                          className="w-full p-4 flex items-center justify-between text-left text-xs sm:text-sm font-bold text-[#161C3A] dark:text-white hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer"
-                        >
-                          <span>{item.q}</span>
-                          <div className="flex items-center gap-1.5 text-[#9AA5C4]">
-                            {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                          </div>
-                        </button>
-
-                        {isOpen && (
-                          <div className="px-4 pb-4 pt-1 text-xs text-[#6B7494] dark:text-[#9AA5C4] leading-relaxed bg-[#F8FAFC]/50 dark:bg-[#151D3F]/50">
-                            {item.a}
-                          </div>
+                        {/* Sector resaltado según perfil dominante */}
+                        {String(discResult.perfil_dominante).includes('D') ? (
+                          <path
+                            d="M 150 150 L 150 20 A 130 130 0 0 1 200 29 Z"
+                            fill="#DC2626"
+                            opacity="0.85"
+                          />
+                        ) : String(discResult.perfil_dominante).includes('I') ? (
+                          <path
+                            d="M 150 150 L 270 150 A 130 130 0 0 1 261 199 Z"
+                            fill="#EA580C"
+                            opacity="0.85"
+                          />
+                        ) : String(discResult.perfil_dominante).includes('C') ? (
+                          <path
+                            d="M 150 150 L 30 150 A 130 130 0 0 1 39 199 Z"
+                            fill="#2563EB"
+                            opacity="0.85"
+                          />
+                        ) : (
+                          <path
+                            d="M 150 150 L 150 280 A 130 130 0 0 1 200 271 Z"
+                            fill="#16A34A"
+                            opacity="0.85"
+                          />
                         )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
 
-              {/* SECCIÓN: SUBFACTORES DISC */}
-              <div className="bg-white dark:bg-[#182044] rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] p-5 space-y-4">
-                <h4 className="text-base font-extrabold text-[#1F2A5E] dark:text-white">
-                  Subfactores
-                </h4>
+                        {/* Sectores etiquetas */}
+                        <text x="145" y="45" fontSize="9" fontWeight="bold" fill="#DC2626">D</text>
+                        <text x="175" y="55" fontSize="8" fontWeight="bold" fill="#EA580C">Di</text>
+                        <text x="205" y="75" fontSize="8" fontWeight="bold" fill="#D97706">DI</text>
+                        <text x="225" y="105" fontSize="8" fontWeight="bold" fill="#CA8A04">Id</text>
+                        <text x="240" y="135" fontSize="9" fontWeight="bold" fill="#EAB308">I</text>
+                        <text x="235" y="165" fontSize="8" fontWeight="bold" fill="#84CC16">Is</text>
+                        <text x="230" y="185" fontSize="9" fontWeight="900" fill="#16A34A">IS</text>
+                        <text x="205" y="225" fontSize="8" fontWeight="bold" fill="#16A34A">Si</text>
+                        <text x="175" y="245" fontSize="9" fontWeight="bold" fill="#10B981">S</text>
+                        <text x="140" y="250" fontSize="8" fontWeight="bold" fill="#0D9488">Sc</text>
+                        <text x="105" y="240" fontSize="8" fontWeight="bold" fill="#0D9488">SC</text>
+                        <text x="75" y="220" fontSize="8" fontWeight="bold" fill="#0284C7">Cs</text>
+                        <text x="55" y="190" fontSize="9" fontWeight="bold" fill="#2563EB">C</text>
+                        <text x="50" y="155" fontSize="8" fontWeight="bold" fill="#4F46E5">Cd</text>
+                        <text x="60" y="125" fontSize="8" fontWeight="bold" fill="#7C3AED">CD</text>
+                        <text x="80" y="95" fontSize="8" fontWeight="bold" fill="#9333EA">Dc</text>
 
-                <div className="space-y-4 divide-y divide-[#DDE2EF]/60 dark:divide-[#2A3563]/60">
-                  {SUBFACTORES.map((sub, idx) => (
-                    <div key={idx} className="pt-3 first:pt-0 space-y-2">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <div className="space-y-1 max-w-xl">
-                          <span className="text-xs font-bold text-[#161C3A] dark:text-white block">
-                            {sub.code}
-                          </span>
-                          <p className="text-[11px] text-[#6B7494] dark:text-[#9AA5C4] leading-relaxed">
-                            {sub.desc}
-                          </p>
-                        </div>
-
-                        <div className="w-full sm:w-48 shrink-0 space-y-1">
-                          <span className="text-xs font-bold text-[#161C3A] dark:text-white block text-right">
-                            {sub.val} / 10
-                          </span>
-                          <div className={`w-full h-2 rounded-full ${sub.trackColor} overflow-hidden`}>
-                            <div 
-                              className={`h-full rounded-full ${sub.color}`} 
-                              style={{ width: `${sub.val * 10}%` }} 
-                            />
-                          </div>
-                        </div>
-                      </div>
+                        {/* Pin del postulante posicionado según resultados reales */}
+                        {(() => {
+                          // Coordenadas calculadas según el perfil dominante
+                          const isD = String(discResult.perfil_dominante).includes('D');
+                          const isI = String(discResult.perfil_dominante).includes('I');
+                          const isC = String(discResult.perfil_dominante).includes('C');
+                          const pinX = isD ? (isI ? 185 : 155) : (isC ? 80 : 195);
+                          const pinY = isD ? 75 : (isC ? 175 : 160);
+                          return (
+                            <g transform={`translate(${pinX}, ${pinY})`}>
+                              <circle cx="0" cy="0" r="14" fill="#1F2A5E" stroke="#FFFFFF" strokeWidth="2" filter="url(#shadowDiscActual)" />
+                              <text x="0" y="4" textAnchor="middle" fontSize="9" fontWeight="bold" fill="#FFFFFF">{initials}</text>
+                            </g>
+                          );
+                        })()}
+                      </svg>
                     </div>
-                  ))}
+                  </div>
                 </div>
-              </div>
-
-              {/* TARJETA: COMPARACIÓN DE PERFILES LABORALES */}
-              <div className="bg-white dark:bg-[#182044] rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] p-5 shadow-2xs flex items-center justify-between gap-4">
-                <span className="text-base font-bold text-[#1F2A5E] dark:text-white">
-                  Comparación de perfiles laborales
-                </span>
-
-                <button
-                  type="button"
-                  onClick={() => setShowProfileComparisonDrawer(true)}
-                  className="p-2.5 rounded-xl border border-[#DDE2EF] dark:border-[#2A3563] hover:border-[#5844D8] text-[#1F2A5E] dark:text-[#5B8AE0] hover:bg-[#EEF2FF] cursor-pointer transition-colors shadow-2xs"
-                  title="Abrir comparación de perfiles laborales"
-                >
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-
+              )}
             </div>
           )}
 
-          {/* PESTAÑA COMPETENCIAS 🎓 */}
           {activeMainTab === 'COMPETENCIAS' && (
             <div className="space-y-5 animate-in fade-in">
               <h3 className="text-lg font-bold text-[#1F2A5E] dark:text-white">
