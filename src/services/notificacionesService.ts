@@ -13,6 +13,37 @@ export interface Notificacion {
 
 export const NotificacionesService = {
   /**
+   * Crea una nueva notificación en Supabase
+   */
+  async crearNotificacion(payload: {
+    tipo: 'CANDIDATO_INGRESO' | 'CANDIDATO_COMPLETO' | 'CANDIDATO_ETAPA' | 'CANDIDATO_REGISTRADO' | 'SISTEMA';
+    titulo: string;
+    mensaje: string;
+    candidato_id?: string;
+    proceso_id?: string;
+  }): Promise<boolean> {
+    try {
+      const { error } = await supabase.from('notificaciones').insert({
+        tipo: payload.tipo,
+        titulo: payload.titulo,
+        mensaje: payload.mensaje,
+        candidato_id: payload.candidato_id,
+        proceso_id: payload.proceso_id,
+        leido: false,
+        creado_en: new Date().toISOString()
+      });
+      if (error) {
+        console.warn('[NotificacionesService] Error al insertar notificación:', error.message);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.warn('[NotificacionesService] Excepción al crear notificación:', err);
+      return false;
+    }
+  },
+
+  /**
    * Obtiene las últimas notificaciones (máximo 50)
    */
   async getNotificaciones(limit = 50): Promise<Notificacion[]> {

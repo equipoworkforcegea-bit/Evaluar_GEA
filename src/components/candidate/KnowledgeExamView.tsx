@@ -12,11 +12,15 @@ import {
 } from 'lucide-react';
 import { getQuestionsForTopic, QuestionData } from '../../data/questionnairesData';
 import { EvaluacionesService } from '../../services/evaluacionesService';
+import { NotificacionesService } from '../../services/notificacionesService';
 
 interface KnowledgeExamViewProps {
   topicName: string;
   difficulty?: 'Personalizada' | 'Baja' | 'Media' | 'Alta';
   questionCount?: number;
+  questionsLow?: number;
+  questionsMed?: number;
+  questionsHigh?: number;
   candidateId?: string;
   processId?: string;
   onComplete: (score: number, maxScore: number, correctCount: number) => void;
@@ -26,13 +30,35 @@ export const KnowledgeExamView: React.FC<KnowledgeExamViewProps> = ({
   topicName,
   difficulty = 'Media',
   questionCount = 20,
+  questionsLow,
+  questionsMed,
+  questionsHigh,
   candidateId = 'cand_invitado',
   processId = 'proc_invitado',
   onComplete
 }) => {
-  // 1. Obtener las 20 preguntas correspondientes al tema configurado
+  // 1. Obtener las preguntas del tema configurado respetando el desglose por nivel de dificultad
   const [questions] = useState<QuestionData[]>(() => {
-    return getQuestionsForTopic(topicName, difficulty, questionCount);
+    const hasCustomBreakdown = questionsLow !== undefined || questionsMed !== undefined || questionsHigh !== undefined;
+    const breakdown = hasCustomBreakdown ? {
+      low: questionsLow ?? 0,
+      med: questionsMed ?? 0,
+      high: questionsHigh ?? 0
+    } : undefined;
+
+    const targetTotal = hasCustomBreakdown
+      ? ((questionsLow || 0) + (questionsMed || 0) + (questionsHigh || 0))
+      : questionCount;
+
+    const raw = getQuestionsForTopic(topicName, difficulty, targetTotal || 20, breakdown);
+    return raw.map((q) => {
+      // Barajar las opciones aleatoriamente para este intento de examen del postulante
+      const shuffledOptions = [...q.options].sort(() => Math.random() - 0.5);
+      return {
+        ...q,
+        options: shuffledOptions
+      };
+    });
   });
 
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -108,9 +134,9 @@ export const KnowledgeExamView: React.FC<KnowledgeExamViewProps> = ({
 
     let correctCount = 0;
     const formattedAnswers = questions.map((q) => {
-      const selected = selectedAnswers[q.id] || '';
-      const correctOpt = q.options.find((o) => o.isCorrect)?.text || '';
-      const isCorrect = selected === correctOpt;
+      const selected = (selectedAnswers[q.id] || '').trim();
+      const correctOpt = (q.options.find((o) => o.isCorrect)?.text || '').trim();
+      const isCorrect = Boolean(selected && correctOpt && selected === correctOpt);
       if (isCorrect) correctCount++;
       return {
         preguntaId: q.id,
@@ -136,16 +162,25 @@ export const KnowledgeExamView: React.FC<KnowledgeExamViewProps> = ({
     // Guardar en Supabase tabla evaluaciones_conocimientos y LocalStorage
     try {
       await EvaluacionesService.guardarResultadoConocimientos({
-        candidatoId: candidatoId || 'cand_oficial',
-        procesoId: procesoId || 'proc_oficial',
+        candidatoId: candidateId || 'cand_oficial',
+        procesoId: processId || 'proc_oficial',
         tema: topicName || 'General',
-        dificultad: dificultad || 'Media',
+        dificultad: difficulty || 'Media',
         puntaje: score,
         puntajeMaximo: maxScore,
         totalPreguntas: total,
         aciertos: correctCount,
         errores: total - correctCount,
         respuestas: formattedAnswers
+      });
+
+      // Disparar notificación en tiempo real de examen finalizado
+      NotificacionesService.crearNotificacion({
+        tipo: 'CANDIDATO_COMPLETO',
+        titulo: 'Postulante completó evaluación de conocimientos',
+        mensaje: `Evaluación de "${topicName}" finalizada con ${score}/20 pts (${correctCount} aciertos).`,
+        candidato_id: candidateId,
+        proceso_id: processId
       });
     } catch (saveErr) {
       console.warn('[KnowledgeExamView] Error al guardar resultados:', saveErr);
@@ -158,7 +193,7 @@ export const KnowledgeExamView: React.FC<KnowledgeExamViewProps> = ({
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
-  // Pantalla de Resultados al finalizar
+  // Pantalla de confirmación al finalizar (sin revelar puntajes al postulante)
   if (isFinished && resultsSummary) {
     return (
       <div 
@@ -167,42 +202,21 @@ export const KnowledgeExamView: React.FC<KnowledgeExamViewProps> = ({
           background: 'linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 40%, #FAF5FF 100%)',
         }}
       >
-        <div className="w-full max-w-xl bg-white rounded-3xl shadow-xl border border-violet-100 p-6 sm:p-9 text-center space-y-6 animate-in zoom-in-95">
-          <div className="w-16 h-16 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
-            <CheckCircle2 className="w-8 h-8" />
+        <div className="w-full max-w-lg bg-white rounded-3xl shadow-xl border border-violet-100 p-8 sm:p-10 text-center space-y-6 animate-in zoom-in-95">
+          <div className="w-20 h-20 rounded-full bg-emerald-50 border-2 border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
+            <CheckCircle2 className="w-10 h-10" />
           </div>
 
-          <div>
-            <span className="text-xs font-bold text-purple-700 uppercase tracking-widest block mb-1">
+          <div className="space-y-2">
+            <span className="text-xs font-bold text-emerald-600 uppercase tracking-widest block">
               Cuestionario Completado
             </span>
             <h2 className="text-2xl font-black text-slate-900 tracking-tight">
               {topicName}
             </h2>
-            <p className="text-xs text-slate-500 mt-1">
-              Tus respuestas han sido procesadas y guardadas satisfactoriamente en el sistema oficial de selección.
+            <p className="text-xs sm:text-sm text-slate-500 pt-1 leading-relaxed">
+              Tus respuestas han sido procesadas y guardadas satisfactoriamente en el sistema oficial de selección. El equipo de reclutamiento evaluará los resultados correspondientes.
             </p>
-          </div>
-
-          <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 grid grid-cols-3 gap-3">
-            <div>
-              <span className="text-[11px] text-slate-500 block">Puntaje Obtenido</span>
-              <span className="text-xl sm:text-2xl font-black text-purple-700">
-                {resultsSummary.score} <span className="text-xs font-bold text-slate-400">/ 20</span>
-              </span>
-            </div>
-            <div>
-              <span className="text-[11px] text-slate-500 block">Aciertos</span>
-              <span className="text-xl sm:text-2xl font-black text-emerald-600">
-                {resultsSummary.correctCount} <span className="text-xs font-bold text-slate-400">/ {resultsSummary.totalCount}</span>
-              </span>
-            </div>
-            <div>
-              <span className="text-[11px] text-slate-500 block">Efectividad</span>
-              <span className="text-xl sm:text-2xl font-black text-slate-900">
-                {resultsSummary.percentage}%
-              </span>
-            </div>
           </div>
 
           <button

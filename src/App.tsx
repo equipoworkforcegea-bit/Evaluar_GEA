@@ -300,13 +300,16 @@ function ProcesosInvitadosViewWrapper({
     );
   }
 
-  // 2. Si la prueba activa es un cuestionario de Conocimientos (20 preguntas)
+  // 2. Si la prueba activa es un cuestionario de Conocimientos
   if (activeExam?.type === 'KNOWLEDGE') {
     return (
       <KnowledgeExamView
         topicName={activeExam.topicName || 'Planificación estratégica'}
         difficulty={activeExam.difficulty || 'Media'}
         questionCount={activeExam.questionCount || 20}
+        questionsLow={activeExam.questionsLow}
+        questionsMed={activeExam.questionsMed}
+        questionsHigh={activeExam.questionsHigh}
         candidateId={activeExam.candidateId || candidate.id}
         processId={activeExam.testId}
         onComplete={(_score, _max, _correct) => {

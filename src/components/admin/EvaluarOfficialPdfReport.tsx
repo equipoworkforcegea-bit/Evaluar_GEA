@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { EvaluacionesService } from '../../services/evaluacionesService';
 import { createPortal } from 'react-dom';
 import { Candidate, EvaluationTest } from '../../types';
 import { 
@@ -14,7 +15,8 @@ import {
   FileText,
   Printer,
   X,
-  Download
+  Download,
+  BookOpen
 } from 'lucide-react';
 
 interface EvaluarOfficialPdfReportProps {
@@ -62,14 +64,46 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
     ? new Date(candidate.completedAt).toLocaleDateString('es-PE', { day: 'numeric', month: 'long', year: 'numeric' })
     : new Date().toLocaleDateString('es-PE', { day: 'numeric', month: 'long', year: 'numeric' });
 
-  // 1. Puntaje General Real del Postulante
-  const overallScore = candidate.scores?.overall != null 
-    ? Math.round(candidate.scores.overall) 
-    : (candidate.detailedReport?.jobFitPercentage != null 
-        ? Math.round(candidate.detailedReport.jobFitPercentage) 
-        : ((candidate as any).puntaje != null 
-            ? Math.round((candidate as any).puntaje) 
-            : 0));
+  // Cargar evaluaciones reales (Conocimientos y DISC)
+  const [knowledgeResults, setKnowledgeResults] = useState<any[]>([]);
+  const [discResult, setDiscResult] = useState<any | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchEvals = async () => {
+      try {
+        const [kList, dRes] = await Promise.all([
+          EvaluacionesService.obtenerResultadosConocimientos(candidate.id, process?.id, candidate.email),
+          EvaluacionesService.obtenerResultadoDISC(candidate.id, process?.id, candidate.email)
+        ]);
+        if (isMounted) {
+          setKnowledgeResults(kList || []);
+          setDiscResult(dRes || null);
+        }
+      } catch (err) {
+        console.warn('[EvaluarOfficialPdfReport] Error cargando evaluaciones:', err);
+      }
+    };
+    fetchEvals();
+    return () => { isMounted = false; };
+  }, [candidate.id, candidate.email, process?.id]);
+
+  const hasKnowledge = knowledgeResults.length > 0;
+  const avgKnowledgeScore20 = hasKnowledge
+    ? Math.round((knowledgeResults.reduce((sum, item) => sum + (Number(item.puntaje) || 0), 0) / knowledgeResults.length) * 10) / 10
+    : 0;
+  const avgKnowledgePercent = hasKnowledge ? Math.round((avgKnowledgeScore20 / 20) * 100) : 0;
+
+  // 1. Puntaje General Real del Postulante (ponderado con conocimientos y DISC si existe)
+  const rawOverall = candidate.scores?.overall != null && candidate.scores.overall > 0
+    ? Math.round(candidate.scores.overall)
+    : (candidate.detailedReport?.jobFitPercentage != null && candidate.detailedReport.jobFitPercentage > 0
+        ? Math.round(candidate.detailedReport.jobFitPercentage)
+        : ((candidate as any).puntaje != null && (candidate as any).puntaje > 0
+            ? Math.round((candidate as any).puntaje)
+            : (hasKnowledge ? avgKnowledgePercent : 0)));
+
+  const overallScore = rawOverall;
 
   const isAdecuado = overallScore >= 75;
   const isEnDesarrollo = overallScore >= 50 && overallScore < 75;
@@ -415,6 +449,38 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
                   </div>
                 </div>
 
+                {/* Barra Prueba de Conocimientos si existe */}
+                {hasKnowledge && (
+                  <div className="space-y-2 pt-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-zinc-700">
+                      <div className="flex items-center gap-1.5 text-purple-700">
+                        <BookOpen className="w-4 h-4 text-purple-500" />
+                        <span className="uppercase text-[11px] tracking-wider">Pruebas de Conocimiento</span>
+                      </div>
+                      <span className="font-extrabold text-purple-600">{avgKnowledgeScore20}/20 pts ({avgKnowledgePercent}%)</span>
+                    </div>
+                    <div className="w-full bg-purple-50 h-3 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full rounded-full bg-purple-600 transition-all" 
+                        style={{ width: `${avgKnowledgePercent}%` }} 
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Perfil Conductual DISC si existe */}
+                {discResult && (
+                  <div className="p-3 rounded-xl bg-lime-50 border border-lime-200 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold text-lime-800 uppercase tracking-wider block">Perfil Conductual DISC</span>
+                      <span className="text-xs font-black text-lime-900">{discResult.perfil_dominante || 'Completado'}</span>
+                    </div>
+                    <span className="text-[10px] text-lime-700 font-semibold">
+                      D:{discResult.conteo_d ?? 0} I:{discResult.conteo_i ?? 0} S:{discResult.conteo_s ?? 0} C:{discResult.conteo_c ?? 0}
+                    </span>
+                  </div>
+                )}
+
               </div>
 
               {/* Footer Página 1 */}
@@ -495,10 +561,36 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
                 </thead>
                 <tbody className="divide-y divide-zinc-200 font-medium">
                   <tr>
-                    <td className="p-3 text-zinc-800 font-bold">Competencias</td>
+                    <td className="p-3 text-zinc-800 font-bold">Competencias Laborales</td>
                     <td className="p-3 text-center text-zinc-600">{overallScore}/100</td>
                     <td className="p-3 text-right text-zinc-900 font-bold">{overallScore}/100</td>
                   </tr>
+                  {hasKnowledge && knowledgeResults.map((k, ki) => {
+                    const sc = Number(k.puntaje ?? 0);
+                    const mx = Number(k.puntaje_maximo ?? 20);
+                    const pct = Math.round((sc / mx) * 100);
+                    return (
+                      <tr key={ki} className="bg-purple-50/30">
+                        <td className="p-3 text-purple-900 font-bold flex items-center gap-2">
+                          <BookOpen className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                          <span>Conocimiento: {k.tema || 'Técnico'}</span>
+                        </td>
+                        <td className="p-3 text-center text-purple-800 font-semibold">{sc}/{mx} pts ({k.aciertos ?? sc} aciertos)</td>
+                        <td className="p-3 text-right text-purple-900 font-bold">{pct}/100</td>
+                      </tr>
+                    );
+                  })}
+                  {discResult && (
+                    <tr className="bg-lime-50/30">
+                      <td className="p-3 text-lime-900 font-bold">
+                        Estilo Conductual DISC ({discResult.perfil_dominante})
+                      </td>
+                      <td className="p-3 text-center text-lime-800 font-medium text-[11px]">
+                        D: {discResult.conteo_d ?? 0} · I: {discResult.conteo_i ?? 0} · S: {discResult.conteo_s ?? 0} · C: {discResult.conteo_c ?? 0}
+                      </td>
+                      <td className="p-3 text-right text-lime-900 font-bold">100/100</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

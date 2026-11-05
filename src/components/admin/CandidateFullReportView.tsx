@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { EvaluacionesService } from '../../services/evaluacionesService';
 import { Candidate, EvaluationTest } from '../../types';
 import { ExportReportModal } from './ExportReportModal';
 import { 
@@ -50,7 +51,7 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
   onMoveToNoDeseados,
   onInviteToProcess
 }) => {
-  const [activeMainTab, setActiveMainTab] = useState<'DISC' | 'COMPETENCIAS'>('DISC');
+  const [activeMainTab, setActiveMainTab] = useState<'CONOCIMIENTOS' | 'DISC' | 'COMPETENCIAS'>('CONOCIMIENTOS');
   const [activeDiscSubTab, setActiveDiscSubTab] = useState<'ARQUETIPO' | 'PERFIL_DISC'>('ARQUETIPO');
   const [candidateMenuOpen, setCandidateMenuOpen] = useState<boolean>(false);
   const [showProfileComparisonDrawer, setShowProfileComparisonDrawer] = useState<boolean>(false);
@@ -66,6 +67,47 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
   const [selectedTargetProcessId, setSelectedTargetProcessId] = useState<string>('');
   const [openAccordions, setOpenAccordions] = useState<Set<number>>(new Set([0, 1])); // Primero y segundo abiertos por defecto
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // ── Resultados de evaluaciones reales ──
+  const [knowledgeResults, setKnowledgeResults] = useState<any[]>([]);
+  const [discResult, setDiscResult] = useState<any | null>(null);
+  const [loadingResults, setLoadingResults] = useState<boolean>(true);
+  const [expandedExamIndex, setExpandedExamIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchResults = async () => {
+      setLoadingResults(true);
+      try {
+        const [kList, dRes] = await Promise.all([
+          EvaluacionesService.obtenerResultadosConocimientos(candidate.id, process?.id, candidate.email),
+          EvaluacionesService.obtenerResultadoDISC(candidate.id, process?.id, candidate.email)
+        ]);
+        if (isMounted) {
+          setKnowledgeResults(kList || []);
+          setDiscResult(dRes || null);
+          if (kList && kList.length > 0) {
+            setActiveMainTab('CONOCIMIENTOS');
+          } else if (dRes) {
+            setActiveMainTab('DISC');
+          }
+        }
+      } catch (err) {
+        console.warn('[CandidateFullReportView] Error cargando evaluaciones:', err);
+      } finally {
+        if (isMounted) setLoadingResults(false);
+      }
+    };
+    fetchResults();
+    return () => { isMounted = false; };
+  }, [candidate.id, candidate.email, process?.id]);
+
+  const hasKnowledge = knowledgeResults.length > 0;
+  const hasDisc = Boolean(discResult);
+  const avgKnowledgeScore20 = hasKnowledge
+    ? Math.round((knowledgeResults.reduce((sum, item) => sum + (Number(item.puntaje) || 0), 0) / knowledgeResults.length) * 10) / 10
+    : 0;
+  const avgKnowledgePercent = hasKnowledge ? Math.round((avgKnowledgeScore20 / 20) * 100) : 0;
 
   const availableProcesses = (allProcesses && allProcesses.length > 0) ? allProcesses : [
     { id: 'proc-gea-01', title: 'POSTPAGO CHILE PRUEBA 2026 09 28' } as EvaluationTest,
@@ -94,7 +136,9 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
     .map(w => w[0].toUpperCase())
     .join('');
 
-  const scoreVal = candidate.scores?.overall || 87;
+  const scoreVal = (candidate.scores?.overall && candidate.scores.overall > 0) 
+    ? candidate.scores.overall 
+    : (hasKnowledge ? avgKnowledgePercent : 0);
 
 
   // Preguntas del acordeón de descripción (las 10 preguntas exactas de la captura de Evaluar)
@@ -919,7 +963,7 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
 
           {/* Gauge Circular de Adecuación - Puntaje Real */}
           <div className="flex flex-col items-center justify-center pt-3 space-y-4">
-            {candidate.scores && candidate.scores.overall > 0 ? (
+            {(candidate.scores && candidate.scores.overall > 0) || hasKnowledge ? (
               <>
                 {/* Círculo con promedio final */}
                 <div className="relative w-28 h-28 flex items-center justify-center">
@@ -1036,6 +1080,19 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
             <div className="flex items-center gap-8">
               
               {/* Tab 1: DISC */}
+              {/* Tab Conocimientos */}
+              <button
+                type="button"
+                onClick={() => setActiveMainTab('CONOCIMIENTOS')}
+                className={`flex items-center gap-2 pb-2 -mb-3 border-b-2 font-bold text-sm cursor-pointer transition-colors ${
+                  activeMainTab === 'CONOCIMIENTOS'
+                    ? 'border-[#5844D8] text-[#5844D8] dark:text-[#8B7CFF]'
+                    : 'border-transparent text-[#6B7494] hover:text-[#161C3A]'
+                }`}
+              >
+                <BookOpen className="w-4 h-4 text-purple-500" />
+                <span>Conocimientos</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setActiveMainTab('DISC')}
@@ -1074,7 +1131,88 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
             </span>
           </div>
 
-          {activeMainTab === 'DISC' && (
+          {/* ── PANEL CONOCIMIENTOS ── */}
+            {activeMainTab === 'CONOCIMIENTOS' && (
+              <div className="space-y-4 animate-in fade-in">
+                {loadingResults ? (
+                  <p className="text-xs text-slate-400 text-center py-8">Cargando resultados...</p>
+                ) : !hasKnowledge ? (
+                  <div className="text-center py-8 space-y-2">
+                    <BookOpen className="w-10 h-10 text-slate-200 mx-auto" />
+                    <p className="text-sm text-slate-400">No se han registrado evaluaciones de conocimiento</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Resumen general */}
+                    <div className="p-4 rounded-2xl bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900 flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-bold text-purple-700 dark:text-purple-300 uppercase tracking-wider">Promedio General</p>
+                        <p className="text-2xl font-black text-purple-700 dark:text-purple-200">{avgKnowledgeScore20} <span className="text-sm font-semibold text-purple-500">/ 20 pts</span></p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[11px] text-slate-500">{knowledgeResults.length} cuestionario(s) completados</p>
+                        <p className="text-xs font-bold text-purple-600">{avgKnowledgePercent}% de efectividad</p>
+                      </div>
+                    </div>
+
+                    {/* Lista de cuestionarios */}
+                    <div className="space-y-2">
+                      {knowledgeResults.map((item, idx) => {
+                        const score = Number(item.puntaje ?? 0);
+                        const maxScore = Number(item.puntaje_maximo ?? 20);
+                        const pct = Math.round((score / maxScore) * 100);
+                        const isExpanded = expandedExamIndex === idx;
+                        const scoreColor = pct >= 80 ? '#2FA58B' : pct >= 60 ? '#F59E0B' : '#EF4444';
+                        return (
+                          <div key={idx} className="rounded-xl border border-[#DDE2EF] dark:border-[#2A3563] bg-white dark:bg-[#182044] overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedExamIndex(isExpanded ? null : idx)}
+                              className="w-full flex items-center justify-between p-4 text-left hover:bg-slate-50 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${scoreColor}20` }}>
+                                  <FileText className="w-4 h-4" style={{ color: scoreColor }} />
+                                </div>
+                                <div>
+                                  <p className="text-xs font-bold text-[#161C3A] dark:text-white">{item.tema || 'Cuestionario'}</p>
+                                  <p className="text-[10px] text-[#6B7494]">
+                                    {item.aciertos ?? '—'}/{item.total_preguntas ?? (item.puntaje_maximo ?? '—')} aciertos · {new Date(item.completado_en).toLocaleDateString('es-PE')}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="text-sm font-black" style={{ color: scoreColor }}>{score}/{maxScore} pts</span>
+                                {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                              </div>
+                            </button>
+                            {isExpanded && Array.isArray(item.respuestas) && item.respuestas.length > 0 && (
+                              <div className="border-t border-[#DDE2EF] dark:border-[#2A3563] px-4 pb-4 pt-3 space-y-2 max-h-64 overflow-y-auto">
+                                {item.respuestas.map((r: any, ri: number) => (
+                                  <div key={ri} className="flex items-start gap-2 text-[11px]">
+                                    {r.esCorrecta
+                                      ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                                      : <XCircle className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />}
+                                    <div>
+                                      <p className="text-slate-700 dark:text-slate-300 line-clamp-2">{r.enunciado}</p>
+                                      <p className={`font-semibold mt-0.5 ${r.esCorrecta ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                        Resp: {r.respuestaSeleccionada || '—'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {activeMainTab === 'DISC' && (
             <div className="space-y-6 animate-in fade-in">
               
               {candidate.scores && candidate.scores.overall > 0 && candidate.detailedReport ? (
@@ -1227,7 +1365,7 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="space-y-1">
                       <h3 className="text-xl sm:text-2xl font-black text-[#1F2A5E] dark:text-white">
-                        Resultado: <span className="text-[#84CC16]">CONCILIADOR (IS)³</span>
+                        Resultado: <span className="text-[#84CC16]">{discResult?.perfil_dominante || 'Sin datos'}³</span>
                       </h3>
                     </div>
 

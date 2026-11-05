@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { supabase } from '../../services/supabaseClient';
 import * as XLSX from 'xlsx';
 import { Candidate, EvaluationTest } from '../../types';
 import { 
@@ -29,6 +30,33 @@ export const InformesView: React.FC<InformesViewProps> = ({
   const [selectedTestId, setSelectedTestId] = useState<string>('TODOS');
   const [statusFilter, setStatusFilter] = useState<string>('TODOS');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [candidateScores, setCandidateScores] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadScores = async () => {
+      try {
+        const { data } = await supabase.from('evaluaciones_conocimientos').select('candidato_id, puntaje, puntaje_maximo');
+        if (data && data.length > 0 && isMounted) {
+          const map: Record<string, number> = {};
+          data.forEach(item => {
+            const sc = Number(item.puntaje || 0);
+            const mx = Number(item.puntaje_maximo || 20);
+            const pct = Math.round((sc / mx) * 100);
+            // Guardar el puntaje más alto o reciente
+            if (!map[item.candidato_id] || pct > map[item.candidato_id]) {
+              map[item.candidato_id] = pct;
+            }
+          });
+          setCandidateScores(map);
+        }
+      } catch (err) {
+        console.warn('[InformesView] Error cargando puntajes:', err);
+      }
+    };
+    loadScores();
+    return () => { isMounted = false; };
+  }, []);
 
   // Filtrado de candidatos
   const filteredCandidates = useMemo(() => {
@@ -192,20 +220,31 @@ export const InformesView: React.FC<InformesViewProps> = ({
                         {testTitle}
                       </td>
                       <td className="p-3.5 text-center font-bold">
-                        {c.scores?.overall ? (
-                          <span className={`px-2 py-0.5 rounded-md ${
-                            c.scores.overall >= 80 ? 'bg-[#2FA58B]/10 text-[#2FA58B]' : 'bg-[#F28C28]/10 text-[#F28C28]'
-                          }`}>
-                            {c.scores.overall}%
-                          </span>
-                        ) : (
-                          <span className="text-[#6B7494]">—</span>
-                        )}
+                        {(() => {
+                          const resolvedScore = c.scores?.overall || candidateScores[c.id] || (c as any).puntaje;
+                          return resolvedScore ? (
+                            <span className={`px-2 py-0.5 rounded-md ${
+                              resolvedScore >= 80 ? 'bg-[#2FA58B]/10 text-[#2FA58B]' : 'bg-[#F28C28]/10 text-[#F28C28]'
+                            }`}>
+                              {resolvedScore}%
+                            </span>
+                          ) : (
+                            <span className="text-[#6B7494]">—</span>
+                          );
+                        })()}
                       </td>
                       <td className="p-3.5 text-center">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#1F2A5E]/10 text-[#1F2A5E] dark:text-[#5B8AE0]">
-                          {c.status || 'INVITADO'}
-                        </span>
+                        {(() => {
+                          const resolvedScore = c.scores?.overall || candidateScores[c.id] || (c as any).puntaje;
+                          const effectiveStatus = resolvedScore ? 'EVALUADO' : (c.status || 'INVITADO');
+                          return (
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              effectiveStatus === 'EVALUADO' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' : 'bg-[#1F2A5E]/10 text-[#1F2A5E] dark:text-[#5B8AE0]'
+                            }`}>
+                              {effectiveStatus}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="p-3.5 text-center">
                         <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#2FA58B]">

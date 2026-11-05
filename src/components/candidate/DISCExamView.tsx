@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, Wifi, Lock, ShieldCheck } from 'lucide-react';
 import discMirrorImg from '../../assets/disc_mirror.jpg';
 import discColleaguesImg from '../../assets/disc_colleagues.jpg';
 import { EvaluacionesService } from '../../services/evaluacionesService';
+import { NotificacionesService } from '../../services/notificacionesService';
 
 const SECTION1_BLOCKS: { left: string[]; right: string[] }[] = [
   // Block 1 (Question 2)
@@ -155,6 +156,15 @@ export const DISCExamView: React.FC<DISCExamViewProps> = ({
         conteoS,
         conteoC,
         perfilDominante
+      });
+
+      // Disparar notificación en tiempo real
+      NotificacionesService.crearNotificacion({
+        tipo: 'CANDIDATO_COMPLETO',
+        titulo: 'Postulante completó prueba DISC',
+        mensaje: `Evaluación conductual DISC finalizada con perfil "${perfilDominante}".`,
+        candidato_id: candidateId,
+        proceso_id: processId
       });
 
       onComplete(answers);

@@ -1616,14 +1616,301 @@ export const QUESTIONS_BY_TOPIC: Record<string, QuestionData[]> = {
   ]
 };
 
+export interface QuestionBreakdown {
+  low?: number;
+  med?: number;
+  high?: number;
+}
+
+// Mezclador determinista de opciones para que la respuesta correcta no quede siempre en la primera posición
+function shuffleQuestionOptions<T extends { text: string; isCorrect: boolean }>(
+  options: T[],
+  questionSeed: number
+): T[] {
+  if (!options || options.length <= 1) return options;
+  const res = [...options];
+  const n = res.length;
+  let s = Math.abs((questionSeed * 9301 + 49297) % 233280);
+  for (let i = n - 1; i > 0; i--) {
+    s = (s * 9301 + 49297) % 233280;
+    const j = Math.floor((s / 233280) * (i + 1));
+    [res[i], res[j]] = [res[j], res[i]];
+  }
+  return res;
+}
+
+// Generador auxiliar de preguntas adicionales por nivel de dificultad si el banco estático requiere más reactivos
+function generateQuestionsForDifficulty(
+  topicName: string,
+  difficulty: 'Baja' | 'Media' | 'Alta',
+  count: number,
+  offset: number = 0
+): QuestionData[] {
+  const isEnglish = topicName.toLowerCase().includes('inglés') || topicName.toLowerCase().includes('english');
+  const results: QuestionData[] = [];
+
+  const englishTemplates = {
+    Baja: [
+      {
+        q: 'What is the correct greeting to start a professional morning phone call?',
+        c: 'Good morning, thank you for calling GEA customer support.',
+        w1: 'Hey you, what happened?',
+        w2: 'Bye, call me later.',
+        w3: 'Who is this and why are you calling?'
+      },
+      {
+        q: 'Choose the correct preposition: "The meeting will start _____ 10:30 AM."',
+        c: 'at',
+        w1: 'on',
+        w2: 'in',
+        w3: 'to'
+      },
+      {
+        q: 'What is the opposite of "Available" in schedule management?',
+        c: 'Busy / Unavailable',
+        w1: 'Empty',
+        w2: 'Free',
+        w3: 'Open'
+      },
+      {
+        q: 'Select the correct sentence with subject-verb agreement:',
+        c: 'Our team works hard every day.',
+        w1: 'Our team work hard every day.',
+        w2: 'Our team are working not hard.',
+        w3: 'Our team have working hard.'
+      },
+      {
+        q: 'What does "ASAP" stand for in workplace communication?',
+        c: 'As soon as possible',
+        w1: 'Always send all protocols',
+        w2: 'After some accounts paid',
+        w3: 'Ask supervisor about policies'
+      }
+    ],
+    Media: [
+      {
+        q: 'How should you professionally handle an angry English-speaking customer?',
+        c: 'Listen actively, acknowledge their concern with empathy, and provide actionable next steps.',
+        w1: 'Hang up the phone immediately without saying goodbye.',
+        w2: 'Tell the customer that the complaint is not your fault.',
+        w3: 'Ask the customer to send a handwritten letter.'
+      },
+      {
+        q: 'Choose the correct form: "We would appreciate it if you could _____ the attached NDA document."',
+        c: 'sign and return',
+        w1: 'signed and returned',
+        w2: 'to sign and return',
+        w3: 'signing returning'
+      },
+      {
+        q: 'What does "to follow up on an issue" mean?',
+        c: 'To check the progress and ensure resolution of a previously discussed matter.',
+        w1: 'To delete all email history related to that case.',
+        w2: 'To blame another coworker for the delay.',
+        w3: 'To cancel the service contract unconditionally.'
+      },
+      {
+        q: 'Select the correct conditional structure for corporate policies: "If the client _____ within 48 hours, the ticket will be automatically escalated."',
+        c: 'does not respond',
+        w1: 'will not respond',
+        w2: 'did not responded',
+        w3: 'is not responding to'
+      },
+      {
+        q: 'Which phrase is the most courteous way to place someone on hold?',
+        c: 'May I please place you on a brief hold while I review your account details?',
+        w1: 'Wait there, I am busy.',
+        w2: 'Stop talking and hold.',
+        w3: 'I am leaving now, hold the line.'
+      }
+    ],
+    Alta: [
+      {
+        q: 'In executive reporting, what does "variance analysis" refer to?',
+        c: 'The quantitative investigation of the difference between actual performance and projected targets.',
+        w1: 'A subjective impression about employee attendance.',
+        w2: 'Changing the brand logos on public websites.',
+        w3: 'Cancelling all external vendor audits.'
+      },
+      {
+        q: 'Choose the correct formal phrasing for contractual disagreement: "We respectfully request a reconsideration of clause 4.2 in light of recent _____."',
+        c: 'regulatory compliance amendments and operational feasibility studies',
+        w1: 'random opinions from non-specialized personnel',
+        w2: 'unverified rumors heard during informal lunch breaks',
+        w3: 'emotional reactions from junior apprentices'
+      },
+      {
+        q: 'Which idiom best describes mitigating a potential risk before it escalates into a corporate crisis?',
+        c: 'Nipping it in the bud',
+        w1: 'Barking up the wrong tree',
+        w2: 'Biting off more than one can chew',
+        w3: 'Burning the midnight oil for leisure'
+      },
+      {
+        q: 'Identify the sentence with appropriate subjunctive mood for formal governance: "The auditor recommended that the security protocol _____ immediately."',
+        c: 'be updated and certified',
+        w1: 'was updated and certified',
+        w2: 'is being update',
+        w3: 'to be updating'
+      },
+      {
+        q: 'In cross-border negotiations, navigating intercultural communication nuances requires:',
+        c: 'High contextual awareness, diplomatic active listening, and unambiguous written alignment.',
+        w1: 'Imposing local slang and assuming everyone understands idioms.',
+        w2: 'Avoiding all documentation to preserve flexibility.',
+        w3: 'Relying exclusively on non-verbal intuition.'
+      }
+    ]
+  };
+
+  const generalTemplates = {
+    Baja: [
+      {
+        q: `En el marco introductorio de ${topicName}, ¿cuál es el concepto elemental que rige las operaciones diarias?`,
+        c: `El cumplimiento riguroso de las pautas básicas de calidad y la atención diligente a los requerimientos.`,
+        w1: `La improvisación de procesos sin consultar manuales.`,
+        w2: `El descarte sistemático de las consultas de los usuarios.`,
+        w3: `La omisión del registro de asistencias y tareas.`
+      },
+      {
+        q: `¿Qué documento u orientación básica es indispensable al iniciar tareas en ${topicName}?`,
+        c: `El manual de procedimientos y las políticas operativas vigentes del área.`,
+        w1: `Un listado informal sin validación de jefatura.`,
+        w2: `El historial de llamadas personales de los colaboradores.`,
+        w3: `Un contrato sin firma ni cláusulas de confidencialidad.`
+      },
+      {
+        q: `¿Cuál es la actitud esperada ante una instrucción directa del supervisor en ${topicName}?`,
+        c: `Recepción atenta, confirmación de entendimiento y ejecución conforme a los estándares.`,
+        w1: `Rechazo inmediato sin escuchar los argumentos.`,
+        w2: `Delegación no autorizada en compañeros sin inducción.`,
+        w3: `Postergación indefinida de las prioridades asignadas.`
+      },
+      {
+        q: `La puntualidad y el orden en el puesto de trabajo en ${topicName} garantizan:`,
+        c: `Mayor fluidez en la jornada, respeto al equipo y cumplimiento de los acuerdos de servicio.`,
+        w1: `El aumento de las multas de tránsito de la empresa.`,
+        w2: `La cancelación de los descansos programados.`,
+        w3: `La reducción del espacio físico de trabajo.`
+      },
+      {
+        q: `Al detectar una consulta repetitiva de un usuario en ${topicName}, la acción inmediata es:`,
+        c: `Brindar una respuesta clara y amable, guiando al usuario con empatía y paciencia.`,
+        w1: `Ignorar el mensaje y marcarlo como spam sin revisar.`,
+        w2: `Transferir la llamada sin avisar al receptor.`,
+        w3: `Reclamar al usuario por no saber la respuesta.`
+      }
+    ],
+    Media: [
+      {
+        q: `Frente a un cuello de botella recurrente en el flujo de ${topicName}, ¿cuál es el procedimiento analítico adecuado?`,
+        c: `Mapear los tiempos de ciclo, identificar el punto exacto de retención y formular acciones correctivas.`,
+        w1: `Acelerar el trabajo saltándose los controles de verificación obligatorios.`,
+        w2: `Culpar a los sistemas informáticos sin registrar métricas.`,
+        w3: `Eliminar el paso de control de calidad para cumplir el volumen.`
+      },
+      {
+        q: `¿Cómo debe estructurarse un reporte de seguimiento intermedio en ${topicName}?`,
+        c: `Con datos objetivos comparando metas vs. ejecutado, desvíos detectados y plan de mitigación.`,
+        w1: `Únicamente con comentarios informales sin cifras de respaldo.`,
+        w2: `Ocultando los indicadores negativos para no generar alertas.`,
+        w3: `Con transcripciones literales de conversaciones no autorizadas.`
+      },
+      {
+        q: `En la interacción con áreas de soporte técnico o logística en ${topicName}, la mejor práctica es:`,
+        c: `Generar tickets numerados con descripción detallada, evidencia del fallo y nivel de criticidad.`,
+        w1: `Enviar mensajes fragmentados por redes sociales no corporativas.`,
+        w2: `Detener toda la operación sin avisar a los líderes del turno.`,
+        w3: `Modificar los códigos fuente sin permiso de TI.`
+      },
+      {
+        q: `Al capacitar a un nuevo colaborador en las herramientas de ${topicName}, el mentor debe:`,
+        c: `Explicar el fundamento, modelar la ejecución, supervisar la práctica guiada y brindar feedback constructivo.`,
+        w1: `Dejarlo solo frente al sistema desde el primer minuto sin pautas.`,
+        w2: `Exigirle el 100% de velocidad sin enseñar las normas de calidad.`,
+        w3: `Sancionarlo públicamente ante su primer error de digitación.`
+      },
+      {
+        q: `La calibración periódica de criterios en ${topicName} entre evaluadores y líderes busca:`,
+        c: `Homogeneizar la interpretación de las pautas de evaluación y evitar sesgos de medición.`,
+        w1: `Hacer más complejas las rúbricas sin justificación técnica.`,
+        w2: `Reducir a la mitad el número de evaluaciones realizadas.`,
+        w3: `Asegurar que ningún postulante apruebe el proceso.`
+      }
+    ],
+    Alta: [
+      {
+        q: `En un escenario de contingencia mayor en ${topicName} con impacto directo en el SLA corporativo, la prioridad estratégica es:`,
+        c: `Activar el plan de continuidad de negocio (BCP), priorizar servicios críticos y comunicar transparentemente a los stakeholders.`,
+        w1: `Suspender el pago a los colaboradores y cerrar las oficinas.`,
+        w2: `Esperar pasivamente a que el problema se resuelva solo.`,
+        w3: `Destruir los registros históricos para evitar multas regulatorias.`
+      },
+      {
+        q: `El análisis de causa raíz mediante metodologías avanzadas (como Ishikawa o los 5 Porqués) en ${topicName} permite:`,
+        c: `Atacar el origen estructural de las fallas para evitar su recurrencia sistémica y elevar la madurez operativa.`,
+        w1: `Buscar culpables individuales para amonestarlos administrativamente.`,
+        w2: `Justificar el incremento innecesario de presupuestos de compras.`,
+        w3: `Evadir las auditorías internas de calidad programadas.`
+      },
+      {
+        q: `¿Qué implicancia tiene la gestión del cambio organizacional al implementar una transformación digital en ${topicName}?`,
+        c: `Minimizar la resistencia cultural, alinear a los líderes de opinión interna y capacitar metodológicamente en las nuevas competencias.`,
+        w1: `Obligar a los usuarios a usar el nuevo sistema sin explicar los beneficios.`,
+        w2: `Despedir a todo el personal con más de cinco años en la organización.`,
+        w3: `Eliminar todos los canales de soporte al usuario final.`
+      },
+      {
+        q: `En la evaluación de riesgos financieros y operacionales aplicados a ${topicName}, el cálculo de la severidad y probabilidad determina:`,
+        c: `La matriz de calor para asignar recursos preventivos prioritarios a los eventos de alto impacto y alta frecuencia.`,
+        w1: `El salario variable de los pasantes universitarios.`,
+        w2: `El color de la pintura de las instalaciones corporativas.`,
+        w3: `La anulación de los contratos con clientes estratégicos.`
+      },
+      {
+        q: `Un líder directivo en ${topicName} demuestra gobernanza ética avanzada cuando:`,
+        c: `Toma decisiones basadas en datos auditables, protege la integridad del equipo y rinde cuentas con transparencia ante los comités.`,
+        w1: `Firma balances contables sin verificar los anexos correspondientes.`,
+        w2: `Favorece a proveedores por afinidad personal en licitaciones públicas.`,
+        w3: `Oculta incidentes de fuga de información confidencial.`
+      }
+    ]
+  };
+
+  const templateList = isEnglish ? englishTemplates[difficulty] : generalTemplates[difficulty];
+
+  for (let i = 0; i < count; i++) {
+    const tIndex = (offset + i) % templateList.length;
+    const t = templateList[tIndex];
+    const cycle = Math.floor((offset + i) / templateList.length);
+    const variationSuffix = cycle > 0 ? ` (Caso aplicado ${cycle + 1})` : '';
+
+    results.push({
+      id: offset + i + 1000,
+      difficulty,
+      topic: topicName,
+      question: `${t.q}${variationSuffix}`,
+      options: [
+        { text: t.c, isCorrect: true },
+        { text: t.w1, isCorrect: false },
+        { text: t.w2, isCorrect: false },
+        { text: t.w3, isCorrect: false }
+      ]
+    });
+  }
+
+  return results;
+}
+
 // Generador genérico contextual de preguntas para cualquier materia del catálogo
-// Asegura que NINGÚN cuestionario quede con menos de 20 preguntas
+// Asegura que NINGÚN cuestionario quede con menos preguntas de las configuradas
+// y respeta ESTRICTAMENTE el desglose de preguntas por dificultad (Bajas, Medias, Altas)
 export function getQuestionsForTopic(
   topicName: string,
   difficulty?: 'Personalizada' | 'Baja' | 'Media' | 'Alta',
-  totalCount: number = 20
+  totalCount: number = 20,
+  breakdown?: QuestionBreakdown
 ): QuestionData[] {
-  // 1. Buscar coincidencia exacta o normalizada en el diccionario
   const cleanTopic = topicName.trim().toLowerCase();
   const directKey = Object.keys(QUESTIONS_BY_TOPIC).find(
     k => k.trim().toLowerCase() === cleanTopic
@@ -1634,35 +1921,93 @@ export function getQuestionsForTopic(
   if (directKey && QUESTIONS_BY_TOPIC[directKey]) {
     pool = [...QUESTIONS_BY_TOPIC[directKey]];
   } else {
-    // Si no tiene banco estático específico, generar banco temático de 20 preguntas
     pool = generateDynamicQuestionBank(topicName);
   }
 
-  // 2. Filtrar o priorizar según la dificultad solicitada
-  if (difficulty === 'Baja') {
-    pool.sort((a, b) => {
-      const weight = { Baja: 0, Media: 1, Alta: 2 };
-      return weight[a.difficulty] - weight[b.difficulty];
-    });
-  } else if (difficulty === 'Alta') {
-    pool.sort((a, b) => {
-      const weight = { Alta: 0, Media: 1, Baja: 2 };
-      return weight[a.difficulty] - weight[b.difficulty];
-    });
-  } else if (difficulty === 'Media') {
-    pool.sort((a, b) => {
-      const weight = { Media: 0, Baja: 1, Alta: 2 };
-      return weight[a.difficulty] - weight[b.difficulty];
-    });
+  // Separar pool por dificultad
+  const availableLow = pool.filter(q => q.difficulty === 'Baja');
+  const availableMed = pool.filter(q => q.difficulty === 'Media');
+  const availableHigh = pool.filter(q => q.difficulty === 'Alta');
+
+  // Determinar cantidades exactas solicitadas
+  let targetLow = 0;
+  let targetMed = 0;
+  let targetHigh = 0;
+
+  if (breakdown && (breakdown.low !== undefined || breakdown.med !== undefined || breakdown.high !== undefined)) {
+    targetLow = Math.max(0, breakdown.low ?? 0);
+    targetMed = Math.max(0, breakdown.med ?? 0);
+    targetHigh = Math.max(0, breakdown.high ?? 0);
+  } else {
+    const total = Math.max(5, totalCount || 20);
+    if (difficulty === 'Baja') {
+      targetLow = Math.round(total * 0.7);
+      targetMed = Math.round(total * 0.2);
+      targetHigh = Math.max(0, total - targetLow - targetMed);
+    } else if (difficulty === 'Alta') {
+      targetLow = Math.max(0, Math.round(total * 0.1));
+      targetMed = Math.max(1, Math.round(total * 0.3));
+      targetHigh = Math.max(1, total - targetLow - targetMed);
+    } else if (difficulty === 'Media') {
+      targetLow = Math.max(1, Math.round(total * 0.25));
+      targetMed = Math.max(1, Math.round(total * 0.5));
+      targetHigh = Math.max(1, total - targetLow - targetMed);
+    } else {
+      // Personalizada por defecto: 25% baja, 50% media, 25% alta
+      targetLow = Math.round(total * 0.25);
+      targetMed = Math.round(total * 0.5);
+      targetHigh = Math.max(0, total - targetLow - targetMed);
+    }
   }
 
-  // 3. Limitar a la cantidad solicitada (mínimo 20 por requerimiento si totalCount >= 20)
-  const targetCount = Math.max(5, Math.min(pool.length, totalCount));
-  return pool.slice(0, targetCount).map((q, idx) => ({
-    ...q,
-    id: idx + 1,
-    question: q.question.replace(/^\d+\.\s*/, `${idx + 1}. `)
-  }));
+  // 1. Obtener exactamente targetLow preguntas de dificultad 'Baja'
+  let selectedLow: QuestionData[] = [];
+  if (targetLow > 0) {
+    selectedLow = availableLow.slice(0, targetLow);
+    if (selectedLow.length < targetLow) {
+      const needed = targetLow - selectedLow.length;
+      const generated = generateQuestionsForDifficulty(topicName, 'Baja', needed, selectedLow.length);
+      selectedLow = [...selectedLow, ...generated];
+    }
+  }
+
+  // 2. Obtener exactamente targetMed preguntas de dificultad 'Media'
+  let selectedMed: QuestionData[] = [];
+  if (targetMed > 0) {
+    selectedMed = availableMed.slice(0, targetMed);
+    if (selectedMed.length < targetMed) {
+      const needed = targetMed - selectedMed.length;
+      const generated = generateQuestionsForDifficulty(topicName, 'Media', needed, selectedMed.length);
+      selectedMed = [...selectedMed, ...generated];
+    }
+  }
+
+  // 3. Obtener exactamente targetHigh preguntas de dificultad 'Alta'
+  let selectedHigh: QuestionData[] = [];
+  if (targetHigh > 0) {
+    selectedHigh = availableHigh.slice(0, targetHigh);
+    if (selectedHigh.length < targetHigh) {
+      const needed = targetHigh - selectedHigh.length;
+      const generated = generateQuestionsForDifficulty(topicName, 'Alta', needed, selectedHigh.length);
+      selectedHigh = [...selectedHigh, ...generated];
+    }
+  }
+
+  // Ensamblar la lista completa de reactivos en el orden configurado
+  const finalPool = [...selectedLow, ...selectedMed, ...selectedHigh];
+
+  return finalPool.map((q, idx) => {
+    // Mezcla determinista de opciones con semilla única por pregunta y tema
+    const seed = (idx + 1) * 7919 + (cleanTopic.charCodeAt(0) || 1) * 31;
+    const shuffledOpts = shuffleQuestionOptions(q.options, seed);
+    const cleanEnunciado = q.question.replace(/^\d+\.\s*/, '');
+    return {
+      ...q,
+      id: idx + 1,
+      question: `${idx + 1}. ${cleanEnunciado}`,
+      options: shuffledOpts
+    };
+  });
 }
 
 // Generador temático de preguntas para cualquier materia profesional

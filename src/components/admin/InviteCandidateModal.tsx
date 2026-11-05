@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { Candidate, EvaluationTest } from '../../types';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import { EmailInvitationService } from '../../services/emailInvitationService';
+import { NotificacionesService } from '../../services/notificacionesService';
 import { 
   X, 
   UserPlus, 
@@ -370,6 +371,17 @@ export const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
     });
 
     onAddCandidates(newCandidates);
+
+    // Registrar notificaciones de postulantes invitados en tiempo real
+    newCandidates.forEach(c => {
+      NotificacionesService.crearNotificacion({
+        tipo: 'CANDIDATO_REGISTRADO',
+        titulo: 'Postulante invitado',
+        mensaje: `${c.fullName || c.email} fue invitado al proceso "${selectedTest.title}".`,
+        candidato_id: c.id,
+        proceso_id: selectedTest.id
+      });
+    });
 
     setCreatedCredentials(newCandidates.map(c => ({
       name: c.fullName,

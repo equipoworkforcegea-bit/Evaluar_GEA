@@ -765,9 +765,15 @@ Requisitos:
     setOpenMenuId(null);
   };
 
-  // Añadir cuestionario desde el catálogo distribuyendo equitativamente sin superar el 100%
-  const handleAddQuestionnaireFromCatalog = (qTitle: string) => {
-    if (knowledgeItems.some(k => k.name.toLowerCase() === qTitle.toLowerCase())) return;
+  // Añadir o remover cuestionario desde el catálogo distribuyendo equitativamente sin superar el 100%
+  const handleToggleQuestionnaireFromCatalog = (qTitle: string) => {
+    const existing = knowledgeItems.find(k => k.name.toLowerCase() === qTitle.toLowerCase());
+    if (existing) {
+      // Si ya está seleccionado, removerlo y redistribuir el 100%
+      handleDeleteKnowledgeItem(existing.id);
+      return;
+    }
+
     const newCount = knowledgeItems.length + 1;
     const baseWeight = Math.floor(100 / newCount);
     const remainder = 100 % newCount;
@@ -2218,10 +2224,19 @@ Requisitos:
       {/* DRAWER 2: VER CUESTIONARIO (Imagen 4)                                     */}
       {/* ========================================================================= */}
       {activePreviewItem && (() => {
+        const targetTotal = (activePreviewItem.questionsLow !== undefined || activePreviewItem.questionsMed !== undefined || activePreviewItem.questionsHigh !== undefined)
+          ? ((activePreviewItem.questionsLow || 0) + (activePreviewItem.questionsMed || 0) + (activePreviewItem.questionsHigh || 0))
+          : (activePreviewItem.totalQuestions || 20);
+
         const previewQuestions = getQuestionsForTopic(
           activePreviewItem.name,
           activePreviewItem.difficulty,
-          activePreviewItem.totalQuestions || 20
+          targetTotal || 20,
+          {
+            low: activePreviewItem.questionsLow,
+            med: activePreviewItem.questionsMed,
+            high: activePreviewItem.questionsHigh
+          }
         );
 
         return (
@@ -2257,6 +2272,21 @@ Requisitos:
                     <span className="px-2.5 py-0.5 rounded-full font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                       {previewQuestions.length} preguntas configuradas
                     </span>
+                    {activePreviewItem.questionsLow !== undefined && (
+                      <span className="px-2 py-0.5 rounded-full font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        {activePreviewItem.questionsLow} bajas
+                      </span>
+                    )}
+                    {activePreviewItem.questionsMed !== undefined && (
+                      <span className="px-2 py-0.5 rounded-full font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                        {activePreviewItem.questionsMed} medias
+                      </span>
+                    )}
+                    {activePreviewItem.questionsHigh !== undefined && (
+                      <span className="px-2 py-0.5 rounded-full font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                        {activePreviewItem.questionsHigh} altas
+                      </span>
+                    )}
                     <span className="px-2.5 py-0.5 rounded-full font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                       Escala: {activePreviewItem.scoreScale} pts
                     </span>
@@ -2520,13 +2550,13 @@ Requisitos:
 
                     <button
                       type="button"
-                      onClick={() => handleAddQuestionnaireFromCatalog(q.title)}
+                      onClick={() => handleToggleQuestionnaireFromCatalog(q.title)}
                       className={`w-8 h-8 rounded-xl border flex items-center justify-center transition-all cursor-pointer shrink-0 ${
                         isSelected
-                          ? 'bg-[#6355A4] border-[#6355A4] text-white shadow-2xs'
+                          ? 'bg-[#6355A4] border-[#6355A4] text-white shadow-2xs hover:bg-[#4E3F8D]'
                           : 'border-[#6355A4] text-[#6355A4] hover:bg-purple-50'
                       }`}
-                      title={isSelected ? 'Añadido' : 'Añadir cuestionario'}
+                      title={isSelected ? 'Quitar cuestionario' : 'Añadir cuestionario'}
                     >
                       {isSelected ? <Check className="w-4 h-4 stroke-[3]" /> : <Plus className="w-4 h-4 stroke-[2.5]" />}
                     </button>

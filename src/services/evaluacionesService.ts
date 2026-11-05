@@ -160,23 +160,38 @@ export const EvaluacionesService = {
   /**
    * Obtiene los resultados de conocimientos completados por un candidato
    */
-  async obtenerResultadosConocimientos(candidatoId: string, procesoId?: string): Promise<any[]> {
+  async obtenerResultadosConocimientos(candidatoId: string, procesoId?: string, email?: string): Promise<any[]> {
     try {
-      let query = supabase
-        .from('evaluaciones_conocimientos')
-        .select('*');
-
-      if (candidatoId && procesoId) {
-        query = query.or(`candidato_id.eq.${candidatoId},proceso_id.eq.${procesoId}`);
-      } else if (procesoId) {
-        query = query.eq('proceso_id', procesoId);
-      } else if (candidatoId) {
-        query = query.eq('candidato_id', candidatoId);
+      // 1. Intentar por candidato_id exacto
+      if (candidatoId) {
+        let query = supabase.from('evaluaciones_conocimientos').select('*').eq('candidato_id', candidatoId);
+        if (procesoId) query = query.eq('proceso_id', procesoId);
+        const { data, error } = await query.order('completado_en', { ascending: false });
+        if (!error && data && data.length > 0) {
+          return data;
+        }
       }
 
-      const { data, error } = await query;
-      if (!error && data && data.length > 0) {
-        return data;
+      // 2. Si no hubo resultados y tenemos email, buscar todos los candidato_id asociados a ese email
+      if (email) {
+        const { data: candList } = await supabase.from('candidatos').select('id').eq('correo', email);
+        if (candList && candList.length > 0) {
+          const ids = candList.map(c => c.id);
+          const { data: dataByEmail, error: errByEmail } = await supabase
+            .from('evaluaciones_conocimientos')
+            .select('*')
+            .in('candidato_id', ids)
+            .order('completado_en', { ascending: false });
+          if (!errByEmail && dataByEmail && dataByEmail.length > 0) {
+            return dataByEmail;
+          }
+        }
+      }
+
+      // 3. Si no hay candidatoId pero hay procesoId
+      if (procesoId && !candidatoId) {
+        const { data } = await supabase.from('evaluaciones_conocimientos').select('*').eq('proceso_id', procesoId).order('completado_en', { ascending: false });
+        if (data && data.length > 0) return data;
       }
     } catch (err) {
       console.warn('[EvaluacionesService] Error consultando Supabase:', err);
@@ -186,7 +201,9 @@ export const EvaluacionesService = {
     try {
       const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY_CONOCIMIENTOS) || '[]');
       return stored.filter((item: any) => 
-        (procesoId && item.procesoId === procesoId) || (candidatoId && item.candidatoId === candidatoId)
+        (candidatoId && item.candidatoId === candidatoId) ||
+        (procesoId && item.procesoId === procesoId) ||
+        (email && item.email === email)
       );
     } catch {
       return [];
@@ -196,23 +213,39 @@ export const EvaluacionesService = {
   /**
    * Obtiene el resultado DISC de un candidato
    */
-  async obtenerResultadoDISC(candidatoId: string, procesoId?: string): Promise<any | null> {
+  async obtenerResultadoDISC(candidatoId: string, procesoId?: string, email?: string): Promise<any | null> {
     try {
-      let query = supabase
-        .from('evaluaciones_disc')
-        .select('*');
-
-      if (candidatoId && procesoId) {
-        query = query.or(`candidato_id.eq.${candidatoId},proceso_id.eq.${procesoId}`);
-      } else if (procesoId) {
-        query = query.eq('proceso_id', procesoId);
-      } else if (candidatoId) {
-        query = query.eq('candidato_id', candidatoId);
+      // 1. Intentar por candidato_id exacto
+      if (candidatoId) {
+        let query = supabase.from('evaluaciones_disc').select('*').eq('candidato_id', candidatoId);
+        if (procesoId) query = query.eq('proceso_id', procesoId);
+        const { data, error } = await query.order('completado_en', { ascending: false }).limit(1);
+        if (!error && data && data.length > 0) {
+          return data[0];
+        }
       }
 
-      const { data, error } = await query.order('completado_en', { ascending: false }).limit(1);
-      if (!error && data && data.length > 0) {
-        return data[0];
+      // 2. Si no hubo resultados y tenemos email, buscar todos los candidato_id asociados a ese email
+      if (email) {
+        const { data: candList } = await supabase.from('candidatos').select('id').eq('correo', email);
+        if (candList && candList.length > 0) {
+          const ids = candList.map(c => c.id);
+          const { data: dataByEmail, error: errByEmail } = await supabase
+            .from('evaluaciones_disc')
+            .select('*')
+            .in('candidato_id', ids)
+            .order('completado_en', { ascending: false })
+            .limit(1);
+          if (!errByEmail && dataByEmail && dataByEmail.length > 0) {
+            return dataByEmail[0];
+          }
+        }
+      }
+
+      // 3. Si no hay candidatoId pero hay procesoId
+      if (procesoId && !candidatoId) {
+        const { data } = await supabase.from('evaluaciones_disc').select('*').eq('proceso_id', procesoId).order('completado_en', { ascending: false }).limit(1);
+        if (data && data.length > 0) return data[0];
       }
     } catch (err) {
       console.warn('[EvaluacionesService] Error consultando DISC en Supabase:', err);
@@ -222,7 +255,9 @@ export const EvaluacionesService = {
     try {
       const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY_DISC) || '[]');
       const matches = stored.filter((item: any) => 
-        (procesoId && item.procesoId === procesoId) || (candidatoId && item.candidatoId === candidatoId)
+        (candidatoId && item.candidatoId === candidatoId) ||
+        (procesoId && item.procesoId === procesoId) ||
+        (email && item.email === email)
       );
       return matches[matches.length - 1] || null;
     } catch {

@@ -22,6 +22,7 @@ import {
   FileCheck
 } from 'lucide-react';
 import { EvaluacionesService } from '../../services/evaluacionesService';
+import { NotificacionesService } from '../../services/notificacionesService';
 
 export interface StartExamPayload {
   type: 'DISC' | 'KNOWLEDGE' | 'COMPETENCIAS';
@@ -30,6 +31,9 @@ export interface StartExamPayload {
   topicName?: string;
   difficulty?: 'Personalizada' | 'Baja' | 'Media' | 'Alta';
   questionCount?: number;
+  questionsLow?: number;
+  questionsMed?: number;
+  questionsHigh?: number;
 }
 
 interface ProcesosInvitadosViewProps {
@@ -45,6 +49,9 @@ export interface KnowledgeQuestionnaireItem {
   durationMinutes: number;
   score?: number;
   isCompleted: boolean;
+  questionsLow?: number;
+  questionsMed?: number;
+  questionsHigh?: number;
 }
 
 interface InvitedProcessDetailed {
@@ -282,15 +289,31 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
             if (foundKey) scoreVal = knowledgeScoresMap[foundKey];
           }
 
+          // Buscar configuración detallada guardada en el perfil para este tema
+          const savedItem = Array.isArray(meta.knowledgeItems)
+            ? meta.knowledgeItems.find((k: any) => typeof k === 'object' && k.name && k.name.trim().toLowerCase() === rawTitle)
+            : null;
+
+          const totalQ = savedItem?.totalQuestions || (
+            (savedItem?.questionsLow !== undefined || savedItem?.questionsMed !== undefined || savedItem?.questionsHigh !== undefined)
+              ? ((savedItem?.questionsLow || 0) + (savedItem?.questionsMed || 0) + (savedItem?.questionsHigh || 0))
+              : 20
+          );
+          const diff = (savedItem?.difficulty as any) || 'Media';
+          const durMins = savedItem?.timeControl ? (savedItem.minutes || 15) : 15;
+
           const isCompleted = scoreVal !== undefined;
           return {
             id: `k_${idx}_${normTitle}`,
             title: topicTitle,
-            questionCount: 20, // 20 preguntas por cuestionario
-            difficulty: 'Media',
-            durationMinutes: 15,
+            questionCount: totalQ || 20,
+            difficulty: diff,
+            durationMinutes: durMins,
             isCompleted,
-            score: scoreVal
+            score: scoreVal,
+            questionsLow: savedItem?.questionsLow,
+            questionsMed: savedItem?.questionsMed,
+            questionsHigh: savedItem?.questionsHigh
           };
         }) : [];
 
@@ -358,7 +381,17 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
 
   const handleConfirmStartExam = () => {
     if (!warningModalTarget) return;
-    const { payload } = warningModalTarget;
+    const { payload, testTitle, processTitle } = warningModalTarget;
+
+    // Disparar notificación oficial: postulante inició la prueba
+    NotificacionesService.crearNotificacion({
+      tipo: 'CANDIDATO_INGRESO',
+      titulo: 'Postulante inició evaluación',
+      mensaje: `${realName || candidate.fullName || candidate.email} inició "${testTitle}" en el proceso "${processTitle}".`,
+      candidato_id: payload.candidateId || candidate.id,
+      proceso_id: payload.testId
+    });
+
     setWarningModalTarget(null);
     onStartExam(payload);
   };
@@ -573,15 +606,7 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
                               </div>
 
                               <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                                <span>⏱ Tiempo: {kItem.durationMinutes} min</span>
-                                {kItem.isCompleted && kItem.score !== undefined && (
-                                  <>
-                                    <span>•</span>
-                                    <span className="font-bold text-emerald-600">
-                                      Nota obtenida: {kItem.score} / 20 pts ({Math.round((kItem.score / 20) * 100)}%)
-                                    </span>
-                                  </>
-                                )}
+                                <span>⏱ Tiempo estimado: {kItem.durationMinutes} min</span>
                               </div>
                             </div>
 
@@ -589,7 +614,7 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
                               {kItem.isCompleted ? (
                                 <div className="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-300 font-bold text-xs flex items-center gap-1.5 shadow-2xs">
                                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                  <span>Completado ({kItem.score ?? 20}/20)</span>
+                                  <span>Prueba Rendida</span>
                                 </div>
                               ) : (
                                 <button
@@ -602,7 +627,10 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
                                       candidateId: proc.candidateIdInProcess,
                                       topicName: kItem.title,
                                       difficulty: kItem.difficulty,
-                                      questionCount: kItem.questionCount
+                                      questionCount: kItem.questionCount,
+                                      questionsLow: kItem.questionsLow,
+                                      questionsMed: kItem.questionsMed,
+                                      questionsHigh: kItem.questionsHigh
                                     },
                                     `Cuestionario: ${kItem.title}`,
                                     `${kItem.questionCount} preguntas obligatorias`,
