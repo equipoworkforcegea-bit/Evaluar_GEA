@@ -91,7 +91,7 @@ export const InvitationService = {
       }
 
       // Enlace de invitación oficial compatible con móvil y desktop
-      const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+      const origin = 'https://evaluar-gea.vercel.app'; // Siempre usar URL de produccion para correos
       const inviteUrl = `${origin}/login?code=${encodeURIComponent(codigoFinal)}&dni=${encodeURIComponent(dniClean)}&email=${encodeURIComponent(emailClean)}`;
 
       // Mensaje corporativo optimizado para WhatsApp
