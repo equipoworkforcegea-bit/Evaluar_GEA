@@ -195,6 +195,8 @@ export interface EvaluationTest {
   stages: TestStageConfig[];
   selectedCompetencies: string[]; // Competencias específicas elegidas para evaluar al postulante
   knowledgeQuestionnaires?: string[]; // Nombres de cuestionarios de conocimientos configurados
+  knowledgeItems?: any[]; // Items de configuración detallada de conocimientos
+  profileId?: string; // ID de perfil_puesto vinculado en Supabase
   difficultyLevel?: 'BAJO' | 'MEDIO' | 'ALTO';
   candidateCount: number;
   completedCount: number;

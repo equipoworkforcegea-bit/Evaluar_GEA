@@ -1320,9 +1320,22 @@ Requisitos:
                   )}
 
                   {isConocimiento && (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>Sin guardar</span>
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
+                      knowledgeItems.length > 0
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-amber-50 text-amber-700 border-amber-200'
+                    }`}>
+                      {knowledgeItems.length > 0 ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                          <span>Completo</span>
+                        </>
+                      ) : (
+                        <>
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>Sin configurar</span>
+                        </>
+                      )}
                     </span>
                   )}
 

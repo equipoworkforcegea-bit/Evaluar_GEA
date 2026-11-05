@@ -222,7 +222,36 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
           .eq('id', procId)
           .maybeSingle();
 
-        const perfil = procData?.perfiles_puesto;
+        let perfil = procData?.perfiles_puesto;
+
+        // Fallback resiliente: Si no hay perfil_puesto_id vinculado o la relación vino nula,
+        // buscar en perfiles_puesto por puesto_objetivo o título del proceso
+        if (!perfil) {
+          const searchClean = (procData?.puesto_objetivo || procData?.titulo || '')
+            .replace(/\s+\d{4}\s+\d{2}\s+\d{2}.*$/, '')
+            .trim();
+          if (searchClean) {
+            const { data: fallbackPerfil } = await supabase
+              .from('perfiles_puesto')
+              .select('*')
+              .or(`titulo.ilike.${searchClean},puesto_objetivo.ilike.${searchClean}`)
+              .order('creado_en', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (fallbackPerfil) {
+              perfil = fallbackPerfil;
+              // Auto-vincular en Supabase para futuras consultas
+              if (!procData?.perfil_puesto_id && fallbackPerfil.id) {
+                supabase
+                  .from('procesos_evaluacion')
+                  .update({ perfil_puesto_id: fallbackPerfil.id })
+                  .eq('id', procId)
+                  .then(() => {});
+              }
+            }
+          }
+        }
+
         const meta = perfil?.competencias?._metadata || {};
         const stages: any[] = Array.isArray(meta.stages) ? meta.stages : [];
         const hasCustomStages = stages.length > 0;

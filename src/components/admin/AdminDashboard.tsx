@@ -349,9 +349,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleLaunchProcess = async (newProcess: EvaluationTest, newCandidates: Candidate[]) => {
+  const handleLaunchProcess = async (newProcess: EvaluationTest, newCandidates: Candidate[], explicitProfileId?: string) => {
     try {
-      const saved = await ProcessDataService.createProcess(newProcess, createProcessPreselectedProfileId || undefined);
+      const resolvedProfileId = explicitProfileId || createProcessPreselectedProfileId || (newProcess as any).profileId || undefined;
+      const saved = await ProcessDataService.createProcess(newProcess, resolvedProfileId);
       const processToUse = saved || newProcess;
       setProcesses(prev => [processToUse, ...prev.filter(t => t.id !== processToUse.id)]);
       setActiveTestId(processToUse.id);

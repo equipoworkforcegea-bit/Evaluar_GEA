@@ -412,9 +412,34 @@ export const ProcessDataService = {
   async createProcess(process: EvaluationTest, profileId?: string): Promise<EvaluationTest | null> {
     const uuid = ensureUuid(process.id);
     try {
-      const validProfileId = profileId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(profileId)
+      let validProfileId = profileId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(profileId)
         ? profileId
-        : null;
+        : ((process as any).profileId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test((process as any).profileId)
+            ? (process as any).profileId
+            : null);
+
+      // Si no viene perfil explícito, resolver automáticamente buscando por coincidencia con el perfil
+      if (!validProfileId) {
+        const candidateProfileName = (process.profileName || process.targetPosition || process.title || '')
+          .replace(/\s+\d{4}\s+\d{2}\s+\d{2}.*$/, '')
+          .trim();
+        if (candidateProfileName) {
+          try {
+            const { data: matchedProfile } = await supabase
+              .from('perfiles_puesto')
+              .select('id')
+              .or(`titulo.ilike.${candidateProfileName},puesto_objetivo.ilike.${candidateProfileName}`)
+              .order('creado_en', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (matchedProfile?.id) {
+              validProfileId = matchedProfile.id;
+            }
+          } catch (matchErr) {
+            console.warn('[ProcessDataService] No se pudo auto-resolver perfil:', matchErr);
+          }
+        }
+      }
 
       let payload: any = {
         id: uuid,

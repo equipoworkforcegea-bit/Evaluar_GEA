@@ -48,7 +48,7 @@ interface CreateProcessModalProps {
   tests: EvaluationTest[];
   preselectedProfileId?: string;
   onClose: () => void;
-  onLaunchProcess: (newProcess: EvaluationTest, newCandidates: Candidate[]) => void | Promise<void>;
+  onLaunchProcess: (newProcess: EvaluationTest, newCandidates: Candidate[], profileId?: string) => void | Promise<void>;
 }
 
 interface StagedCandidate {
@@ -268,10 +268,12 @@ export const CreateProcessModal: React.FC<CreateProcessModalProps> = ({
         endDate: endDateTime.split('T')[0] || '31/12/2026',
         processStatus: isDraft ? 'BORRADOR' : 'LANZADO',
         profileName: selectedProfile?.title || targetPos,
+        profileId: selectedProfile?.id || selectedProfileId,
         hiredCount: 0,
         inProgressCount: 0,
         selectedCompetencies: selectedProfile ? (selectedProfile.selectedCompetencies || []) : [],
         knowledgeQuestionnaires: selectedProfile ? (selectedProfile.knowledgeQuestionnaires || []) : [],
+        knowledgeItems: (selectedProfile as any)?.knowledgeItems || [],
         stages: selectedProfile ? (selectedProfile.stages || []) : [
           {
             id: 'STAGE_1_PSYCHO',
@@ -323,7 +325,7 @@ export const CreateProcessModal: React.FC<CreateProcessModalProps> = ({
         isConsentSigned: false
       }));
 
-      await onLaunchProcess(newTest, newCandidates);
+      await onLaunchProcess(newTest, newCandidates, selectedProfile?.id || selectedProfileId);
       clearTimeout(progressTimer);
       setSubmitProgress(100);
 
