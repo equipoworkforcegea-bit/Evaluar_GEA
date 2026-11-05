@@ -27,7 +27,12 @@ import {
   UserX,
   LayoutKanban,
   Building,
-  RotateCw
+  RotateCw,
+  BookOpen,
+  CheckCircle2,
+  XCircle,
+  FileText,
+  Award
 } from 'lucide-react';
 
 interface CandidateFullReportViewProps {
