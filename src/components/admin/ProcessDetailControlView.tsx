@@ -85,12 +85,6 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
     }
   }, [initialTab]);
 
-  // Si no hay candidatos en progreso pero sí hay finalizados, cambiar automáticamente a la pestaña FINALIZADOS
-  useEffect(() => {
-    if (statusFilter === 'EN_PROGRESO' && inProgressList.length === 0 && finalizedList.length > 0) {
-      setStatusFilter('FINALIZADOS');
-    }
-  }, [inProgressList.length, finalizedList.length, statusFilter]);
   const [statusFilter, setStatusFilter] = useState<StatusPillFilter>('FINALIZADOS');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'ranking' | 'nombre' | 'fecha'>('ranking');
@@ -195,6 +189,13 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
   const preselectedList = useMemo(() => {
     return processCandidates.filter(c => preselectedCandidateIds.has(c.id));
   }, [processCandidates, preselectedCandidateIds]);
+
+  // Si no hay candidatos en progreso pero sí hay finalizados, cambiar automáticamente a la pestaña FINALIZADOS
+  useEffect(() => {
+    if (statusFilter === 'EN_PROGRESO' && inProgressList.length === 0 && finalizedList.length > 0) {
+      setStatusFilter('FINALIZADOS');
+    }
+  }, [inProgressList.length, finalizedList.length, statusFilter]);
 
   // Lista filtrada según pestaña y buscador
   const displayedCandidates = useMemo(() => {
