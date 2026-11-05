@@ -1001,9 +1001,9 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                 {/* Barras por etapa */}
                 <div className="w-full space-y-2.5">
                   {[
-                    { label: 'Psicotécnica', val: candidate.scores.stage1Psycho, color: '#6355DE' },
-                    { label: 'Emocional', val: candidate.scores.stage2Emotional, color: '#2F5BA8' },
-                    { label: 'Casos Lab.', val: candidate.scores.stage3WorkCases, color: '#2FA58B' }
+                    { label: 'Psicotécnica', val: hasKnowledge ? avgKnowledgePercent : (candidate.scores?.stage1Psycho ?? 0), color: '#6355DE' },
+                    { label: 'Emocional', val: hasDisc ? 100 : (candidate.scores?.stage2Emotional ?? 0), color: '#2F5BA8' },
+                    { label: 'Casos Lab.', val: candidate.scores?.stage3WorkCases ?? 0, color: '#2FA58B' }
                   ].map(({ label, val, color }) => (
                     <div key={label} className="w-full space-y-1">
                       <div className="flex items-center justify-between text-[11px] font-semibold">
@@ -1262,9 +1262,9 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                   {/* Puntajes por etapa - tarjetas visuales */}
                   <div className="grid grid-cols-3 gap-3">
                     {[
-                      { label: 'Psicotécnica', sublabel: 'Etapa 1', val: candidate.scores.stage1Psycho, color: '#6355DE', bg: 'bg-[#6355DE]/8 dark:bg-[#6355DE]/15' },
-                      { label: 'Emocional', sublabel: 'Etapa 2', val: candidate.scores.stage2Emotional, color: '#2F5BA8', bg: 'bg-[#2F5BA8]/8 dark:bg-[#2F5BA8]/15' },
-                      { label: 'Casos Lab.', sublabel: 'Etapa 3', val: candidate.scores.stage3WorkCases, color: '#2FA58B', bg: 'bg-[#2FA58B]/8 dark:bg-[#2FA58B]/15' }
+                      { label: 'Psicotécnica', sublabel: 'Etapa 1', val: candidate.scores?.stage1Psycho, color: '#6355DE', bg: 'bg-[#6355DE]/8 dark:bg-[#6355DE]/15' },
+                      { label: 'Emocional', sublabel: 'Etapa 2', val: candidate.scores?.stage2Emotional, color: '#2F5BA8', bg: 'bg-[#2F5BA8]/8 dark:bg-[#2F5BA8]/15' },
+                      { label: 'Casos Lab.', sublabel: 'Etapa 3', val: candidate.scores?.stage3WorkCases, color: '#2FA58B', bg: 'bg-[#2FA58B]/8 dark:bg-[#2FA58B]/15' }
                     ].map(({ label, sublabel, val, color, bg }) => (
                       <div key={label} className={`rounded-2xl p-4 ${bg} border border-[#DDE2EF]/60 dark:border-[#2A3563] flex flex-col items-center gap-2`}>
                         <div className="relative w-16 h-16 flex items-center justify-center">
