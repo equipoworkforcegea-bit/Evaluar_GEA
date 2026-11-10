@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { EvaluationTest, TestStageConfig } from '../../types';
 import { generateSafeUuid, ProcessDataService } from '../../services/processDataService';
 import { 
@@ -184,20 +184,15 @@ export const COMPETENCY_DESCRIPTIONS: Record<string, string> = {
   'Comunicación efectiva': 'Capacidad para transmitir ideas con claridad y coherencia, ajustando el mensaje al contexto y asegurando una comprensión precisa que facilite interacciones fluidas y constructivas.'
 };
 
-const COMPETENCY_CATEGORIES: CompetencyCategory[] = [
-  {
-    name: 'Favoritos',
-    count: 5,
-    iconName: 'Star',
-    color: '#EAB308',
-    items: [
-      'Orientación al Cliente',
-      'Integridad',
-      'Temple y Serenidad',
-      'Orientación y adaptabilidad a las ventas',
-      'Comunicación efectiva'
-    ]
-  },
+export const DEFAULT_FAVORITE_COMPETENCIES = [
+  'Orientación al Cliente',
+  'Integridad',
+  'Temple y Serenidad',
+  'Orientación y adaptabilidad a las ventas',
+  'Comunicación efectiva'
+];
+
+const BASE_COMPETENCY_CATEGORIES: CompetencyCategory[] = [
   {
     name: 'Relacionales',
     count: 12,
@@ -584,6 +579,45 @@ export const CreateProfileView: React.FC<CreateProfileViewProps> = ({
   const [showCompetenciesDrawer, setShowCompetenciesDrawer] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<string[]>(['Favoritos']);
   const [searchCompetency, setSearchCompetency] = useState('');
+
+  // Competencias Favoritas (persisten en localStorage)
+  const [favoriteCompetencies, setFavoriteCompetencies] = useState<string[]>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('evaluar_favorite_competencies');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      }
+    } catch {}
+    return DEFAULT_FAVORITE_COMPETENCIES;
+  });
+
+  const handleToggleFavorite = (compName: string) => {
+    setFavoriteCompetencies(prev => {
+      const next = prev.includes(compName)
+        ? prev.filter(c => c !== compName)
+        : [...prev, compName];
+      try {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('evaluar_favorite_competencies', JSON.stringify(next));
+        }
+      } catch {}
+      return next;
+    });
+  };
+
+  const displayedCompetencyCategories = useMemo<CompetencyCategory[]>(() => {
+    const favCat: CompetencyCategory = {
+      name: 'Favoritos',
+      count: favoriteCompetencies.length,
+      iconName: 'Star',
+      color: '#EAB308',
+      items: favoriteCompetencies
+    };
+    return [favCat, ...BASE_COMPETENCY_CATEGORIES];
+  }, [favoriteCompetencies]);
 
   // Questionnaire catalogue drawer state
   const [searchQuestionnaire, setSearchQuestionnaire] = useState('');
@@ -2445,7 +2479,7 @@ Requisitos:
 
             {/* Categorías y Competencias Desplegables (Imagen 5) */}
             <div className="flex-1 overflow-y-auto px-4 py-3 divide-y divide-slate-100">
-              {COMPETENCY_CATEGORIES.map((cat) => {
+              {displayedCompetencyCategories.map((cat) => {
                 const isExpanded = expandedCategories.includes(cat.name) || searchCompetency.trim().length > 0;
                 const filteredItems = cat.items.filter(it => 
                   it.toLowerCase().includes(searchCompetency.toLowerCase())
@@ -2474,37 +2508,56 @@ Requisitos:
 
                     {/* Lista de items al expandir */}
                     {isExpanded && (
-                      <div className="pl-9 pr-2 pt-2 pb-1 space-y-2 animate-in fade-in">
-                        {filteredItems.map((compItem) => {
-                          const isSelected = selectedCompetencies.includes(compItem);
-                          const desc = COMPETENCY_DESCRIPTIONS[compItem];
-                          return (
-                            <label
-                              key={compItem}
-                              title={desc || compItem}
-                              className={`flex items-start justify-between p-2.5 rounded-xl cursor-pointer transition-colors text-xs sm:text-sm gap-3 ${
-                                isSelected ? 'bg-purple-50/80 text-[#6355A4] border border-purple-200/60 font-medium' : 'hover:bg-slate-50 text-slate-700 border border-transparent'
-                              }`}
-                            >
-                              <div className="flex-1 pr-1">
-                                <span className="font-semibold block text-slate-800 leading-snug">
-                                  {compItem}
-                                </span>
-                                {desc && (
-                                  <p className="text-[11px] text-slate-500 font-normal leading-relaxed mt-1">
-                                    {desc}
-                                  </p>
-                                )}
+                      <div className="pl-6 pr-2 pt-1 pb-1 space-y-1 animate-in fade-in">
+                        {filteredItems.length === 0 && cat.name === 'Favoritos' ? (
+                          <div className="py-2.5 pl-3 text-xs text-slate-400 italic">
+                            No tienes competencias favoritas aún. Haz clic en la estrella de cualquier competencia para añadirla aquí.
+                          </div>
+                        ) : (
+                          filteredItems.map((compItem) => {
+                            const isSelected = selectedCompetencies.includes(compItem);
+                            const isFav = favoriteCompetencies.includes(compItem);
+                            return (
+                              <div
+                                key={compItem}
+                                onClick={() => handleToggleCompetency(compItem)}
+                                className={`flex items-center justify-between py-2 px-2.5 rounded-lg cursor-pointer transition-colors text-xs sm:text-sm group ${
+                                  isSelected ? 'bg-purple-50/70 text-[#6355A4] font-medium' : 'hover:bg-slate-50 text-slate-700'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleToggleFavorite(compItem);
+                                    }}
+                                    className="p-1 -ml-1 rounded hover:bg-amber-50 text-slate-300 hover:text-amber-500 transition-colors cursor-pointer shrink-0"
+                                    title={isFav ? "Quitar de favoritos" : "Marcar como favorito"}
+                                  >
+                                    <Star
+                                      className={`w-4 h-4 transition-all ${
+                                        isFav
+                                          ? "fill-amber-400 text-amber-500 scale-110"
+                                          : "text-slate-300 group-hover:text-amber-400"
+                                      }`}
+                                    />
+                                  </button>
+                                  <span className="truncate pr-2 font-normal">
+                                    {compItem}
+                                  </span>
+                                </div>
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => handleToggleCompetency(compItem)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="w-4 h-4 rounded text-[#6355A4] focus:ring-[#6355A4] border-slate-300 cursor-pointer shrink-0"
+                                />
                               </div>
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => handleToggleCompetency(compItem)}
-                                className="w-4 h-4 mt-0.5 rounded text-[#6355A4] focus:ring-[#6355A4] border-slate-300 cursor-pointer shrink-0"
-                              />
-                            </label>
-                          );
-                        })}
+                            );
+                          })
+                        )}
                       </div>
                     )}
                   </div>
@@ -2515,7 +2568,7 @@ Requisitos:
             {/* Footer de Competencias (Imagen 5) */}
             <div className="p-4 border-t border-slate-100 flex items-center justify-between text-xs sm:text-sm text-slate-600 shrink-0 bg-slate-50/30">
               <span className="font-bold text-slate-800">
-                {new Set(COMPETENCY_CATEGORIES.filter(c => c.name !== 'Favoritos').flatMap(c => c.items)).size} Competencias Totales en Evaluar
+                {new Set(BASE_COMPETENCY_CATEGORIES.flatMap(c => c.items)).size} Competencias Totales en Evaluar
               </span>
               <button
                 type="button"
