@@ -258,6 +258,62 @@ export const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
     }
   };
 
+  const searchDniInDatabase = async (dniToSearch: string) => {
+    const cleanDni = dniToSearch.replace(/\D/g, '').trim();
+    if (cleanDni.length < 8) return;
+
+    setIsSearchingEmail(true);
+    try {
+      // 1. Buscar en tabla `candidatos`
+      const { data: foundCand } = await supabase
+        .from('candidatos')
+        .select('nombre_completo, dni, telefono, correo, whatsapp_user')
+        .eq('dni', cleanDni)
+        .order('actualizado_en', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (foundCand) {
+        if (!newEmail && foundCand.correo) setNewEmail(foundCand.correo);
+        if (foundCand.nombre_completo) {
+          const rawName = foundCand.nombre_completo.trim();
+          const parts = rawName.split(/\s+/);
+          let fName = parts[0] || '';
+          let lName = parts.slice(1).join(' ') || '';
+          setNewFirstName(fName.toUpperCase());
+          setNewLastName(lName.toUpperCase());
+        }
+        if (foundCand.telefono || foundCand.whatsapp_user) {
+          setFoundPhone(foundCand.telefono || foundCand.whatsapp_user || '');
+        }
+        setFoundDni(cleanDni);
+        setAutoFilledNotice(true);
+        return;
+      }
+
+      // 2. Buscar en tabla `postulantes`
+      const { data: foundPost } = await supabase
+        .from('postulantes')
+        .select('nombre, apellido, dni, telefono, correo')
+        .eq('dni', cleanDni)
+        .limit(1)
+        .maybeSingle();
+
+      if (foundPost) {
+        if (!newEmail && foundPost.correo) setNewEmail(foundPost.correo);
+        if (foundPost.nombre) setNewFirstName(foundPost.nombre.toUpperCase());
+        if (foundPost.apellido) setNewLastName(foundPost.apellido.toUpperCase());
+        if (foundPost.telefono) setFoundPhone(foundPost.telefono);
+        setFoundDni(cleanDni);
+        setAutoFilledNotice(true);
+      }
+    } catch (e) {
+      console.warn('[InviteCandidateModal] Error buscando por DNI:', e);
+    } finally {
+      setIsSearchingEmail(false);
+    }
+  };
+
   // =========================================================================
   // SUBMIT DEL SUB-MODAL: Agregar candidato a la lista
   // =========================================================================
@@ -860,6 +916,39 @@ export const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
                       placeholder="Apellido"
                       required
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm placeholder:text-slate-400 text-slate-800 focus:outline-none focus:border-[#6355A4] focus:ring-1 focus:ring-purple-200"
+                    />
+                  </div>
+                </div>
+
+                {/* 4. DNI y Teléfono Personalizado (2 columnas) */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      DNI (8 dígitos)
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={8}
+                      value={foundDni}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '');
+                        setFoundDni(val);
+                        if (val.length === 8) searchDniInDatabase(val);
+                      }}
+                      placeholder="78965412"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-mono placeholder:text-slate-400 text-slate-800 focus:outline-none focus:border-[#6355A4] focus:ring-1 focus:ring-purple-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Teléfono / WhatsApp
+                    </label>
+                    <input
+                      type="text"
+                      value={foundPhone}
+                      onChange={(e) => setFoundPhone(e.target.value)}
+                      placeholder="+51 984 123 456"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-mono placeholder:text-slate-400 text-slate-800 focus:outline-none focus:border-[#6355A4] focus:ring-1 focus:ring-purple-200"
                     />
                   </div>
                 </div>

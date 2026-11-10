@@ -44,6 +44,7 @@ import {
 
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import { generateSafeUuid } from '../../services/processDataService';
+import { supabase } from '../../services/supabaseClient';
 
 interface CreateProcessModalProps {
   tests: EvaluationTest[];
@@ -246,7 +247,32 @@ export const CreateProcessModal: React.FC<CreateProcessModalProps> = ({
     setCurrentStep(3);
   };
 
-  // Helper candidate addition
+  // Helper de búsqueda para autocompletar candidato registrado
+  const searchEmailOrDniInDatabase = async (val: string) => {
+    const clean = val.trim().toLowerCase();
+    if (!clean) return;
+    try {
+      const isEmail = clean.includes('@') && clean.includes('.');
+      const isDni = /^\d{7,8}$/.test(clean);
+      if (!isEmail && !isDni) return;
+
+      const { data } = await supabase
+        .from('candidatos')
+        .select('nombre_completo, dni, correo, telefono')
+        .or(isEmail ? `correo.ilike.${clean}` : `dni.eq.${clean}`)
+        .limit(1)
+        .maybeSingle();
+
+      if (data) {
+        if (data.nombre_completo && !candFullName) setCandFullName(data.nombre_completo.toUpperCase());
+        if (data.dni && !candDni) setCandDni(data.dni);
+        if (data.correo && !candEmail) setCandEmail(data.correo);
+        if (data.telefono) setCandPhone(data.telefono);
+      }
+    } catch {}
+  };
+
+  // Helper candidate addition con datos y contraseña personalizados
   const handleAddCandidate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!candEmail.trim() || !candEmail.includes('@')) {
@@ -254,13 +280,14 @@ export const CreateProcessModal: React.FC<CreateProcessModalProps> = ({
       return;
     }
     const cleanDni = candDni.replace(/\D/g, '').slice(0, 8) || `${70000000 + stagedCandidates.length}`;
+    const generatedPass = 'Gea' + Math.random().toString(36).slice(-4) + '!';
     const newCand: StagedCandidate = {
       id: `cand-${Date.now()}`,
       fullName: candFullName.trim() || candEmail.split('@')[0],
       email: candEmail.trim().toLowerCase(),
       dni: cleanDni,
       phone: candPhone.trim(),
-      password: 'Gea2026!'
+      password: generatedPass
     };
     setStagedCandidates(prev => [...prev, newCand]);
     setCandEmail('');
@@ -1034,14 +1061,22 @@ export const CreateProcessModal: React.FC<CreateProcessModalProps> = ({
                         type="text"
                         placeholder="DNI (8 dígitos)"
                         value={candDni}
-                        onChange={(e) => setCandDni(e.target.value)}
-                        className="px-3 py-2 rounded-xl border border-zinc-200 dark:border-zinc-800 text-xs"
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, '').slice(0, 8);
+                          setCandDni(val);
+                          if (val.length === 8) searchEmailOrDniInDatabase(val);
+                        }}
+                        className="px-3 py-2 rounded-xl border border-zinc-200 dark:border-zinc-800 text-xs font-mono"
                       />
                       <input
                         type="email"
                         placeholder="Correo electrónico *"
                         value={candEmail}
-                        onChange={(e) => setCandEmail(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setCandEmail(val);
+                          if (val.includes('@') && val.includes('.')) searchEmailOrDniInDatabase(val);
+                        }}
                         className="px-3 py-2 rounded-xl border border-zinc-200 dark:border-zinc-800 text-xs"
                       />
                       <button

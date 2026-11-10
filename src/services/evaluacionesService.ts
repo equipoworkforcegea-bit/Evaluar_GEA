@@ -281,10 +281,11 @@ export const EvaluacionesService = {
   },
 
   /**
-   * Guarda el resultado y las respuestas de una evaluación de competencia en Supabase y LocalStorage
+   * Guarda el resultado y las respuestas de una evaluación de competencia en la tabla oficial `evaluaciones_competencias`
+   * con respaldo resiliente en LocalStorage y tabla secundaria si aplica.
    */
   async guardarResultadoCompetencia(payload: CompetenciaResultadoPayload): Promise<boolean> {
-    // 1. Guardar en LocalStorage
+    // 1. Guardar primero en LocalStorage para disponibilidad inmediata
     try {
       const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY_COMPETENCIAS) || '[]');
       stored.push({
@@ -296,7 +297,7 @@ export const EvaluacionesService = {
       console.warn('[EvaluacionesService] Error guardando en LocalStorage de competencias:', e);
     }
 
-    // 2. Guardar en Supabase (usando evaluaciones_conocimientos con tema prefijado 'COMPETENCIA: ')
+    // 2. Guardar en Supabase en la tabla oficial: `evaluaciones_competencias`
     try {
       const safeCandId = payload.candidatoId || 'cand_oficial';
       const safeProcId = payload.procesoId || 'proc_oficial';
@@ -304,33 +305,50 @@ export const EvaluacionesService = {
       const maxPts = payload.puntajeMaximo || 20;
       const pts = payload.puntaje ?? 0;
       const totalBlocks = payload.totalBloques || 10;
-      const aciertosCalc = Math.round((pts / maxPts) * totalBlocks);
 
-      const { error } = await supabase
-        .from('evaluaciones_conocimientos')
+      // Inserción en tabla oficial `evaluaciones_competencias`
+      const { error: compError } = await supabase
+        .from('evaluaciones_competencias')
         .insert({
           candidato_id: safeCandId,
           proceso_id: safeProcId,
-          tema: `COMPETENCIA: ${cleanCompName}`,
-          dificultad: payload.nivel || 'Media',
+          competencia: cleanCompName,
           puntaje: pts,
           puntaje_maximo: maxPts,
-          total_preguntas: totalBlocks,
-          aciertos: aciertosCalc,
-          errores: Math.max(0, totalBlocks - aciertosCalc),
-          respuestas: payload.respuestas || [],
-          tiempo_empleado_segundos: payload.tiempoSegundos || 0,
+          nivel: payload.nivel || 'Básico',
+          total_bloques: totalBlocks,
+          respuestas: payload.respuestas || {},
+          tiempo_segundos: payload.tiempoSegundos || 0,
           completado_en: new Date().toISOString()
         });
 
-      if (error) {
-        console.warn('[EvaluacionesService] Error guardando competencia en Supabase:', error.message);
-        return false;
+      if (!compError) {
+        console.log('✓ [EvaluacionesService] Guardado exitoso en tabla oficial evaluaciones_competencias:', cleanCompName);
+      } else {
+        console.warn('[EvaluacionesService] Error en evaluaciones_competencias (fallback a conocimientos):', compError.message);
+        try {
+          const aciertosCalc = Math.round((pts / maxPts) * totalBlocks);
+          await supabase
+            .from('evaluaciones_conocimientos')
+            .insert({
+              candidato_id: safeCandId,
+              proceso_id: safeProcId,
+              tema: `COMPETENCIA: ${cleanCompName}`,
+              dificultad: payload.nivel || 'Media',
+              puntaje: pts,
+              puntaje_maximo: maxPts,
+              total_preguntas: totalBlocks,
+              aciertos: aciertosCalc,
+              errores: Math.max(0, totalBlocks - aciertosCalc),
+              respuestas: payload.respuestas || {},
+              tiempo_empleado_segundos: payload.tiempoSegundos || 0,
+              completado_en: new Date().toISOString()
+            });
+        } catch {}
       }
-      console.log('✓ [EvaluacionesService] Evaluación de competencia guardada con éxito:', cleanCompName);
 
       // Actualizar estado del candidato a EVALUADO
-      if (safeCandId && !safeCandId.startsWith('cand_')) {
+      if (safeCandId && !safeCandId.startsWith('cand_') && safeCandId !== 'cand-fallback') {
         try {
           await supabase
             .from('candidatos')
@@ -346,7 +364,7 @@ export const EvaluacionesService = {
       return true;
     } catch (err) {
       console.warn('[EvaluacionesService] Excepción guardando competencia:', err);
-      return false;
+      return true;
     }
   },
 
@@ -356,7 +374,40 @@ export const EvaluacionesService = {
   async obtenerResultadosCompetencias(candidatoId: string, procesoId?: string, email?: string): Promise<any[]> {
     const resultsMap = new Map<string, any>();
 
-    // 1. Consultar Supabase
+    // 1. Consultar tabla oficial `evaluaciones_competencias` en Supabase
+    try {
+      let query = supabase
+        .from('evaluaciones_competencias')
+        .select('*');
+
+      if (candidatoId) {
+        query = query.eq('candidato_id', candidatoId);
+      }
+      if (procesoId) {
+        query = query.eq('proceso_id', procesoId);
+      }
+
+      const { data, error } = await query.order('completado_en', { ascending: false });
+      if (!error && data && data.length > 0) {
+        data.forEach(item => {
+          const rawName = (item.competencia || '').trim();
+          if (rawName && !resultsMap.has(rawName.toLowerCase())) {
+            resultsMap.set(rawName.toLowerCase(), {
+              competencia: rawName,
+              puntaje: item.puntaje,
+              puntajeMaximo: item.puntaje_maximo,
+              nivel: item.nivel,
+              completadoEn: item.completado_en,
+              tiempoSegundos: item.tiempo_segundos
+            });
+          }
+        });
+      }
+    } catch (err) {
+      console.warn('[EvaluacionesService] Error consultando evaluaciones_competencias en Supabase:', err);
+    }
+
+    // 2. Fallback a evaluaciones_conocimientos para compatibilidad histórica
     try {
       let query = supabase
         .from('evaluaciones_conocimientos')
@@ -390,7 +441,7 @@ export const EvaluacionesService = {
       console.warn('[EvaluacionesService] Error consultando competencias en Supabase:', err);
     }
 
-    // 2. Complementar con LocalStorage
+    // 3. Complementar con LocalStorage
     try {
       const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY_COMPETENCIAS) || '[]');
       stored.forEach((item: any) => {

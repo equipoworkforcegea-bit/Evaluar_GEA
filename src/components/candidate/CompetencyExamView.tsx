@@ -106,62 +106,68 @@ export const CompetencyExamView: React.FC<CompetencyExamViewProps> = ({
   };
 
   const finishExam = async () => {
+    if (isSaving) return;
     setIsSaving(true);
-    const elapsedSeconds = Math.round((Date.now() - startTime) / 1000);
 
-    // Algoritmo psicométrico ipsativo:
-    // Ponderación de rango asignado:
-    // Primero = 4, Segundo = 3, Tercero = 2, Cuarto = 1
-    // Puntaje por ítem = statement.level * rankWeight
-    const rankWeights: Record<number, number> = { 1: 4, 2: 3, 3: 2, 4: 1 };
-    let totalAchieved = 0;
-    let maxPossible = 0;
-    let minPossible = 0;
+    try {
+      const elapsedSeconds = Math.round((Date.now() - startTime) / 1000);
 
-    blocks.forEach((block, bIdx) => {
-      const blockSelections = responses[bIdx] || {};
-      block.behaviors.forEach(behavior => {
-        const assignedRank = blockSelections[behavior.id] || 4;
-        const weight = rankWeights[assignedRank] || 1;
-        totalAchieved += behavior.level * weight;
+      // Algoritmo psicométrico ipsativo:
+      // Ponderación de rango asignado:
+      // Primero = 4, Segundo = 3, Tercero = 2, Cuarto = 1
+      // Puntaje por ítem = statement.level * rankWeight
+      const rankWeights: Record<number, number> = { 1: 4, 2: 3, 3: 2, 4: 1 };
+      let totalAchieved = 0;
+      let maxPossible = 0;
+      let minPossible = 0;
+
+      blocks.forEach((block, bIdx) => {
+        const blockSelections = responses[bIdx] || {};
+        block.behaviors.forEach(behavior => {
+          const assignedRank = blockSelections[behavior.id] || 4;
+          const weight = rankWeights[assignedRank] || 1;
+          totalAchieved += behavior.level * weight;
+        });
+        // En cada bloque con niveles 4, 3, 2, 1:
+        // Max = 4*4 + 3*3 + 2*2 + 1*1 = 16 + 9 + 4 + 1 = 30
+        // Min = 4*1 + 3*2 + 2*3 + 1*4 = 4 + 6 + 6 + 4 = 20
+        maxPossible += 30;
+        minPossible += 20;
       });
-      // En cada bloque con niveles 4, 3, 2, 1:
-      // Max = 4*4 + 3*3 + 2*2 + 1*1 = 16 + 9 + 4 + 1 = 30
-      // Min = 4*1 + 3*2 + 2*3 + 1*4 = 4 + 6 + 6 + 4 = 20
-      maxPossible += 30;
-      minPossible += 20;
-    });
 
-    const range = maxPossible - minPossible;
-    const normalizedRatio = range > 0 ? Math.max(0, Math.min(1, (totalAchieved - minPossible) / range)) : 0.5;
-    
-    // Escala estándar peruana 0 a 20 pts
-    const score20 = Math.round((normalizedRatio * 20) * 10) / 10;
-    setFinalScore(score20);
+      const range = maxPossible - minPossible;
+      const normalizedRatio = range > 0 ? Math.max(0, Math.min(1, (totalAchieved - minPossible) / range)) : 0.5;
+      
+      // Escala estándar peruana 0 a 20 pts
+      const score20 = Math.round((normalizedRatio * 20) * 10) / 10;
+      setFinalScore(score20);
 
-    let levelStr = 'Básico';
-    if (score20 >= 17) levelStr = 'Sobresaliente';
-    else if (score20 >= 14) levelStr = 'Avanzado';
-    else if (score20 >= 11) levelStr = 'Intermedio';
-    else levelStr = 'Básico';
+      let levelStr = 'Básico';
+      if (score20 >= 17) levelStr = 'Sobresaliente';
+      else if (score20 >= 14) levelStr = 'Avanzado';
+      else if (score20 >= 11) levelStr = 'Intermedio';
+      else levelStr = 'Básico';
 
-    setFinalLevel(levelStr);
+      setFinalLevel(levelStr);
 
-    // Guardar mediante EvaluacionesService
-    await EvaluacionesService.guardarResultadoCompetencia({
-      candidatoId,
-      procesoId: processId || 'proc_default',
-      competencia: competencyName,
-      puntaje: score20,
-      puntajeMaximo: 20,
-      nivel: levelStr,
-      totalBloques: totalBlocks,
-      respuestas: responses,
-      tiempoSegundos: elapsedSeconds
-    });
-
-    setIsSaving(false);
-    setIsCompleted(true);
+      // Guardar mediante EvaluacionesService en tabla oficial `evaluaciones_competencias`
+      await EvaluacionesService.guardarResultadoCompetencia({
+        candidatoId,
+        procesoId: processId || 'proc_default',
+        competencia: competencyName,
+        puntaje: score20,
+        puntajeMaximo: 20,
+        nivel: levelStr,
+        totalBloques: totalBlocks,
+        respuestas: responses,
+        tiempoSegundos: elapsedSeconds
+      });
+    } catch (err) {
+      console.error('[CompetencyExamView] Error al guardar competencia:', err);
+    } finally {
+      setIsSaving(false);
+      setIsCompleted(true);
+    }
   };
 
   // Pantalla de Felicitación / Finalización
@@ -224,13 +230,17 @@ export const CompetencyExamView: React.FC<CompetencyExamViewProps> = ({
       <div className="w-full max-w-[860px] bg-white dark:bg-[#182044] rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xl overflow-hidden animate-in fade-in">
         
         {/* ============================================================== */}
-        {/* HEADER SUPERIOR: EVALUAR LOGO | CONDUCT... | ONLINE BADGE     */}
+        {/* HEADER SUPERIOR: LOGO EVALUAR GEA | CONDUCT... | ONLINE BADGE */}
         {/* ============================================================== */}
         <div className="px-6 sm:px-8 py-4 sm:py-5 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-          {/* Logo evaluar oficial */}
-          <div className="flex items-center gap-1 font-sans">
-            <span className="text-rose-500 text-2xl sm:text-3xl font-extrabold italic leading-none">e</span>
-            <span className="text-[#1F2A5E] dark:text-white text-xl sm:text-2xl font-bold tracking-tight">valuar</span>
+          {/* Logo EvaluarGEA oficial */}
+          <div className="flex items-center font-sans tracking-tight select-none">
+            <span className="text-xl sm:text-2xl font-black text-[#1F2A5E] dark:text-white">
+              Evaluar
+            </span>
+            <span className="text-xl sm:text-2xl font-black text-[#2563EB] dark:text-[#5B8AE0]">
+              GEA
+            </span>
           </div>
 
           {/* Título central truncado tipo 'Conduct...' */}

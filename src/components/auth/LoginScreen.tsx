@@ -116,18 +116,32 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               const emailVal = res.candidato.correo || rawEmail || '';
               setBlockedEmail(emailVal);
               setIdentifier(res.candidato.dni || emailVal);
-              setPassword('Gea2026!');
+
+              // Personalizar con la contraseña específica asignada al postulante
+              const matchedInList = candidates.find(c => 
+                (res.candidato.dni && c.dni === res.candidato.dni) ||
+                (emailVal && c.email?.toLowerCase() === emailVal.toLowerCase()) ||
+                (codeToValidate && c.invitationCode === codeToValidate)
+              );
+              const personalPassword = 
+                res.candidato.password || 
+                res.candidato.clave || 
+                res.candidato.contrasena || 
+                matchedInList?.password || 
+                'Gea2026!';
+              setPassword(personalPassword);
 
               const hasAcc = Boolean(res.candidato.auth_usuario_id || res.candidato.estado === 'REGISTRADO');
               setCandidateHasAccount(hasAcc);
 
-              // Pre-llenar campos registrados previamente por Selección
-              setRegDni(res.candidato.dni || rawDni || '');
+              // Pre-llenar campos registrados previamente por Selección de forma personalizada
+              setRegDni(res.candidato.dni || rawDni || matchedInList?.dni || '');
               
               let nom = res.candidato.nombre || '';
               let ape = res.candidato.apellido || '';
-              if (!nom && res.candidato.nombre_completo) {
-                const words = res.candidato.nombre_completo.trim().split(/\s+/);
+              const fullNameCandidate = res.candidato.nombre_completo || matchedInList?.fullName || '';
+              if (!nom && fullNameCandidate) {
+                const words = fullNameCandidate.trim().split(/\s+/);
                 if (words.length >= 3) {
                   ape = words.slice(-2).join(' ');
                   nom = words.slice(0, -2).join(' ');
@@ -141,22 +155,24 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               setRegNombre(nom);
               setRegApellido(ape);
               setRegUsuario(res.candidato.usuario || (emailVal ? emailVal.split('@')[0] : ''));
-              setRegNumero(res.candidato.numero || res.candidato.telefono || '+51 9');
+              setRegNumero(res.candidato.numero || res.candidato.telefono || matchedInList?.phone || '+51 9');
             } else {
+              const fallbackMatched = candidates.find(c => (rawDni && c.dni === rawDni) || (rawEmail && c.email?.toLowerCase() === rawEmail.toLowerCase()));
               if (rawDni) {
                 setIdentifier(rawDni);
-                setPassword('Gea2026!');
+                setPassword(fallbackMatched?.password || 'Gea2026!');
               } else if (rawEmail) {
                 setIdentifier(rawEmail);
-                setPassword('Gea2026!');
+                setPassword(fallbackMatched?.password || 'Gea2026!');
               }
             }
           })
           .catch(() => {
             setIsLoading(false);
+            const fallbackMatched = candidates.find(c => (rawDni && c.dni === rawDni) || (rawEmail && c.email?.toLowerCase() === rawEmail.toLowerCase()));
             if (rawDni) {
               setIdentifier(rawDni);
-              setPassword('Gea2026!');
+              setPassword(fallbackMatched?.password || 'Gea2026!');
             }
           });
       }
@@ -192,6 +208,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     (identifier.trim().length > 4 && c.email.toLowerCase() === identifier.trim().toLowerCase()) ||
     (c.invitationCode && c.invitationCode.toLowerCase() === identifier.trim().toLowerCase())
   ) : null;
+
+  // Personalizar automáticamente la contraseña cuando el postulante es reconocido en tiempo real
+  useEffect(() => {
+    if (activeTab === 'CANDIDATE' && matchedCandidate) {
+      if (matchedCandidate.password && (!password || password === 'Gea2026!')) {
+        setPassword(matchedCandidate.password);
+      }
+    }
+  }, [matchedCandidate, activeTab]);
 
   // Handle Login / Registration Submission
   const handleSubmit = async (e: React.FormEvent) => {
