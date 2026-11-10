@@ -76,6 +76,8 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
   // ── Resultados de evaluaciones reales ──
   const [knowledgeResults, setKnowledgeResults] = useState<any[]>([]);
   const [discResult, setDiscResult] = useState<any | null>(null);
+  const [competencyResults, setCompetencyResults] = useState<any[]>([]);
+  const [activeProfileCompetencies, setActiveProfileCompetencies] = useState<string[]>([]);
   const [loadingResults, setLoadingResults] = useState<boolean>(true);
   const [expandedExamIndex, setExpandedExamIndex] = useState<number | null>(null);
 
@@ -84,17 +86,62 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
     const fetchResults = async () => {
       setLoadingResults(true);
       try {
-        const [kList, dRes] = await Promise.all([
-          EvaluacionesService.obtenerResultadosConocimientos(candidate.id, process?.id, candidate.email),
-          EvaluacionesService.obtenerResultadoDISC(candidate.id, process?.id, candidate.email)
+        const procId = process?.id || candidate.testId;
+
+        const [kList, dRes, cList] = await Promise.all([
+          EvaluacionesService.obtenerResultadosConocimientos(candidate.id, procId, candidate.email),
+          EvaluacionesService.obtenerResultadoDISC(candidate.id, procId, candidate.email),
+          EvaluacionesService.obtenerResultadosCompetencias(candidate.id, procId, candidate.email)
         ]);
+
+        // Cargar competencias activas correspondientes al perfil usado en el proceso
+        let loadedComps: string[] = [];
+
+        if (procId) {
+          try {
+            const { data: procRow } = await supabase
+              .from('procesos_evaluacion')
+              .select('*, perfiles_puesto(*)')
+              .eq('id', procId)
+              .maybeSingle();
+
+            if (procRow) {
+              const perfil = procRow.perfiles_puesto;
+              const meta = perfil?.competencias?._metadata || {};
+              if (Array.isArray(meta.selectedList) && meta.selectedList.length > 0) {
+                loadedComps = meta.selectedList;
+              } else if (perfil?.competencias && typeof perfil.competencias === 'object') {
+                loadedComps = Object.keys(perfil.competencias).filter(k => !k.startsWith('_'));
+              }
+              if (loadedComps.length === 0 && Array.isArray(procRow.competencias_seleccionadas)) {
+                loadedComps = procRow.competencias_seleccionadas;
+              }
+            }
+          } catch (errP) {
+            console.warn('[CandidateFullReportView] Error consultando perfil de proceso:', errP);
+          }
+        }
+
+        if (loadedComps.length === 0 && process?.selectedCompetencies && process.selectedCompetencies.length > 0) {
+          loadedComps = process.selectedCompetencies;
+        }
+
+        if (loadedComps.length === 0) {
+          loadedComps = ['Orientación al Cliente', 'Integridad', 'Temple y Serenidad'];
+        }
+
         if (isMounted) {
           setKnowledgeResults(kList || []);
           setDiscResult(dRes || null);
+          setCompetencyResults(cList || []);
+          setActiveProfileCompetencies(loadedComps);
+
           if (kList && kList.length > 0) {
             setActiveMainTab('CONOCIMIENTOS');
           } else if (dRes) {
             setActiveMainTab('DISC');
+          } else if (cList && cList.length > 0) {
+            setActiveMainTab('COMPETENCIAS');
           }
         }
       } catch (err) {
@@ -105,7 +152,7 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
     };
     fetchResults();
     return () => { isMounted = false; };
-  }, [candidate.id, candidate.email, process?.id]);
+  }, [candidate.id, candidate.email, process?.id, candidate.testId]);
 
   const hasKnowledge = knowledgeResults.length > 0;
   const hasDisc = Boolean(discResult);
@@ -141,9 +188,64 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
     .map(w => w[0].toUpperCase())
     .join('');
 
+  const avgCompetencyPercent = competencyResults.length > 0
+    ? Math.round(competencyResults.reduce((sum, item) => {
+        const sc = Number(item.puntaje ?? 0);
+        const percent = item.puntajeMaximo === 20 ? Math.round((sc / 20) * 100) : sc;
+        return sum + percent;
+      }, 0) / competencyResults.length)
+    : 0;
+
   const scoreVal = (candidate.scores?.overall && candidate.scores.overall > 0) 
     ? candidate.scores.overall 
-    : (hasKnowledge ? avgKnowledgePercent : 0);
+    : (hasKnowledge ? avgKnowledgePercent : (competencyResults.length > 0 ? avgCompetencyPercent : 0));
+
+  // Diccionario exhaustivo de definiciones conductuales
+  const COMPETENCY_DESCRIPTIONS: Record<string, string> = {
+    'Orientación al Cliente': 'Actitud genuina de comprender y atender al cliente, priorizando sus necesidades y buscando generar una experiencia positiva y de confianza en cada interacción.',
+    'Integridad': 'Coherencia entre valores, principios éticos y acciones, expresándose con honestidad y responsabilidad y proyectando una conducta confiable que refuerza la credibilidad y la cultura ética de la organización.',
+    'Temple y Serenidad': 'Calma sostenida para enfrentar presión o incertidumbre, respondiendo con equilibrio emocional, claridad y objetividad, y transmitiendo estabilidad al abordar desafíos o conflictos.',
+    'Orientación y adaptabilidad a las ventas': 'Disposición flexible para desenvolverse con eficacia en distintos entornos comerciales, ajustando el estilo y el enfoque para conectar con el cliente y facilitar el logro de resultados.',
+    'Comunicación efectiva': 'Capacidad para transmitir ideas con claridad y coherencia, ajustando el mensaje al contexto y asegurando una comprensión precisa que facilite interacciones fluidas y constructivas.',
+    'Trabajo en equipo y colaboración': 'Habilidad para integrarse activamente y cooperar con otros hacia metas compartidas, fomentando relaciones de confianza y apoyo mutuo.',
+    'Orientación a Resultados & Eficiencia': 'Compromiso constante para superar objetivos establecidos optimizando el tiempo y los recursos disponibles con altos estándares de calidad.',
+    'Autorregulación Emocional bajo Presión': 'Control emocional y serenidad ante situaciones de estrés, alta carga de trabajo o contingencias críticas.',
+    'Toma de Decisiones en Contingencias': 'Capacidad de resolución oportuna y estructurada ante problemas imprevistos, eligiendo el curso de acción más adecuado.',
+    'Pensamiento Crítico y Solución de Problemas': 'Capacidad de analizar situaciones complejas, descomponer problemas en elementos clave y proponer soluciones efectivas.',
+    'Negociación Asertiva': 'Capacidad de alcanzar acuerdos constructivos buscando el beneficio mutuo y defendiendo intereses clave con firmeza y respeto.',
+    'Construcción de confianza': 'Actitud honesta, transparente y coherente que genera credibilidad y vínculos seguros y duraderos con clientes y compañeros.',
+    'Empatía y sensibilidad social': 'Habilidad para sintonizar con los sentimientos y perspectivas de los demás, respondiendo con consideración y respeto.',
+    'Fidelización de relaciones': 'Capacidad de cultivar relaciones sólidas y leales a largo plazo tanto con clientes internos como externos.'
+  };
+
+  // Mapeo detallado de las competencias activas del perfil y los resultados reales del candidato
+  const activeCompetenciesData = useMemo(() => {
+    return activeProfileCompetencies.map(compName => {
+      const rawClean = compName.trim().toLowerCase();
+
+      // Buscar si el postulante tiene resultado guardado en evaluaciones_competencias
+      const match = competencyResults.find(r => {
+        const rName = (r.competencia || '').trim().toLowerCase();
+        return rName === rawClean || rName.includes(rawClean) || rawClean.includes(rName);
+      });
+
+      const isCompleted = Boolean(match);
+      const scoreNum = match ? Number(match.puntaje ?? 0) : 0;
+      const scorePercent = match?.puntajeMaximo === 20 ? Math.round((scoreNum / 20) * 100) : scoreNum;
+      const levelStr = match?.nivel || (scorePercent >= 70 ? 'Apto' : scorePercent >= 50 ? 'En Desarrollo' : 'No Apto');
+      const desc = COMPETENCY_DESCRIPTIONS[compName] || 'Evaluación conductual de aptitudes y desempeño profesional orientada a la vacante.';
+
+      return {
+        name: compName,
+        isCompleted,
+        score: scorePercent,
+        level: levelStr,
+        desc,
+        tiempoSegundos: match?.tiempoSegundos,
+        completadoEn: match?.completadoEn
+      };
+    });
+  }, [activeProfileCompetencies, competencyResults]);
 
 
   // Preguntas del acordeón de descripción (las 10 preguntas exactas de la captura de Evaluar)
@@ -1370,28 +1472,107 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
 
           {activeMainTab === 'COMPETENCIAS' && (
             <div className="space-y-5 animate-in fade-in">
-              <h3 className="text-lg font-bold text-[#1F2A5E] dark:text-white">
-                Evaluación de Competencias Laborales
-              </h3>
-
-              <div className="space-y-3">
-                {[
-                  { name: 'Comunicación Asertiva y Persuasión', score: 88, desc: 'Excelente articulación de argumentos comerciales y trato empático.' },
-                  { name: 'Resolución de Casos de Atención al Cliente', score: 86, desc: 'Alta capacidad para destrabar objeciones y retener llamadas críticas.' },
-                  { name: 'Autorregulación bajo Presión', score: 87, desc: 'Estabilidad emocional óptima en escenarios de alta demanda temporal.' }
-                ].map((c, i) => (
-                  <div key={i} className="p-4 rounded-xl bg-slate-50 dark:bg-[#151D3F] border border-[#DDE2EF] dark:border-[#2A3563] space-y-1.5">
-                    <div className="flex justify-between text-xs font-bold">
-                      <span className="text-[#161C3A] dark:text-white">{c.name}</span>
-                      <span className="text-[#2FA58B]">{c.score}%</span>
-                    </div>
-                    <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                      <div className="h-full bg-[#2FA58B]" style={{ width: `${c.score}%` }} />
-                    </div>
-                    <p className="text-[11px] text-[#6B7494]">{c.desc}</p>
-                  </div>
-                ))}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-lg font-bold text-[#1F2A5E] dark:text-white">
+                    Evaluación de Competencias Laborales
+                  </h3>
+                  <p className="text-xs text-[#6B7494] dark:text-[#9AA5C4]">
+                    Competencias requeridas por el perfil y resultados psicométricos del postulante
+                  </p>
+                </div>
+                <div className="text-xs font-semibold text-[#6B7494] dark:text-[#9AA5C4] shrink-0">
+                  <span className="font-bold text-[#1F2A5E] dark:text-white">
+                    {activeCompetenciesData.filter(c => c.isCompleted).length}
+                  </span> de {activeCompetenciesData.length} evaluadas
+                </div>
               </div>
+
+              {activeCompetenciesData.length === 0 ? (
+                <div className="p-8 text-center rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 text-slate-400 text-xs">
+                  No se han configurado competencias activas para este perfil.
+                </div>
+              ) : (
+                <div className="space-y-3.5">
+                  {activeCompetenciesData.map((c, i) => (
+                    <div 
+                      key={i} 
+                      className="p-4 sm:p-5 rounded-2xl bg-slate-50 dark:bg-[#151D3F] border border-[#DDE2EF] dark:border-[#2A3563] space-y-2.5 transition-all hover:border-[#6355A4]/40"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span 
+                            className="w-2.5 h-2.5 rounded-full shrink-0" 
+                            style={{ 
+                              backgroundColor: c.isCompleted 
+                                ? (c.score >= 70 ? '#10B981' : c.score >= 50 ? '#F59E0B' : '#EF4444') 
+                                : '#94A3B8' 
+                            }} 
+                          />
+                          <h4 className="text-sm font-bold text-[#161C3A] dark:text-white truncate">
+                            {c.name}
+                          </h4>
+                        </div>
+
+                        <div className="flex items-center gap-2.5 shrink-0">
+                          {c.isCompleted ? (
+                            <>
+                              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                                c.score >= 70 
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800' 
+                                  : c.score >= 50
+                                    ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
+                                    : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800'
+                              }`}>
+                                {c.level}
+                              </span>
+                              <span className="text-base sm:text-lg font-black text-[#2FA58B]">
+                                {c.score}%
+                              </span>
+                            </>
+                          ) : (
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-200/80 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                              Pendiente de rendir
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Barra de progreso visual */}
+                      <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                        <div 
+                          className="h-full rounded-full transition-all duration-500" 
+                          style={{ 
+                            width: `${c.isCompleted ? c.score : 0}%`,
+                            backgroundColor: c.score >= 70 ? '#2FA58B' : c.score >= 50 ? '#F59E0B' : '#EF4444'
+                          }} 
+                        />
+                      </div>
+
+                      {/* Descripción conductual oficial */}
+                      <p className="text-xs text-[#6B7494] dark:text-[#9AA5C4] leading-relaxed">
+                        {c.desc}
+                      </p>
+
+                      {/* Detalle si fue completado */}
+                      {c.isCompleted && (
+                        <div className="pt-1.5 flex flex-wrap items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400 border-t border-slate-200/60 dark:border-slate-800/60">
+                          <span className="flex items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Prueba completada</span>
+                          </span>
+                          {c.tiempoSegundos && (
+                            <span>• Tiempo empleado: {Math.floor(c.tiempoSegundos / 60)}m {c.tiempoSegundos % 60}s</span>
+                          )}
+                          {c.completadoEn && (
+                            <span>• Finalizado el {new Date(c.completadoEn).toLocaleDateString('es-PE', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
