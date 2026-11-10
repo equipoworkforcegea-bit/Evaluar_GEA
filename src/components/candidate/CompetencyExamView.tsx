@@ -389,3 +389,4 @@ export const CompetencyExamView: React.FC<CompetencyExamViewProps> = ({
     </div>
   );
 };
+

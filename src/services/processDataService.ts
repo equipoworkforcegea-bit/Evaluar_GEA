@@ -319,7 +319,7 @@ export const ProcessDataService = {
   /**
    * Actualiza directamente la columna `competencias` de un perfil en Supabase (`perfiles_puesto`)
    */
-  async updateProfileCompetencies(profileId: string, competencies: string[]): Promise<boolean> {
+  async updateProfileCompetencies(profileId: string, competencies: string[], levels?: Record<string, number>): Promise<boolean> {
     try {
       const uuid = ensureUuid(profileId);
       const { data: row } = await supabase
@@ -332,13 +332,17 @@ export const ProcessDataService = {
         ? (row.competencias._metadata || {})
         : {};
 
+      const existingLevels = existingMeta.competencyLevels || {};
+      const mergedLevels = { ...existingLevels, ...(levels || {}) };
+
       const compMap: Record<string, any> = {};
       competencies.forEach(c => {
-        compMap[c] = 85;
+        compMap[c] = mergedLevels[c] || 7;
       });
       compMap._metadata = {
         ...existingMeta,
-        selectedList: competencies
+        selectedList: competencies,
+        competencyLevels: mergedLevels
       };
 
       const { error } = await supabase
