@@ -931,23 +931,6 @@ export const AdminUsersManagementView: React.FC<AdminUsersManagementViewProps> =
                 </div>
               </div>
 
-              {/* Sugerencias de posición */}
-              <div className="pt-1">
-                <span className="text-[10px] font-bold text-[#6B7494] uppercase tracking-wider block mb-1.5">Sugerencias rápidas de posición:</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {SUGGESTED_POSITIONS.slice(0, 4).map((pos) => (
-                    <button
-                      key={pos}
-                      type="button"
-                      onClick={() => setCreatePosition(pos)}
-                      className="px-2 py-0.5 rounded-md bg-[#E9EDF6] dark:bg-zinc-800 text-[10px] font-semibold text-[#1F2A5E] dark:text-zinc-300 hover:bg-[#2F5BA8] hover:text-white transition-colors cursor-pointer"
-                    >
-                      {pos}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {/* Botones de Acción */}
               <div className="pt-4 flex items-center justify-end gap-2.5 border-t border-[#DDE2EF] dark:border-zinc-800">
                 <button

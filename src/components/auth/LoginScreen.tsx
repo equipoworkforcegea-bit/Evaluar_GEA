@@ -177,8 +177,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     setActiveTab(tab);
     setError(null);
     if (tab === 'ADMIN') {
-      setIdentifier('equipoworkforcegea@gmail.com');
-      setPassword('gea3953036');
+      setIdentifier('');
+      setPassword('');
     } else {
       setIdentifier(invitationDetected ? blockedEmail : '');
       setPassword('');
@@ -213,7 +213,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       const cleanPassword = password.trim();
 
       if (!cleanInput || !cleanPassword) {
-        setError('Ingrese usuario y contraseña corporativa.');
+        setError('Ingrese su usuario corporativo y contraseña.');
+        setIsLoading(false);
+        return;
+      }
+
+      if (cleanInput.includes('@')) {
+        setError('Acceso administrativo: ingrese únicamente con su nombre de usuario (sin @ ni correo).');
         setIsLoading(false);
         return;
       }
@@ -778,7 +784,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="text-xs text-slate-700 font-medium">
-                        {activeTab === 'ADMIN' ? 'Correo Electrónico Corporativo' : 'DNI o Código de Postulante'}
+                        {activeTab === 'ADMIN' ? 'Usuario Corporativo' : 'DNI o Código de Postulante'}
                       </label>
                       {activeTab === 'CANDIDATE' && (
                         <span className={`text-[10px] font-medium transition-colors ${cleanDni.length === 8 ? 'text-emerald-600 font-semibold' : 'text-slate-500'}`}>
@@ -793,23 +799,23 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                         : 'border-slate-200 bg-white hover:border-slate-300'
                     }`}>
                       <input
-                        type={activeTab === 'ADMIN' ? 'email' : 'text'}
-                        inputMode={activeTab === 'ADMIN' ? 'email' : 'numeric'}
+                        type="text"
+                        inputMode={activeTab === 'ADMIN' ? 'text' : 'numeric'}
                         pattern={activeTab === 'ADMIN' ? undefined : '[0-9]*'}
-                        autoComplete={activeTab === 'ADMIN' ? 'email' : 'username'}
+                        autoComplete="username"
                         autoCapitalize="none"
                         autoCorrect="off"
                         spellCheck={false}
-                        maxLength={activeTab === 'ADMIN' ? 60 : 12}
+                        maxLength={activeTab === 'ADMIN' ? 40 : 12}
                         value={identifier}
                         onChange={e => setIdentifier(e.target.value)}
                         onFocus={() => setFocusedField('identifier')}
                         onBlur={() => setFocusedField(null)}
-                        placeholder={activeTab === 'ADMIN' ? 'seleccion@geaperu.pe' : 'Ingresa tu DNI'}
+                        placeholder={activeTab === 'ADMIN' ? 'Ingresa tu usuario (ej. bryan.ramos)' : 'Ingresa tu DNI'}
                         className="w-full pl-10 pr-10 py-3.5 sm:py-2.5 rounded-xl bg-transparent text-slate-900 placeholder:text-slate-400 text-base sm:text-sm outline-none transition-all"
                       />
                       {activeTab === 'ADMIN' ? (
-                        <Mail className={`w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none transition-colors ${focusedField === 'identifier' ? 'text-blue-600' : 'text-slate-400'}`} />
+                        <User className={`w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none transition-colors ${focusedField === 'identifier' ? 'text-blue-600' : 'text-slate-400'}`} />
                       ) : (
                         <IdCard className={`w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none transition-colors ${focusedField === 'identifier' ? 'text-blue-600' : 'text-slate-400'}`} />
                       )}

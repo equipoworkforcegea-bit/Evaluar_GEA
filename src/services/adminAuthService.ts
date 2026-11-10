@@ -21,12 +21,17 @@ export const AdminAuthService = {
     const cleanId = identifier.trim().toLowerCase();
     const cleanPass = passwordInput.trim();
 
+    // No permitir correo electrónico para inicio de sesión administrativo (únicamente con usuario)
+    if (cleanId.includes('@')) {
+      return null;
+    }
+
     try {
-      // 1. Consultar en Supabase
+      // 1. Consultar en Supabase exclusivamente por username
       const { data, error } = await supabase
         .from('usuarios_admin')
         .select('*')
-        .or(`email.ilike.${cleanId},username.ilike.${cleanId}`)
+        .ilike('username', cleanId)
         .eq('is_active', true)
         .maybeSingle();
 
@@ -44,7 +49,7 @@ export const AdminAuthService = {
             role: (data.role as 'SUPER_ADMIN' | 'ADMIN') || 'SUPER_ADMIN',
             userId: data.id,
             fullName: data.full_name || 'Bryan • Super Admin',
-            email: data.email,
+            email: data.email || `${data.username}@geaperu.pe`,
             username: data.username,
             position: data.position || 'Super Administrador & Creador'
           };
@@ -54,16 +59,13 @@ export const AdminAuthService = {
       console.warn('[AdminAuthService] Error querying usuarios_admin in Supabase:', err);
     }
 
-    // 2. Respaldo de Creador / Super Admin en caso de que aún no haya corrido el SQL en Supabase
+    // 2. Respaldo de Creador / Super Admin por nombre de usuario
     const isCreatorLogin = 
-      cleanId === 'equipoworkforcegea@gmail.com' ||
       cleanId === 'equipoworkforce' ||
       cleanId === 'bryan' ||
-      cleanId === 'bryan@geaperu.pe' ||
+      cleanId === 'bryan.ramos' ||
       cleanId === 'superadmin' ||
-      cleanId === 'admin' ||
-      cleanId === 'admin@geaperu.pe' ||
-      cleanId === 'seleccion@geaperu.pe';
+      cleanId === 'admin';
 
     const isAuthorizedPass = 
       cleanPass === 'gea3953036' || 
@@ -75,8 +77,8 @@ export const AdminAuthService = {
         role: 'SUPER_ADMIN',
         userId: 'usr-superadmin-bryan',
         fullName: cleanId.includes('equipoworkforce') ? 'Bryan • Super Admin (Workforce GEA)' : 'Bryan • Super Admin (Creador)',
-        email: cleanId.includes('@') ? cleanId : 'equipoworkforcegea@gmail.com',
-        username: cleanId.includes('@') ? cleanId.split('@')[0] : cleanId,
+        email: `${cleanId}@geaperu.pe`,
+        username: cleanId,
         position: 'Super Administrador & Creador del Sistema'
       };
     }

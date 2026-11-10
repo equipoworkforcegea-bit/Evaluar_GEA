@@ -388,6 +388,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <CreateProcessModal
           tests={profiles.length > 0 ? profiles : processes}
           preselectedProfileId={createProcessPreselectedProfileId || undefined}
+          session={session}
           onClose={() => {
             setShowCreateProcessModal(false);
             setCreateProcessPreselectedProfileId(null);

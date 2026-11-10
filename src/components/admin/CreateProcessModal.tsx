@@ -1,6 +1,7 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { EvaluationTest, Candidate } from '../../types';
+import { EvaluationTest, Candidate, AuthSession } from '../../types';
+import { AuthStorage } from '../../services/authStorage';
 import { 
   X, 
   Rocket, 
@@ -47,6 +48,7 @@ import { generateSafeUuid } from '../../services/processDataService';
 interface CreateProcessModalProps {
   tests: EvaluationTest[];
   preselectedProfileId?: string;
+  session?: AuthSession | null;
   onClose: () => void;
   onLaunchProcess: (newProcess: EvaluationTest, newCandidates: Candidate[], profileId?: string) => void | Promise<void>;
 }
@@ -66,6 +68,7 @@ interface StagedCandidate {
 export const CreateProcessModal: React.FC<CreateProcessModalProps> = ({
   tests,
   preselectedProfileId,
+  session,
   onClose,
   onLaunchProcess
 }) => {
@@ -156,9 +159,46 @@ export const CreateProcessModal: React.FC<CreateProcessModalProps> = ({
     setEndDateTime(`${year}-${month}-${day}T${hours}:${mins}`);
   };
 
+  // Helpers para duración dinámica y usuario conectado
+  const getProfileDuration = (prof?: EvaluationTest | null): number => {
+    if (!prof) return 40;
+    if (typeof prof.totalDurationMinutes === 'number' && prof.totalDurationMinutes > 0) {
+      return prof.totalDurationMinutes;
+    }
+    if (Array.isArray(prof.stages) && prof.stages.length > 0) {
+      const sum = prof.stages.reduce((acc, st) => acc + (st.durationMinutes || 0), 0);
+      if (sum > 0) return sum;
+    }
+    const metaDur = (prof as any)?.competencias?._metadata?.duration;
+    if (typeof metaDur === 'number' && metaDur > 0) return metaDur;
+    return 40;
+  };
+
+  const getConnectedUserName = (): string => {
+    const s = session || AuthStorage.getSession();
+    if (s?.fullName) return s.fullName;
+    if (s?.username) return s.username;
+    return 'Bryan Ramos (Selección)';
+  };
+
   // Advanced Config state
-  const [durationMinutes, setDurationMinutes] = useState<number>(selectedProfile?.totalDurationMinutes || 45);
-  const [launchedBy, setLaunchedBy] = useState<string>('Tania León (Selección)');
+  const [durationMinutes, setDurationMinutes] = useState<number>(() => getProfileDuration(selectedProfile));
+  const [launchedBy, setLaunchedBy] = useState<string>(() => getConnectedUserName());
+
+  // Sincronizar reactivamente duración y reclutador conectado
+  useEffect(() => {
+    if (selectedProfile) {
+      const dur = getProfileDuration(selectedProfile);
+      setDurationMinutes(dur);
+    }
+  }, [selectedProfileId, selectedProfile]);
+
+  useEffect(() => {
+    const recruiter = getConnectedUserName();
+    if (recruiter) {
+      setLaunchedBy(recruiter);
+    }
+  }, [session]);
 
   // Staged Candidates (in advanced config or optional bulk invite)
   const [stagedCandidates, setStagedCandidates] = useState<StagedCandidate[]>([]);
