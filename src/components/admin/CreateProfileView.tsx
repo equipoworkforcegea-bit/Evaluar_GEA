@@ -45,7 +45,8 @@ import {
   BookOpen,
   ChevronRight,
   Edit3,
-  Layers
+  Layers,
+  Star
 } from 'lucide-react';
 
 export type DifficultyLevel = 'BAJO' | 'MEDIO' | 'ALTO';
@@ -175,13 +176,35 @@ const DEFAULT_KNOWLEDGE_ITEMS: KnowledgeItemConfig[] = [
   }
 ];
 
+export const COMPETENCY_DESCRIPTIONS: Record<string, string> = {
+  'Orientación al Cliente': 'Actitud genuina de comprender y atender al cliente, priorizando sus necesidades y buscando generar una experiencia positiva y de confianza en cada interacción.',
+  'Integridad': 'Coherencia entre valores, principios éticos y acciones, expresándose con honestidad y responsabilidad y proyectando una conducta confiable que refuerza la credibilidad y la cultura ética de la organización.',
+  'Temple y Serenidad': 'Calma sostenida para enfrentar presión o incertidumbre, respondiendo con equilibrio emocional, claridad y objetividad, y transmitiendo estabilidad al abordar desafíos o conflictos.',
+  'Orientación y adaptabilidad a las ventas': 'Disposición flexible para desenvolverse con eficacia en distintos entornos comerciales, ajustando el estilo y el enfoque para conectar con el cliente y facilitar el logro de resultados.',
+  'Comunicación efectiva': 'Capacidad para transmitir ideas con claridad y coherencia, ajustando el mensaje al contexto y asegurando una comprensión precisa que facilite interacciones fluidas y constructivas.'
+};
+
 const COMPETENCY_CATEGORIES: CompetencyCategory[] = [
   {
+    name: 'Favoritos',
+    count: 5,
+    iconName: 'Star',
+    color: '#EAB308',
+    items: [
+      'Orientación al Cliente',
+      'Integridad',
+      'Temple y Serenidad',
+      'Orientación y adaptabilidad a las ventas',
+      'Comunicación efectiva'
+    ]
+  },
+  {
     name: 'Relacionales',
-    count: 11,
+    count: 12,
     iconName: 'Users',
     color: '#64748B',
     items: [
+      'Orientación al Cliente',
       'Trabajo en equipo y colaboración',
       'Orientación a las relaciones interpersonales',
       'Establecimiento de redes de contacto (Networking)',
@@ -240,10 +263,11 @@ const COMPETENCY_CATEGORIES: CompetencyCategory[] = [
   },
   {
     name: 'Actitudinales',
-    count: 18,
+    count: 19,
     iconName: 'Zap',
     color: '#D97706',
     items: [
+      'Temple y Serenidad',
       'Proactividad e iniciativa',
       'Resiliencia y tolerancia a la frustración',
       'Compromiso organizacional',
@@ -266,10 +290,11 @@ const COMPETENCY_CATEGORIES: CompetencyCategory[] = [
   },
   {
     name: 'Valores',
-    count: 9,
+    count: 10,
     iconName: 'Rocket',
     color: '#0891B2',
     items: [
+      'Integridad',
       'Honestidad y transparencia',
       'Lealtad institucional',
       'Respeto por la diversidad e inclusión',
@@ -346,10 +371,11 @@ const COMPETENCY_CATEGORIES: CompetencyCategory[] = [
   },
   {
     name: 'Comunicacionales',
-    count: 9,
+    count: 10,
     iconName: 'MessageSquare',
     color: '#16A34A',
     items: [
+      'Comunicación efectiva',
       'Comunicación asertiva y clara',
       'Oratoria y presentación ejecutiva',
       'Redacción profesional estructurada',
@@ -377,10 +403,11 @@ const COMPETENCY_CATEGORIES: CompetencyCategory[] = [
   },
   {
     name: 'Emocionales',
-    count: 9,
+    count: 10,
     iconName: 'Heart',
     color: '#DB2777',
     items: [
+      'Temple y Serenidad',
       'Inteligencia emocional y autoconocimiento',
       'Autorregulación emocional bajo presión',
       'Gestión del estrés y la ansiedad laboral',
@@ -394,10 +421,12 @@ const COMPETENCY_CATEGORIES: CompetencyCategory[] = [
   },
   {
     name: 'Comerciales',
-    count: 9,
+    count: 11,
     iconName: 'Banknote',
     color: '#059669',
     items: [
+      'Orientación y adaptabilidad a las ventas',
+      'Orientación al Cliente',
       'Prospección y captación de nuevos clientes',
       'Cierre de ventas y persuasión comercial',
       'Atención al cliente y vocación de servicio',
@@ -553,7 +582,7 @@ export const CreateProfileView: React.FC<CreateProfileViewProps> = ({
     return initialProfile?.selectedCompetencies || [];
   });
   const [showCompetenciesDrawer, setShowCompetenciesDrawer] = useState(false);
-  const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
+  const [expandedCategories, setExpandedCategories] = useState<string[]>(['Favoritos']);
   const [searchCompetency, setSearchCompetency] = useState('');
 
   // Questionnaire catalogue drawer state
@@ -991,6 +1020,7 @@ Requisitos:
   const renderCategoryIcon = (iconName: string, color: string) => {
     const iconProps = { className: 'w-4 h-4 shrink-0', style: { color } };
     switch (iconName) {
+      case 'Star': return <Star {...iconProps} className="w-4 h-4 shrink-0 fill-amber-400 text-amber-500" />;
       case 'Users': return <Users {...iconProps} />;
       case 'Award': return <Award {...iconProps} />;
       case 'Zap': return <Zap {...iconProps} />;
@@ -1629,6 +1659,7 @@ Requisitos:
                         {selectedCompetencies.map((compName) => (
                           <span
                             key={compName}
+                            title={COMPETENCY_DESCRIPTIONS[compName] || compName}
                             className="px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-1.5"
                           >
                             <span>{compName}</span>
@@ -2435,7 +2466,7 @@ Requisitos:
                       <div className="flex items-center gap-3">
                         {renderCategoryIcon(cat.iconName, cat.color)}
                         <span className="text-xs sm:text-sm font-semibold text-slate-800">
-                          {cat.name} ({cat.count})
+                          {cat.name} ({cat.items.length})
                         </span>
                       </div>
                       <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
@@ -2446,19 +2477,30 @@ Requisitos:
                       <div className="pl-9 pr-2 pt-2 pb-1 space-y-2 animate-in fade-in">
                         {filteredItems.map((compItem) => {
                           const isSelected = selectedCompetencies.includes(compItem);
+                          const desc = COMPETENCY_DESCRIPTIONS[compItem];
                           return (
                             <label
                               key={compItem}
-                              className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors text-xs sm:text-sm ${
-                                isSelected ? 'bg-purple-50/70 text-[#6355A4] font-medium' : 'hover:bg-slate-50 text-slate-700'
+                              title={desc || compItem}
+                              className={`flex items-start justify-between p-2.5 rounded-xl cursor-pointer transition-colors text-xs sm:text-sm gap-3 ${
+                                isSelected ? 'bg-purple-50/80 text-[#6355A4] border border-purple-200/60 font-medium' : 'hover:bg-slate-50 text-slate-700 border border-transparent'
                               }`}
                             >
-                              <span className="pr-2">{compItem}</span>
+                              <div className="flex-1 pr-1">
+                                <span className="font-semibold block text-slate-800 leading-snug">
+                                  {compItem}
+                                </span>
+                                {desc && (
+                                  <p className="text-[11px] text-slate-500 font-normal leading-relaxed mt-1">
+                                    {desc}
+                                  </p>
+                                )}
+                              </div>
                               <input
                                 type="checkbox"
                                 checked={isSelected}
                                 onChange={() => handleToggleCompetency(compItem)}
-                                className="w-4 h-4 rounded text-[#6355A4] focus:ring-[#6355A4] border-slate-300 cursor-pointer"
+                                className="w-4 h-4 mt-0.5 rounded text-[#6355A4] focus:ring-[#6355A4] border-slate-300 cursor-pointer shrink-0"
                               />
                             </label>
                           );
@@ -2473,7 +2515,7 @@ Requisitos:
             {/* Footer de Competencias (Imagen 5) */}
             <div className="p-4 border-t border-slate-100 flex items-center justify-between text-xs sm:text-sm text-slate-600 shrink-0 bg-slate-50/30">
               <span className="font-bold text-slate-800">
-                145 Competencias Totales en Evaluar
+                {new Set(COMPETENCY_CATEGORIES.filter(c => c.name !== 'Favoritos').flatMap(c => c.items)).size} Competencias Totales en Evaluar
               </span>
               <button
                 type="button"
