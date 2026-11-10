@@ -29,8 +29,8 @@ export const CompetencyExamView: React.FC<CompetencyExamViewProps> = ({
   const [responses, setResponses] = useState<Record<number, Record<string, number>>>({});
   const [isCompleted, setIsCompleted] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [finalScore, setFinalScore] = useState<number>(0);
-  const [finalLevel, setFinalLevel] = useState<string>('Avanzado');
+  const [finalPorcentaje, setFinalPorcentaje] = useState<number>(0);
+  const [finalAptitud, setFinalAptitud] = useState<string>('No Apto');
   const [startTime] = useState<number>(() => Date.now());
 
   // Bloque actual
@@ -137,27 +137,25 @@ export const CompetencyExamView: React.FC<CompetencyExamViewProps> = ({
 
       const range = maxPossible - minPossible;
       const normalizedRatio = range > 0 ? Math.max(0, Math.min(1, (totalAchieved - minPossible) / range)) : 0.5;
-      
-      // Escala estándar peruana 0 a 20 pts
-      const score20 = Math.round((normalizedRatio * 20) * 10) / 10;
-      setFinalScore(score20);
 
-      let levelStr = 'Básico';
-      if (score20 >= 17) levelStr = 'Sobresaliente';
-      else if (score20 >= 14) levelStr = 'Avanzado';
-      else if (score20 >= 11) levelStr = 'Intermedio';
-      else levelStr = 'Básico';
+      // Porcentaje de aptitud 0–100%
+      const porcentaje = Math.round(normalizedRatio * 100);
+      setFinalPorcentaje(porcentaje);
 
-      setFinalLevel(levelStr);
+      // Umbral de aptitud conductual
+      let aptitud = 'No Apto';
+      if (porcentaje >= 70) aptitud = 'Apto';
+      else if (porcentaje >= 50) aptitud = 'En Desarrollo';
+      setFinalAptitud(aptitud);
 
       // Guardar mediante EvaluacionesService en tabla oficial `evaluaciones_competencias`
       await EvaluacionesService.guardarResultadoCompetencia({
-        candidatoId,
+        candidatoId: candidateId,
         procesoId: processId || 'proc_default',
         competencia: competencyName,
-        puntaje: score20,
-        puntajeMaximo: 20,
-        nivel: levelStr,
+        puntaje: porcentaje,
+        puntajeMaximo: 100,
+        nivel: aptitud,
         totalBloques: totalBlocks,
         respuestas: responses,
         tiempoSegundos: elapsedSeconds
@@ -181,7 +179,7 @@ export const CompetencyExamView: React.FC<CompetencyExamViewProps> = ({
 
           <div className="space-y-2">
             <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-              ¡Evaluación Completada!
+              ¡Prueba Completada!
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               Has finalizado la evaluación conductual de la competencia:
@@ -191,24 +189,9 @@ export const CompetencyExamView: React.FC<CompetencyExamViewProps> = ({
             </p>
           </div>
 
-          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-[#121936] border border-slate-200 dark:border-slate-800 space-y-2">
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-slate-500">Puntaje Obtenido:</span>
-              <span className="font-bold text-slate-900 dark:text-white text-base">
-                {finalScore} / 20 pts
-              </span>
-            </div>
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-slate-500">Nivel de Desempeño:</span>
-              <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                {finalLevel}
-              </span>
-            </div>
-          </div>
-
           <button
             type="button"
-            onClick={() => onComplete(finalScore, finalLevel)}
+            onClick={() => onComplete(finalPorcentaje, finalAptitud)}
             className="w-full py-3.5 px-6 rounded-2xl bg-[#6355A4] hover:bg-[#52448d] text-white font-bold text-sm shadow-md transition-all cursor-pointer active:scale-98"
           >
             Volver a Mis Evaluaciones
