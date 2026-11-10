@@ -25,12 +25,68 @@ function ensureUuid(id?: string): string {
 
 // Mapeo de fila Supabase `procesos_evaluacion` a `EvaluationTest`
 function mapRowToProcess(row: any): EvaluationTest {
+  const perfil = row.perfiles_puesto;
+  const rawComp = perfil?.competencias;
+  const meta = (rawComp && typeof rawComp === 'object' && !Array.isArray(rawComp))
+    ? (rawComp._metadata || {})
+    : {};
+
+  let comps: string[] = [];
+  if (Array.isArray(meta.selectedList) && meta.selectedList.length > 0) {
+    comps = meta.selectedList;
+  } else if (rawComp && typeof rawComp === 'object') {
+    comps = Object.keys(rawComp).filter(k => !k.startsWith('_'));
+  }
+  if (comps.length === 0 && Array.isArray(row.competencias_seleccionadas)) {
+    comps = row.competencias_seleccionadas;
+  }
+
+  const knowledgeQuestionnaires = Array.isArray(meta.knowledgeQuestionnaires)
+    ? meta.knowledgeQuestionnaires
+    : (Array.isArray(meta.knowledgeItems) ? meta.knowledgeItems.map((k: any) => typeof k === 'string' ? k : k.name) : []);
+
+  const stages = Array.isArray(meta.stages) && meta.stages.length > 0
+    ? meta.stages
+    : [
+        {
+          id: 'STAGE_1_PSYCHO',
+          category: 'PSYCHOLOGICAL',
+          name: 'Etapa 1: Prueba de Conocimientos',
+          description: 'Evaluación de conocimientos y razonamiento especializado',
+          durationMinutes: 15,
+          questionCount: 20,
+          weightPercent: 35,
+          isEnabled: true
+        },
+        {
+          id: 'STAGE_2_EMOTIONAL',
+          category: 'EMOTIONAL',
+          name: 'Etapa 2: Prueba DISC (Conducta y Estilo Laboral)',
+          description: 'Perfil conductual, estilo de comunicación y adaptación',
+          durationMinutes: 15,
+          questionCount: 24,
+          weightPercent: 30,
+          isEnabled: true
+        },
+        {
+          id: 'STAGE_3_COMPETENCIES',
+          category: 'COMPETENCIES',
+          name: 'Etapa 3: Evaluación de Competencias Laborales',
+          description: 'Medición de aptitudes y desempeño profesional orientadas a la vacante',
+          durationMinutes: 15,
+          questionCount: 10,
+          weightPercent: 35,
+          isEnabled: true
+        }
+      ];
+
   return {
     id: row.id,
     code: row.codigo || 'PROC-GEA',
     title: row.titulo || 'Proceso de Selección',
     targetPosition: row.puesto_objetivo || 'Asesor Operativo',
-    profileName: row.perfiles_puesto?.titulo || row.puesto_objetivo || 'Perfil General',
+    profileName: perfil?.titulo || row.puesto_objetivo || 'Perfil General',
+    profileId: row.perfil_puesto_id || perfil?.id,
     description: row.descripcion || '',
     instructions: row.instrucciones || 'Examen de evaluación psicométrica y situacional.',
     totalDurationMinutes: row.duracion_total_minutos || 45,
@@ -47,44 +103,12 @@ function mapRowToProcess(row: any): EvaluationTest {
     inProgressCount: 0,
     hiredCount: 0,
     averageScore: 0,
-    selectedCompetencies: [
-      'Orientación a Resultados & Eficiencia',
-      'Autorregulación Emocional bajo Presión',
-      'Toma de Decisiones en Contingencias'
-    ],
-    stages: [
-      {
-        id: 'STAGE_1_PSYCHO',
-        category: 'PSYCHOLOGICAL',
-        name: 'Etapa 1: Prueba Psicopedagógica & Lógica',
-        description: 'Evaluación psicométrica y razonamiento lógico-deductivo',
-        durationMinutes: 15,
-        questionCount: 8,
-        weightPercent: 35,
-        isEnabled: true
-      },
-      {
-        id: 'STAGE_2_EMOTIONAL',
-        category: 'EMOTIONAL',
-        name: 'Etapa 2: Clima y Regulación Emocional',
-        description: 'Inteligencia emocional, resiliencia y tolerancia bajo presión',
-        durationMinutes: 15,
-        questionCount: 8,
-        weightPercent: 30,
-        isEnabled: true
-      },
-      {
-        id: 'STAGE_3_WORK_CASES',
-        category: 'WORK_CASES',
-        name: 'Etapa 3: Casos Laborales Simulados',
-        description: 'Resolución de situaciones reales, criterio operativo y toma de decisiones',
-        durationMinutes: 15,
-        questionCount: 4,
-        weightPercent: 35,
-        isEnabled: true
-      }
-    ]
-  };
+    selectedCompetencies: comps,
+    knowledgeQuestionnaires,
+    knowledgeItems: meta.knowledgeItems || [],
+    competencyLevels: meta.competencyLevels || {},
+    stages
+  } as any;
 }
 
 // Mapeo de fila Supabase `perfiles_puesto` a `EvaluationTest` (catálogo)
