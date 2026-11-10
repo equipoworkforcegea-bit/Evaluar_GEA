@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { EvaluacionesService } from '../../services/evaluacionesService';
 import { Candidate, EvaluationTest } from '../../types';
 import { ExportReportModal } from './ExportReportModal';
