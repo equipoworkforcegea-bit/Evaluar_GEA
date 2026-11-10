@@ -46,3 +46,4 @@ END $$;
 CREATE INDEX IF NOT EXISTS idx_eval_competencias_candidato ON public.evaluaciones_competencias(candidato_id);
 CREATE INDEX IF NOT EXISTS idx_eval_competencias_proceso ON public.evaluaciones_competencias(proceso_id);
 CREATE INDEX IF NOT EXISTS idx_eval_competencias_competencia ON public.evaluaciones_competencias(competencia);
+

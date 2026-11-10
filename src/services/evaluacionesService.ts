@@ -92,18 +92,9 @@ export const EvaluacionesService = {
       }
       console.log('✓ [EvaluacionesService] Respuestas de Conocimientos guardadas con éxito en Supabase:', payload.tema);
 
-      // Actualizar estado del candidato en Supabase a EVALUADO y registrar completado_en
+      // Actualizar estado del candidato: EVALUADO si completó todas las pruebas, o EN_CURSO si le quedan pendientes
       if (safeCandId && !safeCandId.startsWith('cand_')) {
-        try {
-          await supabase
-            .from('candidatos')
-            .update({
-              estado: 'EVALUADO',
-              completado_en: new Date().toISOString(),
-              actualizado_en: new Date().toISOString()
-            })
-            .eq('id', safeCandId);
-        } catch {}
+        await this.actualizarEstadoCandidatoTrasPrueba(safeCandId, safeProcId);
       }
 
       return true;
@@ -151,18 +142,9 @@ export const EvaluacionesService = {
       }
       console.log('✓ [EvaluacionesService] Respuestas de DISC guardadas con éxito en Supabase');
 
-      // Actualizar estado del candidato en Supabase a EVALUADO y registrar completado_en
+      // Actualizar estado del candidato: EVALUADO si completó todas las pruebas, o EN_CURSO si le quedan pendientes
       if (payload.candidatoId && !payload.candidatoId.startsWith('cand_')) {
-        try {
-          await supabase
-            .from('candidatos')
-            .update({
-              estado: 'EVALUADO',
-              completado_en: new Date().toISOString(),
-              actualizado_en: new Date().toISOString()
-            })
-            .eq('id', payload.candidatoId);
-        } catch {}
+        await this.actualizarEstadoCandidatoTrasPrueba(payload.candidatoId, payload.procesoId);
       }
 
       return true;
@@ -347,18 +329,9 @@ export const EvaluacionesService = {
         } catch {}
       }
 
-      // Actualizar estado del candidato a EVALUADO
+      // Actualizar estado del candidato: EVALUADO si completó todas las pruebas, o EN_CURSO si le quedan pendientes
       if (safeCandId && !safeCandId.startsWith('cand_') && safeCandId !== 'cand-fallback') {
-        try {
-          await supabase
-            .from('candidatos')
-            .update({
-              estado: 'EVALUADO',
-              completado_en: new Date().toISOString(),
-              actualizado_en: new Date().toISOString()
-            })
-            .eq('id', safeCandId);
-        } catch {}
+        await this.actualizarEstadoCandidatoTrasPrueba(safeCandId, safeProcId);
       }
 
       return true;
@@ -466,6 +439,135 @@ export const EvaluacionesService = {
     } catch {}
 
     return Array.from(resultsMap.values());
+  },
+
+  /**
+   * Verifica si el candidato ha completado TODAS las pruebas requeridas para el proceso.
+   * Si las completó todas: marca el estado como 'EVALUADO' y completado_en = now().
+   * Si solo resolvió una o tiene pendientes: marca el estado como 'EN_CURSO' y completado_en = null.
+   */
+  async actualizarEstadoCandidatoTrasPrueba(candidatoId: string, procesoId?: string): Promise<'EVALUADO' | 'EN_CURSO'> {
+    if (!candidatoId || candidatoId.startsWith('cand_') || candidatoId === 'cand-fallback') {
+      return 'EN_CURSO';
+    }
+
+    try {
+      // 1. Obtener fila del candidato para saber su proceso si no se envió
+      let procId = procesoId;
+      if (!procId || procId === 'proc_default') {
+        const { data: candRow } = await supabase
+          .from('candidatos')
+          .select('proceso_id')
+          .eq('id', candidatoId)
+          .maybeSingle();
+        procId = candRow?.proceso_id || procId;
+      }
+
+      if (!procId || procId === 'proc_default') {
+        await supabase
+          .from('candidatos')
+          .update({
+            estado: 'EN_CURSO',
+            iniciado_en: new Date().toISOString(),
+            completado_en: null,
+            actualizado_en: new Date().toISOString()
+          })
+          .eq('id', candidatoId);
+        return 'EN_CURSO';
+      }
+
+      // 2. Obtener configuración del proceso y su perfil
+      const { data: proc } = await supabase
+        .from('procesos_evaluacion')
+        .select('*, perfiles_puesto(*)')
+        .eq('id', procId)
+        .maybeSingle();
+
+      const perfil = proc?.perfiles_puesto;
+      const meta = perfil?.competencias?._metadata || {};
+      const stages: any[] = Array.isArray(meta.stages) ? meta.stages : (Array.isArray(proc?.etapas) ? proc.etapas : []);
+      const hasCustomStages = stages.length > 0;
+
+      // 2.1 Requerimiento DISC
+      const hasDisc = hasCustomStages
+        ? stages.some(s => s.isEnabled !== false && (s.id === 'STAGE_DISC' || s.id === 'STAGE_2_EMOTIONAL' || s.category === 'EMOTIONAL' || String(s.name || '').toLowerCase().includes('disc')))
+        : true;
+
+      // 2.2 Requerimiento Conocimientos
+      let rawKnowledgeList: string[] = [];
+      if (Array.isArray(meta.knowledgeQuestionnaires) && meta.knowledgeQuestionnaires.length > 0) {
+        rawKnowledgeList = meta.knowledgeQuestionnaires;
+      } else if (Array.isArray(meta.knowledgeItems) && meta.knowledgeItems.length > 0) {
+        rawKnowledgeList = meta.knowledgeItems.map((k: any) => typeof k === 'string' ? k : k.name).filter(Boolean);
+      } else if (hasCustomStages) {
+        const knowStage = stages.find(s => s.isEnabled !== false && (s.id === 'STAGE_CONOCIMIENTOS' || s.category === 'PSYCHOLOGICAL'));
+        if (knowStage?.description && knowStage.description.includes('Cuestionarios: ')) {
+          rawKnowledgeList = knowStage.description
+            .replace('Cuestionarios: ', '')
+            .split(',')
+            .map((x: string) => x.trim())
+            .filter(Boolean);
+        }
+      }
+
+      // 2.3 Requerimiento Competencias
+      let compList: string[] = [];
+      if (Array.isArray(meta.selectedList) && meta.selectedList.length > 0) {
+        compList = meta.selectedList;
+      } else if (perfil?.competencias && typeof perfil.competencias === 'object') {
+        compList = Object.keys(perfil.competencias).filter(k => !k.startsWith('_'));
+      }
+
+      // 3. Consultar pruebas completadas por el candidato
+      const [discRes, knowRes, compRes] = await Promise.all([
+        supabase.from('evaluaciones_disc').select('id').eq('candidato_id', candidatoId),
+        supabase.from('evaluaciones_conocimientos').select('tema').eq('candidato_id', candidatoId),
+        supabase.from('evaluaciones_competencias').select('competencia').eq('candidato_id', candidatoId)
+      ]);
+
+      const discDone = !hasDisc || ((discRes.data || []).length > 0);
+      
+      const completedKnowledgeTopics = (knowRes.data || []).map((k: any) => (k.tema || '').toLowerCase().trim());
+      const knowDone = rawKnowledgeList.length === 0 || rawKnowledgeList.every(kReq => {
+        const kClean = kReq.toLowerCase().trim();
+        return completedKnowledgeTopics.some(done => done.includes(kClean) || kClean.includes(done));
+      });
+
+      const completedCompNames = (compRes.data || []).map((c: any) => (c.competencia || '').toLowerCase().trim());
+      const compDone = compList.length === 0 || compList.every(cReq => {
+        const cClean = cReq.toLowerCase().trim();
+        return completedCompNames.some(done => done === cClean || done.includes(cClean) || cClean.includes(done));
+      });
+
+      // Total de requerimientos evaluados
+      const allCompleted = discDone && knowDone && compDone;
+
+      if (allCompleted) {
+        await supabase
+          .from('candidatos')
+          .update({
+            estado: 'EVALUADO',
+            completado_en: new Date().toISOString(),
+            actualizado_en: new Date().toISOString()
+          })
+          .eq('id', candidatoId);
+        return 'EVALUADO';
+      } else {
+        await supabase
+          .from('candidatos')
+          .update({
+            estado: 'EN_CURSO',
+            completado_en: null,
+            iniciado_en: new Date().toISOString(),
+            actualizado_en: new Date().toISOString()
+          })
+          .eq('id', candidatoId);
+        return 'EN_CURSO';
+      }
+    } catch (err) {
+      console.warn('[EvaluacionesService] Error en actualizarEstadoCandidatoTrasPrueba:', err);
+      return 'EN_CURSO';
+    }
   }
 };
 

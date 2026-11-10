@@ -233,10 +233,19 @@ export const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
         }
       } catch {}
 
-      // Si no se encontró en ninguna base de datos, desmarcar aviso
+      // Si no se encontró en ninguna base de datos, NO llenar nada y limpiar campos
+      setNewFirstName('');
+      setNewLastName('');
+      setFoundDni('');
+      setFoundPhone('');
       setAutoFilledNotice(false);
     } catch (err) {
       console.warn('[InviteCandidateModal] Error buscando candidato por correo:', err);
+      setNewFirstName('');
+      setNewLastName('');
+      setFoundDni('');
+      setFoundPhone('');
+      setAutoFilledNotice(false);
     } finally {
       setIsSearchingEmail(false);
     }
@@ -245,72 +254,23 @@ export const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
   const handleEmailInputChange = (val: string) => {
     setNewEmail(val);
     setAddModalError(null);
-    setAutoFilledNotice(false);
 
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
 
-    if (val.includes('@') && val.includes('.')) {
+    const clean = val.trim().toLowerCase();
+    if (clean.includes('@') && clean.includes('.')) {
       searchTimeoutRef.current = setTimeout(() => {
-        searchEmailInDatabase(val);
+        searchEmailInDatabase(clean);
       }, 350);
-    }
-  };
-
-  const searchDniInDatabase = async (dniToSearch: string) => {
-    const cleanDni = dniToSearch.replace(/\D/g, '').trim();
-    if (cleanDni.length < 8) return;
-
-    setIsSearchingEmail(true);
-    try {
-      // 1. Buscar en tabla `candidatos`
-      const { data: foundCand } = await supabase
-        .from('candidatos')
-        .select('nombre_completo, dni, telefono, correo, whatsapp_user')
-        .eq('dni', cleanDni)
-        .order('actualizado_en', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (foundCand) {
-        if (!newEmail && foundCand.correo) setNewEmail(foundCand.correo);
-        if (foundCand.nombre_completo) {
-          const rawName = foundCand.nombre_completo.trim();
-          const parts = rawName.split(/\s+/);
-          let fName = parts[0] || '';
-          let lName = parts.slice(1).join(' ') || '';
-          setNewFirstName(fName.toUpperCase());
-          setNewLastName(lName.toUpperCase());
-        }
-        if (foundCand.telefono || foundCand.whatsapp_user) {
-          setFoundPhone(foundCand.telefono || foundCand.whatsapp_user || '');
-        }
-        setFoundDni(cleanDni);
-        setAutoFilledNotice(true);
-        return;
-      }
-
-      // 2. Buscar en tabla `postulantes`
-      const { data: foundPost } = await supabase
-        .from('postulantes')
-        .select('nombre, apellido, dni, telefono, correo')
-        .eq('dni', cleanDni)
-        .limit(1)
-        .maybeSingle();
-
-      if (foundPost) {
-        if (!newEmail && foundPost.correo) setNewEmail(foundPost.correo);
-        if (foundPost.nombre) setNewFirstName(foundPost.nombre.toUpperCase());
-        if (foundPost.apellido) setNewLastName(foundPost.apellido.toUpperCase());
-        if (foundPost.telefono) setFoundPhone(foundPost.telefono);
-        setFoundDni(cleanDni);
-        setAutoFilledNotice(true);
-      }
-    } catch (e) {
-      console.warn('[InviteCandidateModal] Error buscando por DNI:', e);
-    } finally {
-      setIsSearchingEmail(false);
+    } else {
+      // Si el correo está incompleto o se borró, no llenar nada
+      setAutoFilledNotice(false);
+      setNewFirstName('');
+      setNewLastName('');
+      setFoundDni('');
+      setFoundPhone('');
     }
   };
 
@@ -663,9 +623,15 @@ export const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
             <button
               type="button"
               onClick={() => {
-                setShowAddModal(true);
+                setNewEmail('');
+                setNewFirstName('');
+                setNewLastName('');
+                setFoundDni('');
+                setFoundPhone('');
+                setNewCountry('Perú');
                 setAddModalError(null);
                 setAutoFilledNotice(false);
+                setShowAddModal(true);
               }}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold shadow-2xs transition-all cursor-pointer"
             >
@@ -933,9 +899,8 @@ export const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
                       onChange={(e) => {
                         const val = e.target.value.replace(/\D/g, '');
                         setFoundDni(val);
-                        if (val.length === 8) searchDniInDatabase(val);
                       }}
-                      placeholder="78965412"
+                      placeholder="8 dígitos"
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-mono placeholder:text-slate-400 text-slate-800 focus:outline-none focus:border-[#6355A4] focus:ring-1 focus:ring-purple-200"
                     />
                   </div>

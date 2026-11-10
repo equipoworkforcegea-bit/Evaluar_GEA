@@ -396,6 +396,20 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
           };
         }) : [];
 
+        const isDiscFinished = !hasDisc || isDiscDone;
+        const isKnowledgeFinished = !hasKnowledge || configuredKnowledgeItems.length === 0 || configuredKnowledgeItems.every(k => k.isCompleted);
+        const isCompetenciesFinished = !hasCompetencies || configuredCompetencyItems.length === 0 || configuredCompetencyItems.every(c => c.isCompleted);
+        const allTestsFinished = isDiscFinished && isKnowledgeFinished && isCompetenciesFinished;
+        const hasAnyStartedOrCompleted = isDiscDone || configuredKnowledgeItems.some(k => k.isCompleted) || configuredCompetencyItems.some(c => c.isCompleted) || candRow?.iniciado_en || candStatus === 'IN_PROGRESS' || candStatus === 'EN_CURSO';
+
+        if (allTestsFinished) {
+          status = 'FINALIZADO';
+        } else if (hasAnyStartedOrCompleted) {
+          status = 'EN_PROGRESO';
+        } else {
+          status = 'PENDIENTE';
+        }
+
         builtProcessList.push({
           id: procId,
           candidateIdInProcess: candIdForThisProcess,

@@ -239,14 +239,16 @@ function mapSupabaseToCandidate(row: any): Candidate {
   const rawStatus = String(row.estado || row.status || '').toUpperCase();
   const hasCompletedDate = Boolean(row.completado_en || row.completed_at);
 
-  if (rawStatus === 'EVALUADO' || rawStatus === 'SCORED' || rawStatus === 'COMPLETADO' || hasCompletedDate) {
+  if (rawStatus === 'EN_CURSO' || rawStatus === 'IN_PROGRESS' || rawStatus === 'EN_PROCESO') {
+    status = 'IN_PROGRESS';
+  } else if (rawStatus === 'EVALUADO' || rawStatus === 'SCORED' || rawStatus === 'COMPLETADO') {
     status = 'SCORED';
   } else if (rawStatus === 'FINALISTA' || rawStatus === 'FINALIST') {
     status = 'FINALIST';
   } else if (rawStatus === 'RECHAZADO' || rawStatus === 'REJECTED') {
     status = 'REJECTED';
-  } else if (rawStatus === 'EN_CURSO' || rawStatus === 'IN_PROGRESS' || rawStatus === 'EN_PROCESO') {
-    status = hasCompletedDate ? 'SCORED' : 'IN_PROGRESS';
+  } else if (hasCompletedDate) {
+    status = 'SCORED';
   } else {
     const rawStage = String(row.etapa_actual || row.current_stage || '').toUpperCase();
     if (row.consentimiento_firmado || row.iniciado_en || rawStage.includes('ETAPA_2') || rawStage.includes('STAGE_2') || rawStage.includes('ETAPA_3') || rawStage.includes('STAGE_3')) {
@@ -427,12 +429,12 @@ export const CandidateDataService = {
             const stats = statsMap.get(c.id);
             if (stats && stats.totalMax > 0) {
               const avgScore = Math.round((stats.totalScore / stats.totalMax) * 100);
-              const isEvaluated = c.estado === 'EVALUADO' || Boolean(c.completado_en);
+              const isEvaluated = String(c.estado || '').toUpperCase() === 'EVALUADO';
               return {
                 ...c,
                 puntaje: avgScore,
-                estado: isEvaluated ? 'EVALUADO' : c.estado,
-                completado_en: c.completado_en || (isEvaluated ? stats.lastDate : null)
+                estado: isEvaluated ? 'EVALUADO' : (c.estado || 'EN_CURSO'),
+                completado_en: isEvaluated ? (c.completado_en || stats.lastDate) : null
               };
             }
             return c;

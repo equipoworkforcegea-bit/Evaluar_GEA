@@ -144,14 +144,14 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
     return processCandidates.filter(c => {
       if (noDeseadosCandidateIds.has(c.id)) return false;
       const s = String(c.status || '').toUpperCase();
+      // Si el candidato está en progreso o en curso, NO debe listarse en finalizados
+      if (s === 'IN_PROGRESS' || s === 'EN_CURSO' || s === 'EN_PROCESO') return false;
       return (
         s === 'FINALIST' || 
         s === 'FINALISTA' || 
         s === 'SCORED' || 
         s === 'EVALUADO' || 
-        s === 'COMPLETADO' || 
-        Boolean(c.completedAt) || 
-        (c.scores && (c.scores.overall || 0) > 0)
+        s === 'COMPLETADO'
       );
     });
   }, [processCandidates, noDeseadosCandidateIds]);
@@ -163,7 +163,17 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
       if (isFin) return false;
       const s = String(c.status || '').toUpperCase();
       const stage = String(c.currentStage || '').toUpperCase();
-      return (s === 'IN_PROGRESS' || s === 'EN_CURSO' || s === 'EN_PROCESO' || Boolean(c.startedAt) || stage.includes('ETAPA_2') || stage.includes('ETAPA_3'));
+      const hasScores = (c.scores && (c.scores.overall || 0) > 0) || Boolean((c as any).puntaje);
+      return (
+        s === 'IN_PROGRESS' || 
+        s === 'EN_CURSO' || 
+        s === 'EN_PROCESO' || 
+        Boolean(c.startedAt) || 
+        Boolean((c as any).iniciado_en) ||
+        hasScores ||
+        stage.includes('ETAPA_2') || 
+        stage.includes('ETAPA_3')
+      );
     });
   }, [processCandidates, finalizedList, noDeseadosCandidateIds]);
 
@@ -196,6 +206,13 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
       setStatusFilter('FINALIZADOS');
     }
   }, [inProgressList.length, finalizedList.length, statusFilter]);
+
+  // Si no hay finalizados pero sí hay candidatos en progreso, cambiar automáticamente a EN_PROGRESO
+  useEffect(() => {
+    if (statusFilter === 'FINALIZADOS' && finalizedList.length === 0 && inProgressList.length > 0) {
+      setStatusFilter('EN_PROGRESO');
+    }
+  }, [finalizedList.length, inProgressList.length, statusFilter]);
 
   // Lista filtrada según pestaña y buscador
   const displayedCandidates = useMemo(() => {
