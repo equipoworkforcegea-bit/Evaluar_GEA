@@ -31,8 +31,21 @@ export interface DISCResultadoPayload {
   perfilDominante: string;
 }
 
+export interface CompetenciaResultadoPayload {
+  candidatoId: string;
+  procesoId: string;
+  competencia: string;
+  puntaje: number;
+  puntajeMaximo?: number;
+  nivel?: string;
+  totalBloques?: number;
+  respuestas?: any;
+  tiempoSegundos?: number;
+}
+
 const LOCAL_STORAGE_KEY_CONOCIMIENTOS = 'gea_evaluaciones_conocimientos';
 const LOCAL_STORAGE_KEY_DISC = 'gea_evaluaciones_disc';
+const LOCAL_STORAGE_KEY_COMPETENCIAS = 'gea_evaluaciones_competencias';
 
 export const EvaluacionesService = {
   /**
@@ -265,6 +278,143 @@ export const EvaluacionesService = {
     } catch {
       return null;
     }
+  },
+
+  /**
+   * Guarda el resultado y las respuestas de una evaluación de competencia en Supabase y LocalStorage
+   */
+  async guardarResultadoCompetencia(payload: CompetenciaResultadoPayload): Promise<boolean> {
+    // 1. Guardar en LocalStorage
+    try {
+      const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY_COMPETENCIAS) || '[]');
+      stored.push({
+        ...payload,
+        completadoEn: new Date().toISOString()
+      });
+      localStorage.setItem(LOCAL_STORAGE_KEY_COMPETENCIAS, JSON.stringify(stored));
+    } catch (e) {
+      console.warn('[EvaluacionesService] Error guardando en LocalStorage de competencias:', e);
+    }
+
+    // 2. Guardar en Supabase (usando evaluaciones_conocimientos con tema prefijado 'COMPETENCIA: ')
+    try {
+      const safeCandId = payload.candidatoId || 'cand_oficial';
+      const safeProcId = payload.procesoId || 'proc_oficial';
+      const cleanCompName = payload.competencia.trim();
+      const maxPts = payload.puntajeMaximo || 20;
+      const pts = payload.puntaje ?? 0;
+      const totalBlocks = payload.totalBloques || 10;
+      const aciertosCalc = Math.round((pts / maxPts) * totalBlocks);
+
+      const { error } = await supabase
+        .from('evaluaciones_conocimientos')
+        .insert({
+          candidato_id: safeCandId,
+          proceso_id: safeProcId,
+          tema: `COMPETENCIA: ${cleanCompName}`,
+          dificultad: payload.nivel || 'Media',
+          puntaje: pts,
+          puntaje_maximo: maxPts,
+          total_preguntas: totalBlocks,
+          aciertos: aciertosCalc,
+          errores: Math.max(0, totalBlocks - aciertosCalc),
+          respuestas: payload.respuestas || [],
+          tiempo_empleado_segundos: payload.tiempoSegundos || 0,
+          completado_en: new Date().toISOString()
+        });
+
+      if (error) {
+        console.warn('[EvaluacionesService] Error guardando competencia en Supabase:', error.message);
+        return false;
+      }
+      console.log('✓ [EvaluacionesService] Evaluación de competencia guardada con éxito:', cleanCompName);
+
+      // Actualizar estado del candidato a EVALUADO
+      if (safeCandId && !safeCandId.startsWith('cand_')) {
+        try {
+          await supabase
+            .from('candidatos')
+            .update({
+              estado: 'EVALUADO',
+              completado_en: new Date().toISOString(),
+              actualizado_en: new Date().toISOString()
+            })
+            .eq('id', safeCandId);
+        } catch {}
+      }
+
+      return true;
+    } catch (err) {
+      console.warn('[EvaluacionesService] Excepción guardando competencia:', err);
+      return false;
+    }
+  },
+
+  /**
+   * Obtiene los resultados de competencias completadas por un candidato
+   */
+  async obtenerResultadosCompetencias(candidatoId: string, procesoId?: string, email?: string): Promise<any[]> {
+    const resultsMap = new Map<string, any>();
+
+    // 1. Consultar Supabase
+    try {
+      let query = supabase
+        .from('evaluaciones_conocimientos')
+        .select('*')
+        .ilike('tema', 'COMPETENCIA:%');
+
+      if (candidatoId) {
+        query = query.eq('candidato_id', candidatoId);
+      }
+      if (procesoId) {
+        query = query.eq('proceso_id', procesoId);
+      }
+
+      const { data, error } = await query.order('completado_en', { ascending: false });
+      if (!error && data && data.length > 0) {
+        data.forEach(item => {
+          const rawName = item.tema.replace(/^COMPETENCIA:\s*/i, '').trim();
+          if (rawName && !resultsMap.has(rawName.toLowerCase())) {
+            resultsMap.set(rawName.toLowerCase(), {
+              competencia: rawName,
+              puntaje: item.puntaje,
+              puntajeMaximo: item.puntaje_maximo,
+              nivel: item.dificultad,
+              completadoEn: item.completado_en,
+              tiempoSegundos: item.tiempo_empleado_segundos
+            });
+          }
+        });
+      }
+    } catch (err) {
+      console.warn('[EvaluacionesService] Error consultando competencias en Supabase:', err);
+    }
+
+    // 2. Complementar con LocalStorage
+    try {
+      const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY_COMPETENCIAS) || '[]');
+      stored.forEach((item: any) => {
+        const matchCand = !candidatoId || item.candidatoId === candidatoId;
+        const matchProc = !procesoId || item.procesoId === procesoId;
+        const matchMail = !email || item.email === email;
+
+        if (matchCand && matchProc && matchMail && item.competencia) {
+          const key = item.competencia.trim().toLowerCase();
+          if (!resultsMap.has(key)) {
+            resultsMap.set(key, {
+              competencia: item.competencia,
+              puntaje: item.puntaje,
+              puntajeMaximo: item.puntajeMaximo || 20,
+              nivel: item.nivel,
+              completadoEn: item.completadoEn,
+              tiempoSegundos: item.tiempoSegundos
+            });
+          }
+        }
+      });
+    } catch {}
+
+    return Array.from(resultsMap.values());
   }
 };
 

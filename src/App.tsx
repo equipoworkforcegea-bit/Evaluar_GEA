@@ -13,6 +13,7 @@ import { LoginScreen } from './components/auth/LoginScreen';
 import { ExamContainer } from './components/candidate/ExamContainer';
 import { DISCExamView } from './components/candidate/DISCExamView';
 import { KnowledgeExamView } from './components/candidate/KnowledgeExamView';
+import { CompetencyExamView } from './components/candidate/CompetencyExamView';
 import { AdminDashboard, MainAdminTab } from './components/admin/AdminDashboard';
 import { ArchitectureViewer } from './components/architecture/ArchitectureViewer';
 import { ProcesosInvitadosView, StartExamPayload } from './components/candidate/ProcesosInvitadosView';
@@ -324,13 +325,11 @@ function ProcesosInvitadosViewWrapper({
   // 3. Si la prueba activa es Competencias
   if (activeExam?.type === 'COMPETENCIAS') {
     return (
-      <KnowledgeExamView
-        topicName="Evaluación de Competencias Clave"
-        difficulty="Media"
-        questionCount={15}
+      <CompetencyExamView
+        competencyName={activeExam.topicName || 'Orientación al Cliente'}
         candidateId={activeExam.candidateId || candidate.id}
         processId={activeExam.testId}
-        onComplete={(_score, _max, _correct) => {
+        onComplete={(_score, _level) => {
           setRefreshKey(k => k + 1);
           setActiveExam(null);
           navigate('/procesos-invitados');

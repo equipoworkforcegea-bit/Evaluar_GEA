@@ -54,6 +54,16 @@ export interface KnowledgeQuestionnaireItem {
   questionsHigh?: number;
 }
 
+export interface CompetencyTestItem {
+  id: string;
+  name: string;
+  questionCount: number;
+  durationMinutes: number;
+  isCompleted: boolean;
+  score?: number;
+  level?: string;
+}
+
 interface InvitedProcessDetailed {
   id: string;
   candidateIdInProcess: string;
@@ -78,7 +88,7 @@ interface InvitedProcessDetailed {
   };
   // 2. Cuestionarios de Conocimientos individuales
   knowledgeQuestionnaires: KnowledgeQuestionnaireItem[];
-  // 3. Competencias
+  // 3. Competencias individuales
   competenciesConfig: {
     title: string;
     description: string;
@@ -86,6 +96,7 @@ interface InvitedProcessDetailed {
     durationMinutes: number;
     isCompleted: boolean;
   };
+  competenciesList: CompetencyTestItem[];
 }
 
 const normalizeTopicString = (str: string) => {
@@ -195,10 +206,11 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
           status = 'EN_PROGRESO';
         }
 
-        // Consultar resultados DISC y Conocimientos para este proceso y candidato
-        const [completedDisc, completedKnowledgeList] = await Promise.all([
+        // Consultar resultados DISC, Conocimientos y Competencias para este proceso y candidato
+        const [completedDisc, completedKnowledgeList, completedCompetenciesList] = await Promise.all([
           EvaluacionesService.obtenerResultadoDISC(candIdForThisProcess, procId),
-          EvaluacionesService.obtenerResultadosConocimientos(candIdForThisProcess, procId)
+          EvaluacionesService.obtenerResultadosConocimientos(candIdForThisProcess, procId),
+          EvaluacionesService.obtenerResultadosCompetencias(candIdForThisProcess, procId)
         ]);
 
         const isDiscDone = Boolean(completedDisc);
@@ -212,6 +224,27 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
             knowledgeScoresMap[norm] = scoreNum;
             const baseNorm = norm.replace(/\([^)]*\)/g, '').trim();
             if (baseNorm) knowledgeScoresMap[baseNorm] = scoreNum;
+          }
+        });
+
+        const competenciesScoresMap: Record<string, { score: number; level: string }> = {};
+        completedCompetenciesList.forEach((c: any) => {
+          if (c.competencia) {
+            const raw = c.competencia.trim().toLowerCase();
+            const norm = normalizeTopicString(c.competencia);
+            competenciesScoresMap[raw] = { score: c.puntaje, level: c.nivel || 'Avanzado' };
+            competenciesScoresMap[norm] = { score: c.puntaje, level: c.nivel || 'Avanzado' };
+          }
+        });
+        completedKnowledgeList.forEach((k: any) => {
+          if (k.tema && k.tema.toLowerCase().startsWith('competencia:')) {
+            const rawName = k.tema.replace(/^competencia:\s*/i, '').trim();
+            const raw = rawName.toLowerCase();
+            const norm = normalizeTopicString(rawName);
+            if (!competenciesScoresMap[raw]) {
+              competenciesScoresMap[raw] = { score: k.puntaje, level: k.dificultad || 'Avanzado' };
+              competenciesScoresMap[norm] = { score: k.puntaje, level: k.dificultad || 'Avanzado' };
+            }
           }
         });
 
@@ -346,6 +379,23 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
           };
         }) : [];
 
+        const configuredCompetencyItems: CompetencyTestItem[] = hasCompetencies ? compList.map((compName, idx) => {
+          const rawTitle = compName.trim().toLowerCase();
+          const normTitle = normalizeTopicString(compName);
+          const matchResult = competenciesScoresMap[normTitle] || competenciesScoresMap[rawTitle];
+          const isCompleted = matchResult !== undefined;
+
+          return {
+            id: `comp_${idx}_${normTitle}`,
+            name: compName,
+            questionCount: 10,
+            durationMinutes: 10,
+            isCompleted,
+            score: matchResult?.score,
+            level: matchResult?.level
+          };
+        }) : [];
+
         builtProcessList.push({
           id: procId,
           candidateIdInProcess: candIdForThisProcess,
@@ -359,7 +409,7 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
           estado_postulante: status,
           hasDisc,
           hasKnowledge: hasKnowledge && configuredKnowledgeItems.length > 0,
-          hasCompetencies,
+          hasCompetencies: hasCompetencies && configuredCompetencyItems.length > 0,
           discConfig: {
             title: 'Prueba DISC (Conducta y Estilo Laboral)',
             description: 'Evalúa tu perfil conductual, estilo de comunicación y adaptación bajo presión.',
@@ -372,8 +422,9 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
             description: 'Medición de aptitudes y desempeño profesional orientadas a la vacante.',
             items: compList,
             durationMinutes: 10,
-            isCompleted: false
-          }
+            isCompleted: configuredCompetencyItems.length > 0 && configuredCompetencyItems.every(c => c.isCompleted)
+          },
+          competenciesList: configuredCompetencyItems
         });
       }
 
@@ -680,57 +731,87 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
                   )}
 
                   {/* ============================================================== */}
-                  {/* PRUEBA 3: COMPETENCIAS (SOLO SI FUE CONFIGURADA EN EL PERFIL)  */}
+                  {/* PRUEBA 3: COMPETENCIAS LABORALES (LISTADO INDIVIDUAL)          */}
                   {/* ============================================================== */}
-                  {proc.hasCompetencies && proc.competenciesConfig.items.length > 0 && (
-                    <div className="p-4 sm:p-5 rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all">
-                      <div className="flex items-start gap-3.5">
-                        <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
-                          <GraduationCap className="w-5 h-5" />
-                        </div>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <h4 className="font-bold text-sm text-slate-900 dark:text-white">
-                              {proc.competenciesConfig.title}
-                            </h4>
+                  {proc.hasCompetencies && proc.competenciesList.length > 0 && (
+                    <div className="p-4 sm:p-5 rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                            <GraduationCap className="w-4 h-4" />
                           </div>
-                          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                            {proc.competenciesConfig.description}
-                          </p>
-                          <div className="flex flex-wrap gap-1 pt-1">
-                            {proc.competenciesConfig.items.map((comp, idx) => (
-                              <span 
-                                key={idx}
-                                className="text-[10px] px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 font-semibold"
-                              >
-                                {comp}
-                              </span>
-                            ))}
+                          <div>
+                            <h4 className="font-bold text-sm text-slate-900 dark:text-white">
+                              Prueba de Competencias ({proc.competenciesList.length} {proc.competenciesList.length === 1 ? 'competencia configurada' : 'competencias configuradas'})
+                            </h4>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              Cada competencia cuenta con una prueba conductual adaptada según el perfil del puesto.
+                            </p>
                           </div>
                         </div>
                       </div>
 
-                      <div className="shrink-0 self-end md:self-center">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenWarningModal(
-                            proc,
-                            {
-                              type: 'COMPETENCIAS',
-                              testId: proc.id,
-                              candidateId: proc.candidateIdInProcess,
-                              topicName: 'Evaluación de Competencias'
-                            },
-                            proc.competenciesConfig.title,
-                            `${proc.competenciesConfig.items.length} competencias clave`,
-                            proc.competenciesConfig.durationMinutes
-                          )}
-                          className="px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-2 cursor-pointer shadow-sm transition-all active:scale-98"
-                        >
-                          <Rocket className="w-3.5 h-3.5 fill-white/20" />
-                          <span>Iniciar Competencias</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </button>
+                      {/* Sub-lista vertical de competencias individuales */}
+                      <div className="space-y-2.5 pt-1">
+                        {proc.competenciesList.map((compItem) => (
+                          <div
+                            key={compItem.id}
+                            className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs hover:border-emerald-300 transition-colors"
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100">
+                                  {compItem.name}
+                                </span>
+                                <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-bold text-[10px]">
+                                  {compItem.questionCount} preguntas
+                                </span>
+                                <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px]">
+                                  Formato: Conductual
+                                </span>
+                                {compItem.isCompleted && compItem.level && (
+                                  <span className="px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[10px] font-semibold border border-emerald-200">
+                                    Nivel: {compItem.level}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                                <span>⏱ Tiempo estimado: {compItem.durationMinutes} min</span>
+                              </div>
+                            </div>
+
+                            <div className="shrink-0 self-end sm:self-center">
+                              {compItem.isCompleted ? (
+                                <div className="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-300 font-bold text-xs flex items-center gap-1.5 shadow-2xs">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                  <span>Prueba Rendida</span>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenWarningModal(
+                                    proc,
+                                    {
+                                      type: 'COMPETENCIAS',
+                                      testId: proc.id,
+                                      candidateId: proc.candidateIdInProcess,
+                                      topicName: compItem.name
+                                    },
+                                    `Competencia: ${compItem.name}`,
+                                    `${compItem.questionCount} bloques conductuales obligatorios`,
+                                    compItem.durationMinutes
+                                  )}
+                                  className="px-4 py-2 rounded-xl bg-[#1F2A5E] hover:bg-[#182348] text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-all active:scale-98"
+                                >
+                                  <Rocket className="w-3.5 h-3.5 fill-white/20" />
+                                  <span>Iniciar Evaluación</span>
+                                  <ArrowRight className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
