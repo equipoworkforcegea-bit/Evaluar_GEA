@@ -107,6 +107,8 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
   const [isResettingExam, setIsResettingExam] = useState<boolean>(false);
   const [resettingSegment, setResettingSegment] = useState<string | null>(null);
   const [loadingCandidateEvals, setLoadingCandidateEvals] = useState<boolean>(false);
+  const [evalsReloadKey, setEvalsReloadKey] = useState<number>(0); // fuerza recarga tras reset
+  const skipNextEvalsReload = React.useRef<boolean>(false); // evita recarga inmediata tras reset
   const [candidateEvalsData, setCandidateEvalsData] = useState<{
     disc: any | null;
     knowledge: any[];
@@ -126,6 +128,7 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
   // Cargar evaluaciones activas y resultados del candidato cuando se abre el modal de reinicio
   useEffect(() => {
     if (!candidateToReset) return;
+    // No recargar mientras se está ejecutando un reset (evalsReloadKey dispara la recarga posterior)
     let isMounted = true;
     const loadCandidateEvals = async () => {
       setLoadingCandidateEvals(true);
@@ -208,7 +211,7 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
 
     loadCandidateEvals();
     return () => { isMounted = false; };
-  }, [candidateToReset, process?.id]);
+  }, [candidateToReset, process?.id, evalsReloadKey]);
 
   // Manejador para reiniciar un segmento individual (DISC, Conocimientos o Competencias)
   const handleResetSingleSegment = async (segment: 'DISC' | 'CONOCIMIENTOS' | 'COMPETENCIAS') => {
@@ -234,7 +237,7 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
       // 2. Ejecutar reseteo del segmento en Supabase y LocalStorage
       await CandidateDataService.resetCandidateSegment(candId, segment, process?.id, candidateToReset.email);
 
-      // 3. Actualizar datos en memoria del modal
+      // 3. Limpiar inmediatamente el estado del modal para ese segmento
       setCandidateEvalsData(prev => ({
         ...prev,
         disc: segment === 'DISC' ? null : prev.disc,
@@ -242,16 +245,22 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
         competencies: segment === 'COMPETENCIAS' ? [] : prev.competencies
       }));
 
-      // 4. Actualizar estado del candidato en la tabla de candidatos
+      // 4. Actualizar estado del candidato en la tabla de candidatos (sin cambiar referencia del modal para no relanzar useEffect aún)
       const updatedCand: Candidate = {
         ...candidateToReset,
         status: 'EN_PROGRESO',
         completedAt: undefined,
         retryCount: nextRetries
       };
-      setCandidateToReset(updatedCand);
       setLiveCandidates(prev => prev.map(c => c.id === candId ? updatedCand : c));
       onUpdateCandidate?.(updatedCand);
+
+      // 5. Forzar recarga real desde Supabase con delay para que el DELETE haya propagado
+      setTimeout(() => {
+        // Actualiza el candidato y el reload key juntos para una sola recarga
+        setCandidateToReset(updatedCand);
+        setEvalsReloadKey(k => k + 1);
+      }, 1000);
 
       const segName = segment === 'DISC' ? 'DISC' : segment === 'CONOCIMIENTOS' ? 'Conocimientos' : 'Competencias';
       showToast(`✓ Segmento ${segName} reiniciado para ${candidateToReset.fullName} (${nextRetries} reinicio${nextRetries > 1 ? 's' : ''}).`);

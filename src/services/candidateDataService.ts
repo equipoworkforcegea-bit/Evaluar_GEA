@@ -1040,33 +1040,33 @@ export const CandidateDataService = {
         } catch {}
       }
 
+      // Helper: determina si un item de localStorage pertenece al candidato que se reinicia
+      // Un item es del candidato si su ID está en allCandidateIds O si el email coincide
+      const isItemOfCandidate = (x: any): boolean => {
+        const matchById = allCandidateIds.includes(x.candidatoId);
+        const matchByEmail = email ? (x.email && x.email.toLowerCase() === email.toLowerCase()) : false;
+        return matchById || matchByEmail;
+      };
+
       if (segment === 'DISC') {
         // Borrar de evaluaciones_disc para todos los IDs del mismo email
         await supabase.from('evaluaciones_disc').delete().in('candidato_id', allCandidateIds);
-        // Limpiar localStorage (clave real usada por EvaluacionesService)
+        // Limpiar localStorage (clave real usada por EvaluacionesService) — eliminar TODOS los items del candidato
         if (typeof window !== 'undefined') {
           try {
             const raw = localStorage.getItem('gea_evaluaciones_disc');
             if (raw) {
               const list = JSON.parse(raw);
-              const filtered = list.filter((x: any) =>
-                !allCandidateIds.includes(x.candidatoId) &&
-                (!processId || x.procesoId !== processId) &&
-                (!email || x.email !== email)
-              );
+              const filtered = list.filter((x: any) => !isItemOfCandidate(x));
               localStorage.setItem('gea_evaluaciones_disc', JSON.stringify(filtered));
             }
           } catch {}
-          // También limpiar clave alternativa por si acaso
           try { localStorage.removeItem('evaluar_resultados_disc'); } catch {}
         }
       } else if (segment === 'CONOCIMIENTOS') {
-        // Borrar de evaluaciones_conocimientos solo filas que NO sean competencias (tema no ilike 'COMPETENCIA:%')
-        // Supabase no soporta NOT ILIKE directamente en delete, así que borramos todo y luego
-        // para candidato, borramos las filas de conocimientos normales
+        // Borrar de evaluaciones_conocimientos solo filas que NO sean competencias
         for (const cid of allCandidateIds) {
           try {
-            // Obtener IDs de filas de conocimientos que NO son competencias
             const { data: knowRows } = await supabase
               .from('evaluaciones_conocimientos')
               .select('id, tema')
@@ -1093,17 +1093,13 @@ export const CandidateDataService = {
             await supabase.from('intentos_examen').delete().in('candidato_id', allCandidateIds);
           }
         } catch {}
-        // Limpiar localStorage
+        // Limpiar localStorage — eliminar TODOS los items del candidato
         if (typeof window !== 'undefined') {
           try {
             const raw = localStorage.getItem('gea_evaluaciones_conocimientos');
             if (raw) {
               const list = JSON.parse(raw);
-              const filtered = list.filter((x: any) =>
-                !allCandidateIds.includes(x.candidatoId) &&
-                (!processId || x.procesoId !== processId) &&
-                (!email || x.email !== email)
-              );
+              const filtered = list.filter((x: any) => !isItemOfCandidate(x));
               localStorage.setItem('gea_evaluaciones_conocimientos', JSON.stringify(filtered));
             }
           } catch {}
@@ -1129,17 +1125,13 @@ export const CandidateDataService = {
             }
           } catch {}
         }
-        // Limpiar localStorage
+        // Limpiar localStorage — eliminar TODOS los items del candidato
         if (typeof window !== 'undefined') {
           try {
             const raw = localStorage.getItem('gea_evaluaciones_competencias');
             if (raw) {
               const list = JSON.parse(raw);
-              const filtered = list.filter((x: any) =>
-                !allCandidateIds.includes(x.candidatoId) &&
-                (!processId || x.procesoId !== processId) &&
-                (!email || x.email !== email)
-              );
+              const filtered = list.filter((x: any) => !isItemOfCandidate(x));
               localStorage.setItem('gea_evaluaciones_competencias', JSON.stringify(filtered));
             }
           } catch {}
