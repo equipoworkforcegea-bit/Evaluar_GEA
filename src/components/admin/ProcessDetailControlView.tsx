@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { EvaluationTest, Candidate, AuthSession } from '../../types';
 import { CandidateDataService } from '../../services/candidateDataService';
+import { EvaluacionesService } from '../../services/evaluacionesService';
+import { supabase } from '../../services/supabaseClient';
 import { AuthStorage } from '../../services/authStorage';
 import { 
   ArrowLeft, 
@@ -16,23 +18,26 @@ import {
   UserX, 
   Users, 
   Clock, 
-  Check,
-  Printer,
-  X,
-  ChevronDown,
-  ChevronUp,
-  Calendar,
-  TrendingUp,
-  Target,
-  GraduationCap,
-  UserCheck,
-  Star,
-  FileText,
-  Send,
-  Eye,
-  Trash2,
-  UserPlus,
-  AlertTriangle
+  Check, 
+  Printer, 
+  X, 
+  ChevronDown, 
+  ChevronUp, 
+  Calendar, 
+  TrendingUp, 
+  Target, 
+  GraduationCap, 
+  UserCheck, 
+  Star, 
+  FileText, 
+  Send, 
+  Eye, 
+  Trash2, 
+  UserPlus, 
+  AlertTriangle,
+  BookOpen,
+  Activity,
+  Compass
 } from 'lucide-react';
 
 export type ControlTab = 
@@ -100,6 +105,163 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
   // Modal para confirmación de reinicio de examen
   const [candidateToReset, setCandidateToReset] = useState<Candidate | null>(null);
   const [isResettingExam, setIsResettingExam] = useState<boolean>(false);
+  const [resettingSegment, setResettingSegment] = useState<string | null>(null);
+  const [loadingCandidateEvals, setLoadingCandidateEvals] = useState<boolean>(false);
+  const [candidateEvalsData, setCandidateEvalsData] = useState<{
+    disc: any | null;
+    knowledge: any[];
+    competencies: any[];
+    configuredKnowledge: string[];
+    configuredCompetencies: string[];
+    hasDiscConfigured: boolean;
+  }>({
+    disc: null,
+    knowledge: [],
+    competencies: [],
+    configuredKnowledge: [],
+    configuredCompetencies: [],
+    hasDiscConfigured: true
+  });
+
+  // Cargar evaluaciones activas y resultados del candidato cuando se abre el modal de reinicio
+  useEffect(() => {
+    if (!candidateToReset) return;
+    let isMounted = true;
+    const loadCandidateEvals = async () => {
+      setLoadingCandidateEvals(true);
+      try {
+        const procId = process?.id || candidateToReset.testId;
+        const candId = candidateToReset.id;
+        const email = candidateToReset.email;
+
+        const [kList, dRes, cList] = await Promise.all([
+          EvaluacionesService.obtenerResultadosConocimientos(candId, procId, email),
+          EvaluacionesService.obtenerResultadoDISC(candId, procId, email),
+          EvaluacionesService.obtenerResultadosCompetencias(candId, procId, email)
+        ]);
+
+        let hasDisc = true;
+        let confKnowledge: string[] = [];
+        let confComps: string[] = [];
+
+        if (procId) {
+          try {
+            const { data: procRow } = await supabase
+              .from('procesos_evaluacion')
+              .select('*, perfiles_puesto(*)')
+              .eq('id', procId)
+              .maybeSingle();
+
+            if (procRow) {
+              const perfil = procRow.perfiles_puesto;
+              const meta = perfil?.competencias?._metadata || {};
+              const stages = Array.isArray(meta.stages) ? meta.stages : (Array.isArray(procRow.etapas) ? procRow.etapas : []);
+
+              if (stages.length > 0) {
+                hasDisc = stages.some((s: any) => s.isEnabled !== false && (s.id === 'STAGE_DISC' || s.id === 'STAGE_2_EMOTIONAL' || s.category === 'EMOTIONAL' || String(s.name || '').toLowerCase().includes('disc')));
+              }
+
+              if (Array.isArray(meta.knowledgeQuestionnaires) && meta.knowledgeQuestionnaires.length > 0) {
+                confKnowledge = meta.knowledgeQuestionnaires;
+              } else if (Array.isArray(meta.knowledgeItems) && meta.knowledgeItems.length > 0) {
+                confKnowledge = meta.knowledgeItems.map((k: any) => typeof k === 'string' ? k : k.name).filter(Boolean);
+              } else if (Array.isArray(procRow.cuestionarios_conocimiento)) {
+                confKnowledge = procRow.cuestionarios_conocimiento;
+              }
+
+              if (Array.isArray(meta.selectedList) && meta.selectedList.length > 0) {
+                confComps = meta.selectedList;
+              } else if (perfil?.competencias && typeof perfil.competencias === 'object') {
+                confComps = Object.keys(perfil.competencias).filter(k => !k.startsWith('_'));
+              } else if (Array.isArray(procRow.competencias_seleccionadas)) {
+                confComps = procRow.competencias_seleccionadas;
+              }
+            }
+          } catch (errP) {
+            console.warn('Error fetching process profile for reset:', errP);
+          }
+        }
+
+        if (confComps.length === 0 && process?.selectedCompetencies && process.selectedCompetencies.length > 0) {
+          confComps = process.selectedCompetencies;
+        }
+        if (confKnowledge.length === 0 && process?.knowledgeQuestionnaires && process.knowledgeQuestionnaires.length > 0) {
+          confKnowledge = process.knowledgeQuestionnaires;
+        }
+
+        if (isMounted) {
+          setCandidateEvalsData({
+            disc: dRes || null,
+            knowledge: kList || [],
+            competencies: cList || [],
+            configuredKnowledge: confKnowledge,
+            configuredCompetencies: confComps,
+            hasDiscConfigured: hasDisc
+          });
+        }
+      } catch (err) {
+        console.warn('Error loading evals for reset modal:', err);
+      } finally {
+        if (isMounted) setLoadingCandidateEvals(false);
+      }
+    };
+
+    loadCandidateEvals();
+    return () => { isMounted = false; };
+  }, [candidateToReset, process?.id]);
+
+  // Manejador para reiniciar un segmento individual (DISC, Conocimientos o Competencias)
+  const handleResetSingleSegment = async (segment: 'DISC' | 'CONOCIMIENTOS' | 'COMPETENCIAS') => {
+    if (!candidateToReset) return;
+    setResettingSegment(segment);
+    try {
+      const candId = candidateToReset.id;
+
+      // 1. Contador de reinicios
+      const storedRetries = (() => {
+        try {
+          const raw = localStorage.getItem('evaluar_candidate_retries');
+          return raw ? JSON.parse(raw) : {};
+        } catch { return {}; }
+      })();
+      const currentRetries = Number(storedRetries[candId] || candidateToReset.retryCount || 0);
+      const nextRetries = currentRetries + 1;
+      storedRetries[candId] = nextRetries;
+      try {
+        localStorage.setItem('evaluar_candidate_retries', JSON.stringify(storedRetries));
+      } catch {}
+
+      // 2. Ejecutar reseteo del segmento en Supabase y LocalStorage
+      await CandidateDataService.resetCandidateSegment(candId, segment, process?.id);
+
+      // 3. Actualizar datos en memoria del modal
+      setCandidateEvalsData(prev => ({
+        ...prev,
+        disc: segment === 'DISC' ? null : prev.disc,
+        knowledge: segment === 'CONOCIMIENTOS' ? [] : prev.knowledge,
+        competencies: segment === 'COMPETENCIAS' ? [] : prev.competencies
+      }));
+
+      // 4. Actualizar estado del candidato en la tabla de candidatos
+      const updatedCand: Candidate = {
+        ...candidateToReset,
+        status: 'EN_PROGRESO',
+        completedAt: undefined,
+        retryCount: nextRetries
+      };
+      setCandidateToReset(updatedCand);
+      setLiveCandidates(prev => prev.map(c => c.id === candId ? updatedCand : c));
+      onUpdateCandidate?.(updatedCand);
+
+      const segName = segment === 'DISC' ? 'DISC' : segment === 'CONOCIMIENTOS' ? 'Conocimientos' : 'Competencias';
+      showToast(`✓ Segmento ${segName} reiniciado para ${candidateToReset.fullName}. Rinde su ${nextRetries + 1}° intento.`);
+    } catch (err) {
+      console.warn('Error al reiniciar segmento:', err);
+      showToast('⚠️ No se pudo reiniciar el segmento. Intente nuevamente.');
+    } finally {
+      setResettingSegment(null);
+    }
+  };
 
   // Cerrar menú contextual al hacer clic fuera de él en la pantalla
   useEffect(() => {
@@ -1845,7 +2007,7 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
         </div>
       )}
 
-      {/* Modal de Confirmación: Reiniciar Examen */}
+      {/* Modal de Confirmación: Reiniciar Examen y Segmentos */}
       {candidateToReset && (
         <div 
           onClick={() => setCandidateToReset(null)}
@@ -1853,41 +2015,190 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
         >
           <div 
             onClick={e => e.stopPropagation()}
-            className="w-full max-w-md bg-white dark:bg-[#182044] rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] shadow-2xl p-6 space-y-5 animate-in zoom-in-95"
+            className="w-full max-w-xl max-h-[90vh] overflow-y-auto bg-white dark:bg-[#182044] rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] shadow-2xl p-6 space-y-5 animate-in zoom-in-95"
           >
             {/* Header Icon + Title */}
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-200 dark:border-amber-800/50 shadow-xs">
-                <RotateCw className="w-6 h-6 stroke-[2.5]" />
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-200 dark:border-amber-800/50 shadow-xs">
+                  <RotateCw className="w-6 h-6 stroke-[2.5]" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-lg font-black text-[#161C3A] dark:text-white">
+                    Reiniciar Examen del Postulante
+                  </h3>
+                  <p className="text-xs text-[#6B7494] dark:text-[#9AA5C4] mt-0.5 truncate">
+                    Proceso: <strong className="text-[#161C3A] dark:text-white">{process.title}</strong>
+                  </p>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-lg font-black text-[#161C3A] dark:text-white">
-                  Reiniciar Examen del Postulante
-                </h3>
-                <p className="text-xs text-[#6B7494] dark:text-[#9AA5C4] mt-0.5 truncate">
-                  Proceso: <strong className="text-[#161C3A] dark:text-white">{process.title}</strong>
-                </p>
-              </div>
+              <button
+                type="button"
+                onClick={() => setCandidateToReset(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+                title="Cerrar modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             {/* Candidate Box */}
             <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#151D3F] border border-slate-200 dark:border-slate-800 space-y-2 text-xs">
               <div className="flex justify-between items-center">
                 <span className="text-[#6B7494] dark:text-[#9AA5C4]">Postulante:</span>
-                <strong className="text-[#161C3A] dark:text-white font-semibold truncate max-w-[220px]">{candidateToReset.fullName}</strong>
+                <strong className="text-[#161C3A] dark:text-white font-semibold truncate max-w-[260px]">{candidateToReset.fullName}</strong>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-[#6B7494] dark:text-[#9AA5C4]">Correo / DNI:</span>
-                <span className="text-slate-700 dark:text-slate-300 font-mono truncate max-w-[200px]">{candidateToReset.email || candidateToReset.dni}</span>
+                <span className="text-slate-700 dark:text-slate-300 font-mono truncate max-w-[260px]">{candidateToReset.email || candidateToReset.dni}</span>
               </div>
               <div className="flex justify-between items-center pt-2 border-t border-slate-200/60 dark:border-slate-800/60">
-                <span className="text-[#6B7494] dark:text-[#9AA5C4]">Nuevo intento asignado:</span>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 flex items-center gap-1">
+                <span className="text-[#6B7494] dark:text-[#9AA5C4]">Intento actual / asignado:</span>
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 flex items-center gap-1.5">
                   <RotateCw className="w-3 h-3 text-amber-600 dark:text-amber-400" />
                   <span>
-                    {(candidateToReset.retryCount || 0) === 0 ? '2° intento (1er reinicio)' : `${(candidateToReset.retryCount || 0) + 2}° intento (${(candidateToReset.retryCount || 0) + 1} reinicios)`}
+                    {(candidateToReset.retryCount || 0) === 0 ? '1er intento asignado' : `${(candidateToReset.retryCount || 0) + 1}° intento (${candidateToReset.retryCount} reinicio${(candidateToReset.retryCount || 0) > 1 ? 's' : ''})`}
                   </span>
                 </span>
+              </div>
+            </div>
+
+            {/* SECCIÓN PRINCIPAL: EVALUACIONES ACTIVAS DEL PERFIL Y BOTÓN PARA REINICIAR CADA SEGMENTO */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-black uppercase tracking-wider text-[#161C3A] dark:text-white flex items-center gap-2">
+                  <span>Evaluaciones Activas del Proceso</span>
+                </h4>
+                {loadingCandidateEvals && (
+                  <span className="text-[11px] text-purple-600 dark:text-purple-400 font-medium animate-pulse flex items-center gap-1">
+                    <RotateCw className="w-3 h-3 animate-spin" />
+                    <span>Consultando estado...</span>
+                  </span>
+                )}
+              </div>
+
+              <div className="space-y-2.5">
+                {/* 1. SEGMENTO: DISC */}
+                {candidateEvalsData.hasDiscConfigured !== false && (
+                  <div className="p-3.5 rounded-xl border border-lime-200 dark:border-lime-900/40 bg-lime-50/40 dark:bg-lime-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-xl bg-lime-100 dark:bg-lime-900/50 text-lime-700 dark:text-lime-300 flex items-center justify-center shrink-0 border border-lime-300/60">
+                        <Activity className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-zinc-900 dark:text-white">Perfil Conductual DISC</span>
+                          {candidateEvalsData.disc ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300/40">
+                              Completado
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                              Pendiente
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
+                          {candidateEvalsData.disc ? (
+                            <span>Estilo: <strong className="text-lime-800 dark:text-lime-200">{candidateEvalsData.disc.perfil_dominante}</strong> (D:{candidateEvalsData.disc.conteo_d ?? 0} · I:{candidateEvalsData.disc.conteo_i ?? 0} · S:{candidateEvalsData.disc.conteo_s ?? 0} · C:{candidateEvalsData.disc.conteo_c ?? 0})</span>
+                          ) : (
+                            <span>Evaluación conductual de 4 factores (D, I, S, C)</span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleResetSingleSegment('DISC')}
+                      disabled={resettingSegment !== null || isResettingExam}
+                      className="px-3.5 py-1.5 rounded-xl bg-lime-700 hover:bg-lime-800 text-white font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all disabled:opacity-50 shrink-0 self-end sm:self-center"
+                      title="Reiniciar solamente la prueba DISC para este candidato"
+                    >
+                      <RotateCw className={`w-3.5 h-3.5 ${resettingSegment === 'DISC' ? 'animate-spin' : ''}`} />
+                      <span>{resettingSegment === 'DISC' ? 'Reiniciando...' : 'Reiniciar DISC'}</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* 2. SEGMENTO: CONOCIMIENTOS */}
+                <div className="p-3.5 rounded-xl border border-purple-200 dark:border-purple-900/40 bg-purple-50/40 dark:bg-purple-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0 border border-purple-300/60">
+                      <BookOpen className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-zinc-900 dark:text-white">Pruebas de Conocimiento</span>
+                        {candidateEvalsData.knowledge.length > 0 ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300/40">
+                            Completado ({candidateEvalsData.knowledge.length})
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                            Pendiente
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
+                        {candidateEvalsData.configuredKnowledge.length > 0 ? (
+                          <span>Cuestionarios: <strong>{candidateEvalsData.configuredKnowledge.join(', ')}</strong></span>
+                        ) : (
+                          <span>Evaluaciones técnicas asignadas en el perfil</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleResetSingleSegment('CONOCIMIENTOS')}
+                    disabled={resettingSegment !== null || isResettingExam}
+                    className="px-3.5 py-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all disabled:opacity-50 shrink-0 self-end sm:self-center"
+                    title="Reiniciar solamente las pruebas de conocimiento para este candidato"
+                  >
+                    <RotateCw className={`w-3.5 h-3.5 ${resettingSegment === 'CONOCIMIENTOS' ? 'animate-spin' : ''}`} />
+                    <span>{resettingSegment === 'CONOCIMIENTOS' ? 'Reiniciando...' : 'Reiniciar Conocimientos'}</span>
+                  </button>
+                </div>
+
+                {/* 3. SEGMENTO: COMPETENCIAS */}
+                <div className="p-3.5 rounded-xl border border-sky-200 dark:border-sky-900/40 bg-sky-50/40 dark:bg-sky-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-sky-100 dark:bg-sky-900/50 text-sky-700 dark:text-sky-300 flex items-center justify-center shrink-0 border border-sky-300/60">
+                      <GraduationCap className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-zinc-900 dark:text-white">Competencias Laborales</span>
+                        {candidateEvalsData.competencies.length > 0 ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300/40">
+                            Completado ({candidateEvalsData.competencies.length})
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                            Pendiente
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
+                        {candidateEvalsData.configuredCompetencies.length > 0 ? (
+                          <span>{candidateEvalsData.configuredCompetencies.length} competencias: <strong>{candidateEvalsData.configuredCompetencies.slice(0, 3).join(', ')}{candidateEvalsData.configuredCompetencies.length > 3 ? '...' : ''}</strong></span>
+                        ) : (
+                          <span>Evaluación de competencias activas del perfil</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleResetSingleSegment('COMPETENCIAS')}
+                    disabled={resettingSegment !== null || isResettingExam}
+                    className="px-3.5 py-1.5 rounded-xl bg-sky-700 hover:bg-sky-800 text-white font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all disabled:opacity-50 shrink-0 self-end sm:self-center"
+                    title="Reiniciar solamente la evaluación de competencias para este candidato"
+                  >
+                    <RotateCw className={`w-3.5 h-3.5 ${resettingSegment === 'COMPETENCIAS' ? 'animate-spin' : ''}`} />
+                    <span>{resettingSegment === 'COMPETENCIAS' ? 'Reiniciando...' : 'Reiniciar Competencias'}</span>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1895,41 +2206,42 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
             <div className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed space-y-1.5 bg-amber-50/60 dark:bg-amber-950/20 p-3.5 rounded-xl border border-amber-200/80 dark:border-amber-900/40">
               <p className="font-semibold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
                 <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>¿Qué ocurrirá con el candidato?</span>
+                <span>¿Cómo funciona el reinicio de evaluaciones?</span>
               </p>
               <ul className="list-disc list-inside space-y-1 text-amber-800/90 dark:text-amber-300/90 pl-1 text-[11.5px]">
-                <li>Se restablecerán a cero sus respuestas y puntajes anteriores.</li>
-                <li>El estado del postulante volverá a <strong>Invitado / Pendiente</strong>.</li>
-                <li>Podrá rendir nuevamente todas las pruebas del proceso asignado.</li>
-                <li>Se mostrará visible la insignia del número de intentos en el listado.</li>
+                <li>Puede <strong>reiniciar un segmento específico</strong> para que el postulante repita únicamente esa evaluación manteniendo las demás intactas.</li>
+                <li>O puede presionar <strong>"Reiniciar todo el examen"</strong> para restablecer a cero todos los segmentos y permitir un intento completo nuevo.</li>
+                <li>En cualquier caso, se registrará el nuevo intento con su respectiva insignia en el listado.</li>
               </ul>
             </div>
 
             {/* Buttons */}
-            <div className="flex items-center justify-end gap-3 pt-1">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-slate-200/80 dark:border-slate-800/80">
               <button
                 type="button"
                 onClick={() => setCandidateToReset(null)}
-                disabled={isResettingExam}
-                className="px-4 py-2.5 rounded-xl border border-[#DDE2EF] dark:border-[#2A3563] text-[#6B7494] dark:text-[#9AA5C4] hover:bg-[#F8FAFC] dark:hover:bg-white/5 text-xs font-semibold cursor-pointer transition-colors"
+                disabled={isResettingExam || resettingSegment !== null}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-[#DDE2EF] dark:border-[#2A3563] text-[#6B7494] dark:text-[#9AA5C4] hover:bg-[#F8FAFC] dark:hover:bg-white/5 text-xs font-semibold cursor-pointer transition-colors"
               >
-                Cancelar
+                Cerrar
               </button>
+              
               <button
                 type="button"
                 onClick={handleConfirmResetExam}
-                disabled={isResettingExam}
-                className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex items-center gap-2 cursor-pointer shadow-md transition-all disabled:opacity-50"
+                disabled={isResettingExam || resettingSegment !== null}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all disabled:opacity-50"
+                title="Reiniciar todas las evaluaciones a la vez"
               >
                 {isResettingExam ? (
                   <>
                     <RotateCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>Reiniciando...</span>
+                    <span>Reiniciando todo...</span>
                   </>
                 ) : (
                   <>
                     <RotateCw className="w-3.5 h-3.5" />
-                    <span>Sí, reiniciar examen</span>
+                    <span>Reiniciar todo el examen</span>
                   </>
                 )}
               </button>

@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { EvaluacionesService } from './evaluacionesService';
 import { Candidate, ExamStageId, AuditEventType, AuditEvent, CandidateDetailedReport, CompetencyScore } from '../types';
 import { SAMPLE_QUESTIONS } from '../data/questionBank';
 import { generateSafeUuid } from './processDataService';
@@ -943,7 +944,22 @@ export const CandidateDataService = {
           .eq('candidato_id', candidateId);
       } catch {}
 
-      // 3.2 Eliminar intentos y respuestas previas para permitir reinicio completo
+      // 3.2 Eliminar evaluaciones DISC y Competencias
+      try {
+        await supabase
+          .from('evaluaciones_disc')
+          .delete()
+          .eq('candidato_id', candidateId);
+      } catch {}
+
+      try {
+        await supabase
+          .from('evaluaciones_competencias')
+          .delete()
+          .eq('candidato_id', candidateId);
+      } catch {}
+
+      // 3.3 Eliminar intentos y respuestas previas para permitir reinicio completo
       try {
         const { data: intentos } = await supabase
           .from('intentos_examen')
@@ -995,6 +1011,81 @@ export const CandidateDataService = {
       return !resetError;
     } catch (err) {
       console.warn('[CandidateDataService] Excepción en resetCandidateForResend:', err);
+      return false;
+    }
+  },
+
+  /**
+   * Reinicia un segmento específico de evaluación (DISC, CONOCIMIENTOS o COMPETENCIAS) para el candidato
+   */
+  async resetCandidateSegment(
+    candidateId: string, 
+    segment: 'DISC' | 'CONOCIMIENTOS' | 'COMPETENCIAS',
+    processId?: string
+  ): Promise<boolean> {
+    try {
+      if (segment === 'DISC') {
+        await supabase.from('evaluaciones_disc').delete().eq('candidato_id', candidateId);
+        if (typeof window !== 'undefined') {
+          try {
+            const raw = localStorage.getItem('evaluar_resultados_disc');
+            if (raw) {
+              const list = JSON.parse(raw);
+              const filtered = list.filter((x: any) => x.candidatoId !== candidateId);
+              localStorage.setItem('evaluar_resultados_disc', JSON.stringify(filtered));
+            }
+          } catch {}
+        }
+      } else if (segment === 'CONOCIMIENTOS') {
+        await supabase.from('evaluaciones_conocimientos').delete().eq('candidato_id', candidateId);
+        try {
+          const { data: intentos } = await supabase
+            .from('intentos_examen')
+            .select('id')
+            .eq('candidato_id', candidateId);
+          if (intentos && intentos.length > 0) {
+            const intentoIds = intentos.map((i: any) => i.id);
+            await supabase.from('respuestas_candidato').delete().in('intento_id', intentoIds);
+            await supabase.from('intentos_examen').delete().eq('candidato_id', candidateId);
+          }
+        } catch {}
+        if (typeof window !== 'undefined') {
+          try {
+            const raw = localStorage.getItem('evaluar_resultados_conocimientos');
+            if (raw) {
+              const list = JSON.parse(raw);
+              const filtered = list.filter((x: any) => x.candidatoId !== candidateId);
+              localStorage.setItem('evaluar_resultados_conocimientos', JSON.stringify(filtered));
+            }
+          } catch {}
+        }
+      } else if (segment === 'COMPETENCIAS') {
+        await supabase.from('evaluaciones_competencias').delete().eq('candidato_id', candidateId);
+        if (typeof window !== 'undefined') {
+          try {
+            const raw = localStorage.getItem('evaluar_resultados_competencias');
+            if (raw) {
+              const list = JSON.parse(raw);
+              const filtered = list.filter((x: any) => x.candidatoId !== candidateId);
+              localStorage.setItem('evaluar_resultados_competencias', JSON.stringify(filtered));
+            }
+          } catch {}
+        }
+      }
+
+      // Reevaluar estado del candidato según las pruebas restantes
+      await EvaluacionesService.actualizarEstadoCandidatoTrasPrueba(candidateId, processId);
+
+      await this.logAuditEvent(
+        candidateId,
+        'STAGE_FAIL' as AuditEventType,
+        `Administrador reinició el segmento de ${segment} para el candidato.`,
+        'INFO'
+      );
+
+      return true;
+    } catch (err) {
+      console.warn(`[CandidateDataService] Error al reiniciar segmento ${segment}:`, err);
       return false;
     }
   },
