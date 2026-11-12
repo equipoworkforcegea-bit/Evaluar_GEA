@@ -235,7 +235,9 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
       } catch {}
 
       // 2. Ejecutar reseteo del segmento en Supabase y LocalStorage
-      await CandidateDataService.resetCandidateSegment(candId, segment, process?.id, candidateToReset.email);
+      // Usar process?.id como processId primario y candidateToReset.testId como fallback
+      const effectiveProcessId = process?.id || candidateToReset.testId;
+      await CandidateDataService.resetCandidateSegment(candId, segment, effectiveProcessId, candidateToReset.email);
 
       // 3. Limpiar inmediatamente el estado del modal para ese segmento
       setCandidateEvalsData(prev => ({

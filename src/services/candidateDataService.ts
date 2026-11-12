@@ -1106,45 +1106,64 @@ export const CandidateDataService = {
           try { localStorage.removeItem('evaluar_resultados_conocimientos'); } catch {}
         }
       } else if (segment === 'COMPETENCIAS') {
-        // Borrar de evaluaciones_competencias — por todos los IDs del candidato
-        if (allCandidateIds.length > 0) {
-          await supabase.from('evaluaciones_competencias').delete().in('candidato_id', allCandidateIds);
+        // Estrategia: buscar TODOS los registros de competencias que coincidan con
+        // candidato_id OR proceso_id, luego borrar por su PK (id) → garantiza borrado completo
+        try {
+          const orParts: string[] = [];
+          if (allCandidateIds.length > 0) {
+            orParts.push(`candidato_id.in.(${allCandidateIds.join(',')})`);
+          }
+          if (processId) {
+            orParts.push(`proceso_id.eq.${processId}`);
+          }
+
+          if (orParts.length > 0) {
+            const { data: compToDelete } = await supabase
+              .from('evaluaciones_competencias')
+              .select('id')
+              .or(orParts.join(','));
+
+            if (compToDelete && compToDelete.length > 0) {
+              const deleteIds = compToDelete.map((r: any) => r.id);
+              console.log(`[resetSegment] Borrando ${deleteIds.length} registros de evaluaciones_competencias`, deleteIds);
+              const { error: delErr } = await supabase
+                .from('evaluaciones_competencias')
+                .delete()
+                .in('id', deleteIds);
+              if (delErr) console.warn('[resetSegment] Error borrando competencias:', delErr.message);
+            } else {
+              console.log('[resetSegment] No se encontraron registros de competencias para borrar');
+            }
+          }
+        } catch (e) {
+          console.warn('[resetSegment] Excepción borrando competencias:', e);
         }
-        // También borrar por proceso_id para cubrir cualquier ID alternativo que se haya usado al guardar
-        if (processId) {
-          await supabase.from('evaluaciones_competencias').delete().eq('proceso_id', processId);
-        }
-        // Borrar de evaluaciones_conocimientos donde tema ilike 'COMPETENCIA:%' (fallback histórico) por todos los IDs
-        for (const cid of allCandidateIds) {
-          try {
-            const { data: compRows } = await supabase
+
+        // Borrar también el fallback histórico en evaluaciones_conocimientos (tema COMPETENCIA:%)
+        try {
+          const orParts2: string[] = [];
+          if (allCandidateIds.length > 0) {
+            orParts2.push(`candidato_id.in.(${allCandidateIds.join(',')})`);
+          }
+          if (processId) {
+            orParts2.push(`proceso_id.eq.${processId}`);
+          }
+          if (orParts2.length > 0) {
+            const { data: knowComp } = await supabase
               .from('evaluaciones_conocimientos')
               .select('id, tema')
-              .eq('candidato_id', cid);
-            if (compRows && compRows.length > 0) {
-              const idsToDelete = compRows
+              .or(orParts2.join(','));
+            if (knowComp && knowComp.length > 0) {
+              const idsComp = knowComp
                 .filter((r: any) => String(r.tema || '').match(/^COMPETENCIA:/i))
                 .map((r: any) => r.id);
-              if (idsToDelete.length > 0) {
-                await supabase.from('evaluaciones_conocimientos').delete().in('id', idsToDelete);
+              if (idsComp.length > 0) {
+                await supabase.from('evaluaciones_conocimientos').delete().in('id', idsComp);
               }
             }
-          } catch {}
-        }
-        // También borrar competencias en conocimientos por proceso_id
-        if (processId) {
-          try {
-            const { data: compRowsByProc } = await supabase
-              .from('evaluaciones_conocimientos')
-              .select('id, tema')
-              .eq('proceso_id', processId)
-              .ilike('tema', 'COMPETENCIA:%');
-            if (compRowsByProc && compRowsByProc.length > 0) {
-              const ids = compRowsByProc.map((r: any) => r.id);
-              await supabase.from('evaluaciones_conocimientos').delete().in('id', ids);
-            }
-          } catch {}
-        }
+          }
+        } catch {}
+
         // Limpiar localStorage — eliminar TODOS los items del candidato
         if (typeof window !== 'undefined') {
           try {
