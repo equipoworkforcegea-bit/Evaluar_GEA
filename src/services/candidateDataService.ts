@@ -1106,9 +1106,15 @@ export const CandidateDataService = {
           try { localStorage.removeItem('evaluar_resultados_conocimientos'); } catch {}
         }
       } else if (segment === 'COMPETENCIAS') {
-        // Borrar de evaluaciones_competencias para todos los IDs
-        await supabase.from('evaluaciones_competencias').delete().in('candidato_id', allCandidateIds);
-        // Borrar de evaluaciones_conocimientos donde tema ilike 'COMPETENCIA:%' (fallback histórico)
+        // Borrar de evaluaciones_competencias — por todos los IDs del candidato
+        if (allCandidateIds.length > 0) {
+          await supabase.from('evaluaciones_competencias').delete().in('candidato_id', allCandidateIds);
+        }
+        // También borrar por proceso_id para cubrir cualquier ID alternativo que se haya usado al guardar
+        if (processId) {
+          await supabase.from('evaluaciones_competencias').delete().eq('proceso_id', processId);
+        }
+        // Borrar de evaluaciones_conocimientos donde tema ilike 'COMPETENCIA:%' (fallback histórico) por todos los IDs
         for (const cid of allCandidateIds) {
           try {
             const { data: compRows } = await supabase
@@ -1122,6 +1128,20 @@ export const CandidateDataService = {
               if (idsToDelete.length > 0) {
                 await supabase.from('evaluaciones_conocimientos').delete().in('id', idsToDelete);
               }
+            }
+          } catch {}
+        }
+        // También borrar competencias en conocimientos por proceso_id
+        if (processId) {
+          try {
+            const { data: compRowsByProc } = await supabase
+              .from('evaluaciones_conocimientos')
+              .select('id, tema')
+              .eq('proceso_id', processId)
+              .ilike('tema', 'COMPETENCIA:%');
+            if (compRowsByProc && compRowsByProc.length > 0) {
+              const ids = compRowsByProc.map((r: any) => r.id);
+              await supabase.from('evaluaciones_conocimientos').delete().in('id', ids);
             }
           } catch {}
         }
