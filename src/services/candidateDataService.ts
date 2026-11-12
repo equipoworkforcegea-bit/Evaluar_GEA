@@ -1139,6 +1139,19 @@ export const CandidateDataService = {
         }
       }
 
+      // Resetear estado del candidato a EN_CURSO y limpiar completado_en para todos los IDs
+      // Esto es crítico para que la vista del candidato muestre las pruebas como pendientes
+      try {
+        await supabase
+          .from('candidatos')
+          .update({
+            estado: 'EN_CURSO',
+            completado_en: null,
+            actualizado_en: new Date().toISOString()
+          })
+          .in('id', allCandidateIds);
+      } catch {}
+
       // Reevaluar estado del candidato según las pruebas restantes
       await EvaluacionesService.actualizarEstadoCandidatoTrasPrueba(candidateId, processId);
 

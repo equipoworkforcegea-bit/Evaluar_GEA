@@ -158,14 +158,18 @@ export const EvaluacionesService = {
    * Obtiene los resultados de conocimientos completados por un candidato
    */
   async obtenerResultadosConocimientos(candidatoId: string, procesoId?: string, email?: string): Promise<any[]> {
+    let supabaseReachable = false;
     try {
       // 1. Intentar por candidato_id exacto
       if (candidatoId) {
         let query = supabase.from('evaluaciones_conocimientos').select('*').eq('candidato_id', candidatoId);
         if (procesoId) query = query.eq('proceso_id', procesoId);
         const { data, error } = await query.order('completado_en', { ascending: false });
-        if (!error && data && data.length > 0) {
-          return data;
+        if (!error) {
+          supabaseReachable = true; // Supabase respondió OK
+          // Filtrar para que solo devuelva conocimientos reales (no fallback de competencias)
+          const filtered = (data || []).filter((r: any) => !String(r.tema || '').match(/^COMPETENCIA:/i));
+          if (filtered.length > 0) return filtered;
         }
       }
 
@@ -173,28 +177,37 @@ export const EvaluacionesService = {
       if (email) {
         const { data: candList } = await supabase.from('candidatos').select('id').eq('correo', email);
         if (candList && candList.length > 0) {
-          const ids = candList.map(c => c.id);
+          const ids = candList.map((c: any) => c.id);
           const { data: dataByEmail, error: errByEmail } = await supabase
             .from('evaluaciones_conocimientos')
             .select('*')
             .in('candidato_id', ids)
             .order('completado_en', { ascending: false });
-          if (!errByEmail && dataByEmail && dataByEmail.length > 0) {
-            return dataByEmail;
+          if (!errByEmail) {
+            supabaseReachable = true;
+            const filtered = (dataByEmail || []).filter((r: any) => !String(r.tema || '').match(/^COMPETENCIA:/i));
+            if (filtered.length > 0) return filtered;
           }
         }
       }
 
       // 3. Si no hay candidatoId pero hay procesoId
       if (procesoId && !candidatoId) {
-        const { data } = await supabase.from('evaluaciones_conocimientos').select('*').eq('proceso_id', procesoId).order('completado_en', { ascending: false });
-        if (data && data.length > 0) return data;
+        const { data, error } = await supabase.from('evaluaciones_conocimientos').select('*').eq('proceso_id', procesoId).order('completado_en', { ascending: false });
+        if (!error) {
+          supabaseReachable = true;
+          const filtered = (data || []).filter((r: any) => !String(r.tema || '').match(/^COMPETENCIA:/i));
+          if (filtered.length > 0) return filtered;
+        }
       }
     } catch (err) {
       console.warn('[EvaluacionesService] Error consultando Supabase:', err);
     }
 
-    // Fallback a LocalStorage
+    // Solo hacer fallback a LocalStorage si Supabase NO fue alcanzable (error de red)
+    // Si Supabase respondió OK pero devolvió vacío = datos borrados = NO usar localStorage
+    if (supabaseReachable) return [];
+
     try {
       const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY_CONOCIMIENTOS) || '[]');
       return stored.filter((item: any) => 
@@ -211,14 +224,16 @@ export const EvaluacionesService = {
    * Obtiene el resultado DISC de un candidato
    */
   async obtenerResultadoDISC(candidatoId: string, procesoId?: string, email?: string): Promise<any | null> {
+    let supabaseReachable = false;
     try {
       // 1. Intentar por candidato_id exacto
       if (candidatoId) {
         let query = supabase.from('evaluaciones_disc').select('*').eq('candidato_id', candidatoId);
         if (procesoId) query = query.eq('proceso_id', procesoId);
         const { data, error } = await query.order('completado_en', { ascending: false }).limit(1);
-        if (!error && data && data.length > 0) {
-          return data[0];
+        if (!error) {
+          supabaseReachable = true;
+          if (data && data.length > 0) return data[0];
         }
       }
 
@@ -226,29 +241,35 @@ export const EvaluacionesService = {
       if (email) {
         const { data: candList } = await supabase.from('candidatos').select('id').eq('correo', email);
         if (candList && candList.length > 0) {
-          const ids = candList.map(c => c.id);
+          const ids = candList.map((c: any) => c.id);
           const { data: dataByEmail, error: errByEmail } = await supabase
             .from('evaluaciones_disc')
             .select('*')
             .in('candidato_id', ids)
             .order('completado_en', { ascending: false })
             .limit(1);
-          if (!errByEmail && dataByEmail && dataByEmail.length > 0) {
-            return dataByEmail[0];
+          if (!errByEmail) {
+            supabaseReachable = true;
+            if (dataByEmail && dataByEmail.length > 0) return dataByEmail[0];
           }
         }
       }
 
       // 3. Si no hay candidatoId pero hay procesoId
       if (procesoId && !candidatoId) {
-        const { data } = await supabase.from('evaluaciones_disc').select('*').eq('proceso_id', procesoId).order('completado_en', { ascending: false }).limit(1);
-        if (data && data.length > 0) return data[0];
+        const { data, error } = await supabase.from('evaluaciones_disc').select('*').eq('proceso_id', procesoId).order('completado_en', { ascending: false }).limit(1);
+        if (!error) {
+          supabaseReachable = true;
+          if (data && data.length > 0) return data[0];
+        }
       }
     } catch (err) {
       console.warn('[EvaluacionesService] Error consultando DISC en Supabase:', err);
     }
 
-    // Fallback a LocalStorage
+    // Solo hacer fallback a LocalStorage si Supabase NO fue alcanzable (error de red)
+    if (supabaseReachable) return null;
+
     try {
       const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY_DISC) || '[]');
       const matches = stored.filter((item: any) => 
@@ -346,6 +367,7 @@ export const EvaluacionesService = {
    */
   async obtenerResultadosCompetencias(candidatoId: string, procesoId?: string, email?: string): Promise<any[]> {
     const resultsMap = new Map<string, any>();
+    let supabaseReachable = false;
 
     // 1. Consultar tabla oficial `evaluaciones_competencias` en Supabase
     try {
@@ -361,26 +383,29 @@ export const EvaluacionesService = {
       }
 
       const { data, error } = await query.order('completado_en', { ascending: false });
-      if (!error && data && data.length > 0) {
-        data.forEach(item => {
-          const rawName = (item.competencia || '').trim();
-          if (rawName && !resultsMap.has(rawName.toLowerCase())) {
-            resultsMap.set(rawName.toLowerCase(), {
-              competencia: rawName,
-              puntaje: item.puntaje,
-              puntajeMaximo: item.puntaje_maximo,
-              nivel: item.nivel,
-              completadoEn: item.completado_en,
-              tiempoSegundos: item.tiempo_segundos
-            });
-          }
-        });
+      if (!error) {
+        supabaseReachable = true;
+        if (data && data.length > 0) {
+          data.forEach((item: any) => {
+            const rawName = (item.competencia || '').trim();
+            if (rawName && !resultsMap.has(rawName.toLowerCase())) {
+              resultsMap.set(rawName.toLowerCase(), {
+                competencia: rawName,
+                puntaje: item.puntaje,
+                puntajeMaximo: item.puntaje_maximo,
+                nivel: item.nivel,
+                completadoEn: item.completado_en,
+                tiempoSegundos: item.tiempo_segundos
+              });
+            }
+          });
+        }
       }
     } catch (err) {
       console.warn('[EvaluacionesService] Error consultando evaluaciones_competencias en Supabase:', err);
     }
 
-    // 2. Fallback a evaluaciones_conocimientos para compatibilidad histórica
+    // 2. Fallback a evaluaciones_conocimientos para compatibilidad histórica (solo si Supabase responde)
     try {
       let query = supabase
         .from('evaluaciones_conocimientos')
@@ -395,48 +420,54 @@ export const EvaluacionesService = {
       }
 
       const { data, error } = await query.order('completado_en', { ascending: false });
-      if (!error && data && data.length > 0) {
-        data.forEach(item => {
-          const rawName = item.tema.replace(/^COMPETENCIA:\s*/i, '').trim();
-          if (rawName && !resultsMap.has(rawName.toLowerCase())) {
-            resultsMap.set(rawName.toLowerCase(), {
-              competencia: rawName,
-              puntaje: item.puntaje,
-              puntajeMaximo: item.puntaje_maximo,
-              nivel: item.dificultad,
-              completadoEn: item.completado_en,
-              tiempoSegundos: item.tiempo_empleado_segundos
-            });
-          }
-        });
+      if (!error) {
+        supabaseReachable = true;
+        if (data && data.length > 0) {
+          data.forEach((item: any) => {
+            const rawName = item.tema.replace(/^COMPETENCIA:\s*/i, '').trim();
+            if (rawName && !resultsMap.has(rawName.toLowerCase())) {
+              resultsMap.set(rawName.toLowerCase(), {
+                competencia: rawName,
+                puntaje: item.puntaje,
+                puntajeMaximo: item.puntaje_maximo,
+                nivel: item.dificultad,
+                completadoEn: item.completado_en,
+                tiempoSegundos: item.tiempo_empleado_segundos
+              });
+            }
+          });
+        }
       }
     } catch (err) {
       console.warn('[EvaluacionesService] Error consultando competencias en Supabase:', err);
     }
 
-    // 3. Complementar con LocalStorage
-    try {
-      const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY_COMPETENCIAS) || '[]');
-      stored.forEach((item: any) => {
-        const matchCand = !candidatoId || item.candidatoId === candidatoId;
-        const matchProc = !procesoId || item.procesoId === procesoId;
-        const matchMail = !email || item.email === email;
+    // 3. Solo usar LocalStorage si Supabase NO fue alcanzable (error de red)
+    // Si Supabase respondió OK pero devolvió vacío = datos borrados = NO usar localStorage
+    if (!supabaseReachable) {
+      try {
+        const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY_COMPETENCIAS) || '[]');
+        stored.forEach((item: any) => {
+          const matchCand = !candidatoId || item.candidatoId === candidatoId;
+          const matchProc = !procesoId || item.procesoId === procesoId;
+          const matchMail = !email || item.email === email;
 
-        if (matchCand && matchProc && matchMail && item.competencia) {
-          const key = item.competencia.trim().toLowerCase();
-          if (!resultsMap.has(key)) {
-            resultsMap.set(key, {
-              competencia: item.competencia,
-              puntaje: item.puntaje,
-              puntajeMaximo: item.puntajeMaximo || 20,
-              nivel: item.nivel,
-              completadoEn: item.completadoEn,
-              tiempoSegundos: item.tiempoSegundos
-            });
+          if (matchCand && matchProc && matchMail && item.competencia) {
+            const key = item.competencia.trim().toLowerCase();
+            if (!resultsMap.has(key)) {
+              resultsMap.set(key, {
+                competencia: item.competencia,
+                puntaje: item.puntaje,
+                puntajeMaximo: item.puntajeMaximo || 20,
+                nivel: item.nivel,
+                completadoEn: item.completadoEn,
+                tiempoSegundos: item.tiempoSegundos
+              });
+            }
           }
-        }
-      });
-    } catch {}
+        });
+      } catch {}
+    }
 
     return Array.from(resultsMap.values());
   },
