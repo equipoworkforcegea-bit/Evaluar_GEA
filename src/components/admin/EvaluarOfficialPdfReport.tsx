@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { EvaluacionesService } from '../../services/evaluacionesService';
+import { supabase } from '../../services/supabaseClient';
 import { createPortal } from 'react-dom';
 import { Candidate, EvaluationTest } from '../../types';
 import { 
@@ -26,12 +27,16 @@ interface EvaluarOfficialPdfReportProps {
   hideSensitiveData?: boolean;
 }
 
-const EvaluarGeaReportFooter: React.FC<{ candidateName: string; pageNumber: number }> = ({ candidateName, pageNumber }) => (
+const EvaluarGeaReportFooter: React.FC<{ candidateName: string; pageNumber: number; totalPages?: number }> = ({ 
+  candidateName, 
+  pageNumber, 
+  totalPages = 16 
+}) => (
   <div className="pt-6 border-t border-zinc-200/80 flex items-center justify-between text-[10px] text-zinc-400">
     <div className="flex items-center gap-2">
       <span className="font-bold text-zinc-700 uppercase tracking-wide">{candidateName}</span>
       <span className="text-zinc-400 font-mono text-[9px] bg-zinc-100 px-1.5 py-0.5 rounded-sm">
-        Pág. {pageNumber} / 15
+        Pág. {pageNumber} / {totalPages}
       </span>
     </div>
     
@@ -64,21 +69,60 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
     ? new Date(candidate.completedAt).toLocaleDateString('es-PE', { day: 'numeric', month: 'long', year: 'numeric' })
     : new Date().toLocaleDateString('es-PE', { day: 'numeric', month: 'long', year: 'numeric' });
 
-  // Cargar evaluaciones reales (Conocimientos y DISC)
+  // Cargar evaluaciones reales (Conocimientos, DISC y Competencias)
   const [knowledgeResults, setKnowledgeResults] = useState<any[]>([]);
   const [discResult, setDiscResult] = useState<any | null>(null);
+  const [competencyResults, setCompetencyResults] = useState<any[]>([]);
+  const [activeProfileCompetencies, setActiveProfileCompetencies] = useState<string[]>([]);
 
   useEffect(() => {
     let isMounted = true;
     const fetchEvals = async () => {
       try {
-        const [kList, dRes] = await Promise.all([
-          EvaluacionesService.obtenerResultadosConocimientos(candidate.id, process?.id, candidate.email),
-          EvaluacionesService.obtenerResultadoDISC(candidate.id, process?.id, candidate.email)
+        const procId = process?.id || candidate.testId;
+        const [kList, dRes, compList] = await Promise.all([
+          EvaluacionesService.obtenerResultadosConocimientos(candidate.id, procId, candidate.email),
+          EvaluacionesService.obtenerResultadoDISC(candidate.id, procId, candidate.email),
+          EvaluacionesService.obtenerResultadosCompetencias(candidate.id, procId, candidate.email)
         ]);
+
+        let loadedComps: string[] = [];
+        if (procId) {
+          try {
+            const { data: procRow } = await supabase
+              .from('procesos_evaluacion')
+              .select('*, perfiles_puesto(*)')
+              .eq('id', procId)
+              .maybeSingle();
+
+            if (procRow) {
+              const perfil = procRow.perfiles_puesto;
+              const meta = perfil?.competencias?._metadata || {};
+              if (Array.isArray(meta.selectedList) && meta.selectedList.length > 0) {
+                loadedComps = meta.selectedList;
+              } else if (perfil?.competencias && typeof perfil.competencias === 'object') {
+                loadedComps = Object.keys(perfil.competencias).filter(k => !k.startsWith('_'));
+              }
+              if (loadedComps.length === 0 && Array.isArray(procRow.competencias_seleccionadas)) {
+                loadedComps = procRow.competencias_seleccionadas;
+              }
+            }
+          } catch (errP) {
+            console.warn('[EvaluarOfficialPdfReport] Error consultando perfil de proceso:', errP);
+          }
+        }
+
+        if (loadedComps.length === 0 && process?.selectedCompetencies && process.selectedCompetencies.length > 0) {
+          loadedComps = process.selectedCompetencies;
+        }
+
         if (isMounted) {
           setKnowledgeResults(kList || []);
           setDiscResult(dRes || null);
+          setCompetencyResults(compList || []);
+          if (loadedComps.length > 0) {
+            setActiveProfileCompetencies(loadedComps);
+          }
         }
       } catch (err) {
         console.warn('[EvaluarOfficialPdfReport] Error cargando evaluaciones:', err);
@@ -86,7 +130,7 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
     };
     fetchEvals();
     return () => { isMounted = false; };
-  }, [candidate.id, candidate.email, process?.id]);
+  }, [candidate.id, candidate.email, process?.id, candidate.testId]);
 
   const hasKnowledge = knowledgeResults.length > 0;
   const avgKnowledgeScore20 = hasKnowledge
@@ -94,14 +138,27 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
     : 0;
   const avgKnowledgePercent = hasKnowledge ? Math.round((avgKnowledgeScore20 / 20) * 100) : 0;
 
-  // 1. Puntaje General Real del Postulante (ponderado con conocimientos y DISC si existe)
+  const hasCompetencies = competencyResults.length > 0;
+  const avgCompetencyPercent = hasCompetencies
+    ? Math.round(competencyResults.reduce((sum, item) => {
+        const sc = Number(item.puntaje ?? 0);
+        const percent = item.puntajeMaximo === 20 
+          ? Math.round((sc / 20) * 100) 
+          : (item.puntajeMaximo === 10 ? Math.round(sc * 10) : Math.round(sc));
+        return sum + percent;
+      }, 0) / competencyResults.length)
+    : 0;
+
+  // 1. Puntaje General Real del Postulante (ponderado con evaluaciones reales)
   const rawOverall = candidate.scores?.overall != null && candidate.scores.overall > 0
     ? Math.round(candidate.scores.overall)
     : (candidate.detailedReport?.jobFitPercentage != null && candidate.detailedReport.jobFitPercentage > 0
         ? Math.round(candidate.detailedReport.jobFitPercentage)
         : ((candidate as any).puntaje != null && (candidate as any).puntaje > 0
             ? Math.round((candidate as any).puntaje)
-            : (hasKnowledge ? avgKnowledgePercent : 0)));
+            : (hasKnowledge && hasCompetencies
+                ? Math.round((avgKnowledgePercent + avgCompetencyPercent) / 2)
+                : (hasKnowledge ? avgKnowledgePercent : (hasCompetencies ? avgCompetencyPercent : 0)))));
 
   const overallScore = rawOverall;
 
@@ -130,6 +187,25 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
   const s1 = candidate.scores?.stage1Psycho ?? overallScore;
   const s2 = candidate.scores?.stage2Emotional ?? overallScore;
   const s3 = candidate.scores?.stage3WorkCases ?? overallScore;
+
+  // Helper para resolver puntajes reales de competencias si existen en las evaluaciones del candidato
+  const resolveCompetencyScore = (keywords: string[], fallbackVal: number): number => {
+    if (!competencyResults || competencyResults.length === 0) return fallbackVal;
+    
+    for (const r of competencyResults) {
+      const rName = (r.competencia || '').toLowerCase();
+      for (const kw of keywords) {
+        if (rName.includes(kw.toLowerCase())) {
+          const sc = Number(r.puntaje ?? 0);
+          const maxP = Number(r.puntajeMaximo ?? (sc <= 10 ? 10 : (sc <= 20 ? 20 : 100)));
+          const pct = maxP === 20 ? (sc / 20) * 100 : (maxP === 10 ? sc * 10 : sc);
+          const outOf10 = Number(Math.min(10, Math.max(0.5, pct / 10)).toFixed(1));
+          return outOf10;
+        }
+      }
+    }
+    return fallbackVal;
+  };
 
   // Helper de niveles según nota sobre 10
   const getLevelInfo = (scoreOutOf10: number) => {
@@ -165,12 +241,18 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
     };
   };
 
-  // 5 Competencias clave dinámicas según el candidato (Escala 0 a 10, Esperado = 6.0)
-  const compClienteVal = Number(Math.min(10, Math.max(0.5, (s3 / 10))).toFixed(1));
-  const compVentasVal = Number(Math.min(10, Math.max(0.5, (overallScore / 10) * 0.95)).toFixed(1));
-  const compCommsVal = Number(Math.min(10, Math.max(0.5, (s2 / 10) * 1.05)).toFixed(1));
-  const compTempleVal = Number(Math.min(10, Math.max(0.5, (s2 / 10))).toFixed(1));
-  const compIntegVal = Number(Math.min(10, Math.max(0.5, (s1 / 10))).toFixed(1));
+  // 5 Competencias clave dinámicas según evaluaciones reales o etapas (Escala 0 a 10, Esperado = 6.0)
+  const defaultClienteVal = Number(Math.min(10, Math.max(0.5, (s3 / 10))).toFixed(1));
+  const defaultVentasVal = Number(Math.min(10, Math.max(0.5, (overallScore / 10) * 0.95)).toFixed(1));
+  const defaultCommsVal = Number(Math.min(10, Math.max(0.5, (s2 / 10) * 1.05)).toFixed(1));
+  const defaultTempleVal = Number(Math.min(10, Math.max(0.5, (s2 / 10))).toFixed(1));
+  const defaultIntegVal = Number(Math.min(10, Math.max(0.5, (s1 / 10))).toFixed(1));
+
+  const compClienteVal = resolveCompetencyScore(['cliente', 'atención', 'casos'], defaultClienteVal);
+  const compVentasVal = resolveCompetencyScore(['venta', 'comercial', 'persuasión', 'negociación'], defaultVentasVal);
+  const compCommsVal = resolveCompetencyScore(['comunicación', 'asertiva', 'oral'], defaultCommsVal);
+  const compTempleVal = resolveCompetencyScore(['temple', 'serenidad', 'presión', 'autorregulación'], defaultTempleVal);
+  const compIntegVal = resolveCompetencyScore(['integridad', 'valores', 'ética', 'honestidad'], defaultIntegVal);
 
   const compClienteAjuste = Math.min(100, Math.max(0, Math.round((compClienteVal / 6.0) * 100)));
   const compVentasAjuste = Math.min(100, Math.max(0, Math.round((compVentasVal / 6.0) * 100)));
@@ -251,7 +333,7 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
       
       {/* Top Floating Action Bar (Hidden on print) */}
       <div className="evaluar-no-print fixed top-4 right-4 z-[210] flex items-center gap-3 print:hidden bg-zinc-900/90 text-white px-5 py-2.5 rounded-2xl border border-zinc-700 shadow-2xl backdrop-blur-md">
-        <span className="text-xs font-semibold text-zinc-300">Reporte Oficial (15 págs.)</span>
+        <span className="text-xs font-semibold text-zinc-300">Reporte Oficial (16 págs.)</span>
         
         <button
           type="button"
@@ -284,221 +366,228 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
       >
 
         {/* ------------------------------------------------------------------------- */}
-        {/* PÁGINA 1: PORTADA SPLIT OFICIAL EVALUAR                                   */}
+        {/* PÁGINA 1: PORTADA OFICIAL EVALUAR GEA (HOJA COMPLETA)                     */}
         {/* ------------------------------------------------------------------------- */}
-        <div className="evaluar-page-sheet evaluar-page-portada bg-white w-[210mm] h-[296.8mm] relative flex flex-col justify-between shadow-2xl print:shadow-none mx-auto overflow-hidden">
+        <div className="evaluar-page-sheet evaluar-page-portada bg-gradient-to-b from-[#180A3A] via-[#351268] to-[#120626] text-white w-[210mm] h-[296.8mm] relative p-14 flex flex-col justify-between shadow-2xl print:shadow-none mx-auto overflow-hidden">
           
-          <div className="evaluar-page-portada-grid grid grid-cols-12 h-full w-full">
-            
-            {/* Lado Izquierdo (5 cols): Fondo Cósmico Púrpura con Ondas y Datos */}
-            <div className="evaluar-portada-left col-span-5 bg-gradient-to-b from-[#180A3A] via-[#351268] to-[#120626] text-white p-8 flex flex-col justify-between relative overflow-hidden">
-              
-              {/* Ondas decorativas de fondo */}
-              <div className="absolute inset-0 opacity-40 pointer-events-none">
-                <svg viewBox="0 0 400 800" className="w-full h-full object-cover">
-                  <path d="M-50,200 C150,150 250,350 450,250 C200,450 100,550 -50,650 Z" fill="url(#gradWaves)" />
-                  <defs>
-                    <linearGradient id="gradWaves" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#C026D3" stopOpacity="0.8" />
-                      <stop offset="50%" stopColor="#7C3AED" stopOpacity="0.5" />
-                      <stop offset="100%" stopColor="#2563EB" stopOpacity="0.2" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-              </div>
+          {/* Ondas decorativas de fondo */}
+          <div className="absolute inset-0 opacity-40 pointer-events-none">
+            <svg viewBox="0 0 400 800" className="w-full h-full object-cover">
+              <path d="M-50,200 C150,150 250,350 450,250 C200,450 100,550 -50,650 Z" fill="url(#gradWavesPortada)" />
+              <defs>
+                <linearGradient id="gradWavesPortada" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#C026D3" stopOpacity="0.8" />
+                  <stop offset="50%" stopColor="#7C3AED" stopOpacity="0.5" />
+                  <stop offset="100%" stopColor="#2563EB" stopOpacity="0.2" />
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
 
-              {/* Header Portada: Logo Evaluar GEA con Logo Distintivo */}
-              <div className="relative z-10 flex items-center justify-between">
-                <div className="bg-white px-2.5 py-1.5 rounded-xl shadow-md flex items-center gap-1.5">
-                  <img 
-                    src="/gea-internacional.png" 
-                    alt="GEA Internacional" 
-                    className="h-6 object-contain shrink-0" 
-                  />
-                </div>
-                <div className="flex items-center gap-1.5 font-bold text-base tracking-tight bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/20">
-                  <span className="text-white font-black tracking-tight">evaluar</span>
-                  <span className="text-[#10B981] font-black tracking-wider uppercase text-xs bg-emerald-950/60 px-1.5 py-0.5 rounded-md border border-emerald-500/30">gea</span>
-                </div>
-              </div>
+          {/* Header Portada: Logo GEA y Badge evaluar gea */}
+          <div className="relative z-10 flex items-center justify-between">
+            <div className="bg-white px-3.5 py-2 rounded-xl shadow-md flex items-center gap-2">
+              <img 
+                src="/gea-internacional.png" 
+                alt="GEA Internacional" 
+                className="h-7 object-contain shrink-0" 
+              />
+            </div>
+            <div className="flex items-center gap-2 font-bold text-base tracking-tight bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/20">
+              <span className="text-white font-black tracking-tight text-base">evaluar</span>
+              <span className="text-[#10B981] font-black tracking-wider uppercase text-xs bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-500/30">gea</span>
+            </div>
+          </div>
 
-              {/* Títulos y Pastillas */}
-              <div className="relative z-10 space-y-4 my-auto">
-                <p className="text-[11px] font-bold tracking-widest text-purple-200 uppercase">
-                  {positionTitle}
-                </p>
-                <h1 className="text-3xl font-black text-white leading-tight tracking-tight uppercase">
-                  Reporte de Resultados
-                </h1>
-
-                <div className="space-y-2 pt-2">
-                  <div className="inline-block px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-md text-[11px] font-semibold text-purple-100">
-                    Finalizado: {evaluationDate}
-                  </div>
-                  <div>
-                    <div className="inline-block px-3 py-1.5 rounded-full bg-white text-[11px] font-extrabold shadow-xs" style={{ color: adecuacionColor }}>
-                      Adecuación: {overallScore}%
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Footer Lado Izquierdo: Datos del Candidato & Logo GEA */}
-              <div className="relative z-10 pt-6 border-t border-white/15 space-y-4">
-                <div className="space-y-1.5 text-xs text-purple-100">
-                  <div className="flex items-center gap-2">
-                    <User className="w-3.5 h-3.5 text-purple-300 shrink-0" />
-                    <span className="font-bold text-white text-sm">{candidateName}</span>
-                  </div>
-                  {!hideSensitiveData && (
-                    <>
-                      <div className="flex items-center gap-2 text-[11px]">
-                        <Phone className="w-3.5 h-3.5 text-purple-300 shrink-0" />
-                        <span>{candidate.phone || '+51 984 123 456'}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-[11px]">
-                        <Mail className="w-3.5 h-3.5 text-purple-300 shrink-0" />
-                        <span className="truncate">{candidate.email}</span>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* Recuadro de Empresa GEA Internacional con Logo Oficial */}
-                <div className="bg-white p-3 rounded-xl shadow-lg flex items-center justify-center">
-                  <img 
-                    src="/gea-internacional.png" 
-                    alt="GEA Internacional" 
-                    className="h-10 object-contain" 
-                  />
-                </div>
-              </div>
-
+          {/* Título Central, Proceso y Pastillas */}
+          <div className="relative z-10 space-y-6 my-auto max-w-lg">
+            <div className="space-y-2">
+              <span className="text-xs font-bold tracking-widest text-purple-200 uppercase bg-white/10 backdrop-blur-xs px-3 py-1 rounded-md inline-block">
+                Proceso de Evaluación
+              </span>
+              <p className="text-sm font-bold tracking-wider text-purple-200 uppercase">
+                {positionTitle}
+              </p>
             </div>
 
-            {/* Lado Derecho (7 cols): Resultados Generales */}
-            <div className="evaluar-portada-right col-span-7 p-10 flex flex-col justify-between bg-white text-zinc-900">
-              
-              <div className="space-y-8 pt-4">
-                
-                {/* Título de Sección */}
-                <div className="text-center space-y-3">
-                  <h2 className="text-lg font-black text-[#6355DE] tracking-wide uppercase">
-                    Resultados Generales
-                  </h2>
-                  <div className={`inline-block px-4 py-1 rounded-full text-xs font-bold border ${adecuacionBadgeClass}`}>
-                    Interpretación: {adecuacionText}
+            <h1 className="text-4xl font-black text-white leading-tight tracking-tight uppercase">
+              Reporte de<br />Resultados
+            </h1>
+
+            <div className="flex flex-wrap items-center gap-3 pt-4">
+              <div className="inline-flex items-center px-4 py-2 rounded-full bg-white/15 backdrop-blur-md text-xs font-semibold text-purple-100 border border-white/10">
+                Finalizado: {evaluationDate}
+              </div>
+              <div 
+                className="inline-flex items-center px-4 py-2 rounded-full bg-white text-xs font-extrabold shadow-md"
+                style={{ color: adecuacionColor }}
+              >
+                Adecuación: {overallScore}%
+              </div>
+            </div>
+          </div>
+
+          {/* Footer Portada: Datos del Candidato & Banner GEA */}
+          <div className="relative z-10 pt-8 border-t border-white/15 flex items-end justify-between">
+            <div className="space-y-2 text-xs text-purple-100">
+              <div className="flex items-center gap-2.5">
+                <User className="w-4 h-4 text-purple-300 shrink-0" />
+                <span className="font-bold text-white text-base">{candidateName}</span>
+              </div>
+              {!hideSensitiveData && (
+                <>
+                  <div className="flex items-center gap-2.5 text-xs text-purple-200">
+                    <Phone className="w-3.5 h-3.5 text-purple-300 shrink-0" />
+                    <span>{candidate.phone || '+51 984 123 456'}</span>
                   </div>
-                </div>
-
-                {/* Gauge Circular Dinámico */}
-                <div className="flex justify-center pt-2">
-                  <div className="relative w-36 h-36 flex items-center justify-center">
-                    <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                      <circle
-                        cx="50"
-                        cy="50"
-                        r="42"
-                        stroke="#E2E8F0"
-                        strokeWidth="10"
-                        fill="transparent"
-                      />
-                      <circle
-                        cx="50"
-                        cy="50"
-                        r="42"
-                        stroke={adecuacionColor}
-                        strokeWidth="10"
-                        strokeDasharray={264}
-                        strokeDashoffset={strokeDashoffset}
-                        strokeLinecap="round"
-                        fill="transparent"
-                      />
-                    </svg>
-                    <span className="absolute text-2xl font-black text-zinc-900">{overallScore}%</span>
+                  <div className="flex items-center gap-2.5 text-xs text-purple-200">
+                    <Mail className="w-3.5 h-3.5 text-purple-300 shrink-0" />
+                    <span className="truncate">{candidate.email}</span>
                   </div>
-                </div>
+                </>
+              )}
+            </div>
 
-                {/* Ajuste General de Competencias Descripción */}
-                <div className="space-y-2 text-center max-w-sm mx-auto">
-                  <h3 className="text-sm font-bold text-zinc-800">
-                    Ajuste General de Competencias
-                  </h3>
-                  <p className="text-xs text-zinc-600 leading-relaxed text-justify">
-                    {interpretacionDesc}
-                  </p>
-                </div>
+            {/* Tarjeta GEA Internacional */}
+            <div className="bg-white p-3.5 rounded-2xl shadow-xl flex items-center justify-center">
+              <img 
+                src="/gea-internacional.png" 
+                alt="GEA Internacional" 
+                className="h-11 object-contain" 
+              />
+            </div>
+          </div>
 
-                {/* Barra Competencias Dinámica */}
-                <div className="space-y-2 pt-4">
+        </div>
+
+        {/* ------------------------------------------------------------------------- */}
+        {/* PÁGINA 2: RESULTADOS GENERALES (HOJA COMPLETA)                            */}
+        {/* ------------------------------------------------------------------------- */}
+        <div className="evaluar-page-sheet bg-white w-[210mm] h-[296mm] p-12 flex flex-col justify-between shadow-2xl print:shadow-none mx-auto">
+          
+          <div className="space-y-7 pt-2">
+            
+            {/* Título de Sección */}
+            <div className="text-center space-y-2.5">
+              <h2 className="text-xl font-black text-[#6355DE] tracking-wide uppercase">
+                Resultados Generales
+              </h2>
+              <div className={`inline-block px-5 py-1.5 rounded-full text-xs font-bold border ${adecuacionBadgeClass}`}>
+                Interpretación: {adecuacionText}
+              </div>
+            </div>
+
+            {/* Gauge Circular Dinámico */}
+            <div className="flex justify-center pt-2">
+              <div className="relative w-40 h-40 flex items-center justify-center">
+                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="42"
+                    stroke="#E2E8F0"
+                    strokeWidth="10"
+                    fill="transparent"
+                  />
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="42"
+                    stroke={adecuacionColor}
+                    strokeWidth="10"
+                    strokeDasharray={264}
+                    strokeDashoffset={strokeDashoffset}
+                    strokeLinecap="round"
+                    fill="transparent"
+                  />
+                </svg>
+                <span className="absolute text-3xl font-black text-zinc-900">{overallScore}%</span>
+              </div>
+            </div>
+
+            {/* Ajuste General de Competencias Descripción */}
+            <div className="space-y-2 text-center max-w-md mx-auto">
+              <h3 className="text-sm font-bold text-zinc-800">
+                Ajuste General de Competencias
+              </h3>
+              <p className="text-xs text-zinc-600 leading-relaxed text-justify">
+                {interpretacionDesc}
+              </p>
+            </div>
+
+            {/* Barras de Componentes */}
+            <div className="space-y-4 max-w-lg mx-auto w-full pt-2">
+              {/* Barra Competencias */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs font-bold text-zinc-700">
+                  <div className="flex items-center gap-1.5 text-zinc-600">
+                    <GraduationCap className="w-4 h-4 text-emerald-600" />
+                    <span className="uppercase text-[11px] tracking-wider">Competencias Laborales</span>
+                  </div>
+                  <span className="font-extrabold" style={{ color: adecuacionColor }}>
+                    {hasCompetencies ? `${avgCompetencyPercent}%` : `${overallScore}%`}
+                  </span>
+                </div>
+                <div className="w-full bg-zinc-100 h-3 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full rounded-full transition-all" 
+                    style={{ 
+                      width: `${Math.min(100, Math.max(0, hasCompetencies ? avgCompetencyPercent : overallScore))}%`, 
+                      backgroundColor: adecuacionColor 
+                    }} 
+                  />
+                </div>
+              </div>
+
+              {/* Barra Pruebas de Conocimiento */}
+              {hasKnowledge && (
+                <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs font-bold text-zinc-700">
-                    <div className="flex items-center gap-1.5 text-zinc-500">
-                      <GraduationCap className="w-4 h-4 text-zinc-400" />
-                      <span className="uppercase text-[11px] tracking-wider">Competencias</span>
+                    <div className="flex items-center gap-1.5 text-purple-700">
+                      <BookOpen className="w-4 h-4 text-purple-600" />
+                      <span className="uppercase text-[11px] tracking-wider">Pruebas de Conocimiento</span>
                     </div>
-                    <span className="font-extrabold" style={{ color: adecuacionColor }}>{overallScore}%</span>
+                    <span className="font-extrabold text-purple-600">
+                      {avgKnowledgeScore20}/20 pts ({avgKnowledgePercent}%)
+                    </span>
                   </div>
-                  <div className="w-full bg-zinc-100 h-3 rounded-full overflow-hidden">
+                  <div className="w-full bg-purple-50 h-3 rounded-full overflow-hidden">
                     <div 
-                      className="h-full rounded-full transition-all" 
-                      style={{ 
-                        width: `${Math.min(100, Math.max(0, overallScore))}%`, 
-                        backgroundColor: adecuacionColor 
-                      }} 
+                      className="h-full rounded-full bg-purple-600 transition-all" 
+                      style={{ width: `${avgKnowledgePercent}%` }} 
                     />
                   </div>
                 </div>
-
-                {/* Barra Prueba de Conocimientos si existe */}
-                {hasKnowledge && (
-                  <div className="space-y-2 pt-2">
-                    <div className="flex items-center justify-between text-xs font-bold text-zinc-700">
-                      <div className="flex items-center gap-1.5 text-purple-700">
-                        <BookOpen className="w-4 h-4 text-purple-500" />
-                        <span className="uppercase text-[11px] tracking-wider">Pruebas de Conocimiento</span>
-                      </div>
-                      <span className="font-extrabold text-purple-600">{avgKnowledgeScore20}/20 pts ({avgKnowledgePercent}%)</span>
-                    </div>
-                    <div className="w-full bg-purple-50 h-3 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full rounded-full bg-purple-600 transition-all" 
-                        style={{ width: `${avgKnowledgePercent}%` }} 
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Perfil Conductual DISC si existe */}
-                {discResult && (
-                  <div className="p-3.5 rounded-2xl bg-lime-50 border border-lime-200 space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-lime-800 uppercase tracking-wider block">Perfil Conductual DISC</span>
-                      <span className="text-[10px] font-bold text-lime-700 bg-lime-100 px-2 py-0.5 rounded-md">Evaluado</span>
-                    </div>
-                    <div className="text-sm font-black text-lime-900">{discResult.perfil_dominante}</div>
-                    <div className="flex items-center gap-2 pt-1 text-[11px] font-bold text-lime-800">
-                      <span className="px-2 py-0.5 rounded-md bg-white border border-lime-200">D: {discResult.conteo_d ?? 0}</span>
-                      <span className="px-2 py-0.5 rounded-md bg-white border border-lime-200">I: {discResult.conteo_i ?? 0}</span>
-                      <span className="px-2 py-0.5 rounded-md bg-white border border-lime-200">S: {discResult.conteo_s ?? 0}</span>
-                      <span className="px-2 py-0.5 rounded-md bg-white border border-lime-200">C: {discResult.conteo_c ?? 0}</span>
-                    </div>
-                  </div>
-                )}
-
-              </div>
-
-              {/* Footer Página 1 */}
-              <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={1} />
-
+              )}
             </div>
 
+            {/* Perfil Conductual DISC si existe */}
+            {discResult && (
+              <div className="max-w-lg mx-auto w-full p-4 rounded-2xl bg-lime-50 border border-lime-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-lime-800 uppercase tracking-wider block">Perfil Conductual DISC</span>
+                  <span className="text-[10px] font-bold text-lime-700 bg-lime-100 px-2 py-0.5 rounded-md">Evaluado</span>
+                </div>
+                <div className="text-base font-black text-lime-900">{discResult.perfil_dominante}</div>
+                <div className="flex items-center gap-2 pt-1 text-xs font-bold text-lime-800">
+                  <span className="px-2.5 py-1 rounded-lg bg-white border border-lime-200 shadow-2xs">D: {discResult.conteo_d ?? 0}</span>
+                  <span className="px-2.5 py-1 rounded-lg bg-white border border-lime-200 shadow-2xs">I: {discResult.conteo_i ?? 0}</span>
+                  <span className="px-2.5 py-1 rounded-lg bg-white border border-lime-200 shadow-2xs">S: {discResult.conteo_s ?? 0}</span>
+                  <span className="px-2.5 py-1 rounded-lg bg-white border border-lime-200 shadow-2xs">C: {discResult.conteo_c ?? 0}</span>
+                </div>
+              </div>
+            )}
+
           </div>
+
+          {/* Footer Página 2 */}
+          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={2} totalPages={16} />
 
         </div>
 
 
         {/* ------------------------------------------------------------------------- */}
-        {/* PÁGINA 2: DISTRIBUCIÓN DE RESULTADOS                                      */}
+        {/* PÁGINA 3: DISTRIBUCIÓN DE RESULTADOS                                      */}
         {/* ------------------------------------------------------------------------- */}
         <div className="evaluar-page-sheet bg-white w-[210mm] h-[296mm] p-12 flex flex-col justify-between shadow-2xl print:shadow-none mx-auto">
           
@@ -566,8 +655,8 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
                 <tbody className="divide-y divide-zinc-200 font-medium">
                   <tr>
                     <td className="p-3 text-zinc-800 font-bold">Competencias Laborales</td>
-                    <td className="p-3 text-center text-zinc-600">{overallScore}/100</td>
-                    <td className="p-3 text-right text-zinc-900 font-bold">{overallScore}/100</td>
+                    <td className="p-3 text-center text-zinc-600">{hasCompetencies ? avgCompetencyPercent : overallScore}/100</td>
+                    <td className="p-3 text-right text-zinc-900 font-bold">{hasCompetencies ? avgCompetencyPercent : overallScore}/100</td>
                   </tr>
                   {hasKnowledge && knowledgeResults.map((k, ki) => {
                     const sc = Number(k.puntaje ?? 0);
@@ -601,13 +690,13 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
 
           </div>
 
-          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={2} />
+          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={3} />
 
         </div>
 
 
         {/* ------------------------------------------------------------------------- */}
-        {/* PÁGINA 3: COMPETENCIAS - INTRODUCCIÓN Y NIVELES                           */}
+        {/* PÁGINA 4: COMPETENCIAS - INTRODUCCIÓN Y NIVELES                           */}
         {/* ------------------------------------------------------------------------- */}
         <div className="evaluar-page-sheet bg-white w-[210mm] h-[296mm] p-12 flex flex-col justify-between shadow-2xl print:shadow-none mx-auto">
           
@@ -683,13 +772,13 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
 
           </div>
 
-          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={3} />
+          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={4} />
 
         </div>
 
 
         {/* ------------------------------------------------------------------------- */}
-        {/* PÁGINA 4: RESULTADO DE COMPETENCIAS (TABLA Y BARRAS)                      */}
+        {/* PÁGINA 5: RESULTADO DE COMPETENCIAS (TABLA Y BARRAS)                      */}
         {/* ------------------------------------------------------------------------- */}
         <div className="evaluar-page-sheet bg-white w-[210mm] h-[296mm] p-12 flex flex-col justify-between shadow-2xl print:shadow-none mx-auto">
           
@@ -817,13 +906,13 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
 
           </div>
 
-          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={4} />
+          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={5} />
 
         </div>
 
 
         {/* ------------------------------------------------------------------------- */}
-        {/* PÁGINA 5: VALOR OBTENIDO VS ESPERADO (RADAR / TELARAÑA SVG)               */}
+        {/* PÁGINA 6: VALOR OBTENIDO VS ESPERADO (RADAR / TELARAÑA SVG)               */}
         {/* ------------------------------------------------------------------------- */}
         <div className="evaluar-page-sheet bg-white w-[210mm] h-[296mm] p-12 flex flex-col justify-between shadow-2xl print:shadow-none mx-auto">
           
@@ -937,13 +1026,13 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
 
           </div>
 
-          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={5} />
+          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={6} />
 
         </div>
 
 
         {/* ------------------------------------------------------------------------- */}
-        {/* PÁGINAS 6 A 10: DETALLE INDIVIDUAL DE COMPETENCIAS                        */}
+        {/* PÁGINAS 7 A 11: DETALLE INDIVIDUAL DE COMPETENCIAS                        */}
         {/* ------------------------------------------------------------------------- */}
         {[
           {
@@ -1091,17 +1180,17 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
 
             </div>
 
-            <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={6 + idx} />
+            <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={7 + idx} />
 
           </div>
         ))}
 
 
         {/* ------------------------------------------------------------------------- */}
-        {/* PÁGINAS 11 A 14: RESULTADOS POR PRUEBAS                                   */}
+        {/* PÁGINAS 12 A 15: RESULTADOS POR PRUEBAS                                   */}
         {/* ------------------------------------------------------------------------- */}
         
-        {/* Página 11: Sales Profile */}
+        {/* Página 12: Sales Profile */}
         {(() => {
           const pvScore = getSubScore(0.85, 's3');
           const pvLevel = getSubLevelInfo(pvScore);
@@ -1177,12 +1266,12 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
                 </div>
               </div>
 
-              <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={11} />
+              <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={12} />
             </div>
           );
         })()}
 
-        {/* Página 12: SER15 & EQ-M Parte 1 */}
+        {/* Página 13: SER15 & EQ-M Parte 1 */}
         {(() => {
           const eeScore = getSubScore(1.0, 's2');
           const eeLevel = getSubLevelInfo(eeScore);
@@ -1287,12 +1376,12 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
 
               </div>
 
-              <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={12} />
+              <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={13} />
             </div>
           );
         })()}
 
-        {/* Página 13: SER15 Parte 2 */}
+        {/* Página 14: SER15 Parte 2 */}
         {(() => {
           const empScore = getSubScore(0.95, 's2');
           const empLevel = getSubLevelInfo(empScore);
@@ -1375,12 +1464,12 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
                 </div>
               </div>
 
-              <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={13} />
+              <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={14} />
             </div>
           );
         })()}
 
-        {/* Página 14: Conductas Laborales & Intellectus */}
+        {/* Página 15: Conductas Laborales & Intellectus */}
         {(() => {
           const compScore = getSubScore(0.9, 's2');
           const compLevel = getSubLevelInfo(compScore);
@@ -1460,12 +1549,12 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
                 </div>
               </div>
 
-              <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={14} />
+              <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={15} />
             </div>
           );
         })()}
 
-        {/* Página 15: Preguntas sugeridas para la entrevista */}
+        {/* Página 16: Preguntas sugeridas para la entrevista */}
         <div className="evaluar-page-sheet evaluar-page-last bg-white w-[210mm] h-[296.8mm] p-12 flex flex-col justify-between shadow-2xl print:shadow-none mx-auto">
           <div className="space-y-5">
             <div className="w-full py-2.5 rounded-xl bg-[#6355DE] text-white font-bold text-center text-xs tracking-wider">
@@ -1522,7 +1611,7 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
             </div>
           </div>
 
-          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={15} />
+          <EvaluarGeaReportFooter candidateName={candidateName} pageNumber={16} />
         </div>
 
       </div>

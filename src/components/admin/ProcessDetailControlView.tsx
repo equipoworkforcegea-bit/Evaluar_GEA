@@ -301,19 +301,13 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
     return processCandidates.filter(c => preselectedCandidateIds.has(c.id));
   }, [processCandidates, preselectedCandidateIds]);
 
-  // Si no hay candidatos en progreso pero sí hay finalizados, cambiar automáticamente a la pestaña FINALIZADOS
+  // Auto-switch solo en montaje inicial: si no hay candidatos en progreso pero sí hay finalizados, mostrar FINALIZADOS
   useEffect(() => {
     if (statusFilter === 'EN_PROGRESO' && inProgressList.length === 0 && finalizedList.length > 0) {
       setStatusFilter('FINALIZADOS');
     }
-  }, [inProgressList.length, finalizedList.length, statusFilter]);
-
-  // Si no hay finalizados pero sí hay candidatos en progreso, cambiar automáticamente a EN_PROGRESO
-  useEffect(() => {
-    if (statusFilter === 'FINALIZADOS' && finalizedList.length === 0 && inProgressList.length > 0) {
-      setStatusFilter('EN_PROGRESO');
-    }
-  }, [finalizedList.length, inProgressList.length, statusFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Solo en montaje, no reaccionar a cambios posteriores para no bloquear selección manual
 
   // Lista filtrada según pestaña y buscador
   const displayedCandidates = useMemo(() => {
