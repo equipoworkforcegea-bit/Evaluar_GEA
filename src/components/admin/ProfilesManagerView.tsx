@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { EvaluationTest, Candidate } from '../../types';
+import { AuthStorage } from '../../services/authStorage';
 import { 
   User, 
   Plus, 
@@ -139,7 +140,10 @@ export const ProfilesManagerView: React.FC<ProfilesManagerViewProps> = ({
       candidateCount: 0,
       completedCount: 0,
       averageScore: 0,
-      launchedBy: 'CopilotAI • Tania León',
+      launchedBy: (() => {
+        const s = AuthStorage.getSession();
+        return s?.fullName ? `${s.fullName} (Líder)` : 'Luis Zapata (Líder)';
+      })(),
       startDate: new Date().toLocaleDateString('es-PE'),
       endDate: '31/12/2026',
       processStatus: 'LANZADO',
@@ -203,7 +207,7 @@ export const ProfilesManagerView: React.FC<ProfilesManagerViewProps> = ({
       'Cantidad de Etapas': t.stages.length,
       'Competencias': t.selectedCompetencies?.join(', ') || 'N/A',
       'Estado para Postulantes': t.isActive ? 'ACTIVO' : 'PAUSADO',
-      'Lanzado Por': t.launchedBy || 'Tania León',
+      'Lanzado Por': t.launchedBy && !t.launchedBy.includes('Tania León') ? t.launchedBy : (AuthStorage.getSession()?.fullName ? `${AuthStorage.getSession()!.fullName} (Líder)` : 'Luis Zapata (Líder)'),
       'Vigencia': `${t.startDate || '28/09/2026'} al ${t.endDate || '01/03/2027'}`
     }));
 

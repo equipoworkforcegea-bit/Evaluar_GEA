@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { EvaluationTest, Candidate } from '../../types';
 import { CandidateDataService } from '../../services/candidateDataService';
+import { AuthStorage } from '../../services/authStorage';
 import { TestManagerView } from './TestManagerView';
 import { ProcessCandidateActivityModal } from './ProcessCandidateActivityModal';
 import { CandidateDetailModal } from './CandidateDetailModal';
@@ -717,7 +718,7 @@ export const EvaluarProcessListView: React.FC<EvaluarProcessListViewProps> = ({
                   <div className="text-xs text-zinc-500 dark:text-zinc-400 space-y-1">
                     <div className="flex items-center gap-1.5">
                       <User className="w-3.5 h-3.5 text-zinc-400" />
-                      <span>Lanzado por: <strong className="text-zinc-700 dark:text-zinc-200 font-semibold">{test.launchedBy || 'Tania León'}</strong></span>
+                      <span>Lanzado por: <strong className="text-zinc-700 dark:text-zinc-200 font-semibold">{test.launchedBy && !test.launchedBy.includes('Tania León') ? test.launchedBy : (AuthStorage.getSession()?.fullName ? `${AuthStorage.getSession()!.fullName} (Selección)` : 'Luis Zapata (Selección)')}</strong></span>
                     </div>
 
                     <div className="flex items-center gap-1.5">

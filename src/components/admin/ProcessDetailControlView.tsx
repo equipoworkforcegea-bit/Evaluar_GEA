@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { EvaluationTest, Candidate } from '../../types';
+import { EvaluationTest, Candidate, AuthSession } from '../../types';
 import { CandidateDataService } from '../../services/candidateDataService';
+import { AuthStorage } from '../../services/authStorage';
 import { 
   ArrowLeft, 
   Plus, 
@@ -30,7 +31,8 @@ import {
   Send,
   Eye,
   Trash2,
-  UserPlus
+  UserPlus,
+  AlertTriangle
 } from 'lucide-react';
 
 export type ControlTab = 
@@ -51,6 +53,7 @@ interface ProcessDetailControlViewProps {
   onSwitchToCandidateExam?: (candidateId: string) => void;
   onUpdateCandidate?: (candidate: Candidate) => void;
   initialTab?: ControlTab;
+  session?: AuthSession;
 }
 
 type StatusPillFilter = 'FINALIZADOS' | 'EN_PROGRESO' | 'DESCALIFICADOS' | 'SIN_INICIAR' | 'TODOS';
@@ -75,7 +78,8 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
   onOpenInviteModal,
   onSwitchToCandidateExam,
   onUpdateCandidate,
-  initialTab
+  initialTab,
+  session
 }) => {
   const [activeTab, setActiveTab] = useState<ControlTab>(initialTab || 'CANDIDATOS');
 
@@ -92,6 +96,103 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [activeMenuCandidateId, setActiveMenuCandidateId] = useState<string | null>(null);
   const [liveCandidates, setLiveCandidates] = useState<Candidate[]>(candidates);
+
+  // Modal para confirmación de reinicio de examen
+  const [candidateToReset, setCandidateToReset] = useState<Candidate | null>(null);
+  const [isResettingExam, setIsResettingExam] = useState<boolean>(false);
+
+  // Cerrar menú contextual al hacer clic fuera de él en la pantalla
+  useEffect(() => {
+    const handleWindowClick = () => {
+      setActiveMenuCandidateId(null);
+    };
+    if (activeMenuCandidateId) {
+      window.addEventListener('click', handleWindowClick);
+    }
+    return () => {
+      window.removeEventListener('click', handleWindowClick);
+    };
+  }, [activeMenuCandidateId]);
+
+  // Regularizar nombre del creador / usuario que lanzó el proceso
+  const resolvedLaunchedBy = useMemo(() => {
+    if (process.launchedBy && !process.launchedBy.includes('Tania León')) {
+      return process.launchedBy;
+    }
+    const s = session || (typeof window !== 'undefined' ? AuthStorage.getSession() : null);
+    if (s?.fullName) {
+      const roleStr = s.role === 'SUPER_ADMIN' ? 'Super Administrador' : s.role === 'ADMIN' ? 'Administrador' : 'Selección';
+      return `${s.fullName} (${s.position || roleStr})`;
+    }
+    return 'Luis Zapata (Selección)';
+  }, [process.launchedBy, session]);
+
+  // Manejador de confirmación para reiniciar examen del candidato
+  const handleConfirmResetExam = async () => {
+    if (!candidateToReset) return;
+    setIsResettingExam(true);
+    try {
+      const candId = candidateToReset.id;
+
+      // 1. Obtener y registrar nuevo contador de reinicios
+      const storedRetries = (() => {
+        try {
+          const raw = localStorage.getItem('evaluar_candidate_retries');
+          return raw ? JSON.parse(raw) : {};
+        } catch { return {}; }
+      })();
+      const currentRetries = Number(storedRetries[candId] || candidateToReset.retryCount || 0);
+      const nextRetries = currentRetries + 1;
+      storedRetries[candId] = nextRetries;
+      try {
+        localStorage.setItem('evaluar_candidate_retries', JSON.stringify(storedRetries));
+      } catch {}
+
+      // 2. Limpiar caché local de respuestas del candidato
+      if (typeof window !== 'undefined') {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.includes(candId) || (candidateToReset.dni && key.includes(candidateToReset.dni)))) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(k => localStorage.removeItem(k));
+      }
+
+      // 3. Ejecutar reseteo en Supabase (limpia notas, conocimientos, intentos y respuestas)
+      await CandidateDataService.resetCandidateForResend(candId);
+
+      // 4. Actualizar candidato local
+      const updatedCand: Candidate = {
+        ...candidateToReset,
+        status: 'INVITADO',
+        startedAt: undefined,
+        completedAt: undefined,
+        currentStage: 'STAGE_1_PSYCHO',
+        totalDurationSeconds: 0,
+        scores: {
+          overall: 0,
+          stage1Psycho: 0,
+          stage2Emotional: 0,
+          stage3WorkCases: 0,
+          percentile: 0
+        },
+        retryCount: nextRetries
+      };
+
+      setLiveCandidates(prev => prev.map(c => c.id === candId ? updatedCand : c));
+      onUpdateCandidate?.(updatedCand);
+
+      showToast(`✓ Examen reiniciado para ${candidateToReset.fullName}. Rinde su ${nextRetries + 1}° intento.`);
+      setCandidateToReset(null);
+    } catch (err: any) {
+      console.warn('Error al reiniciar examen:', err);
+      showToast('⚠️ No se pudo reiniciar el examen. Intente nuevamente.');
+    } finally {
+      setIsResettingExam(false);
+    }
+  };
 
   // Estados específicos de funcionalidad
   const [preselectedCandidateIds, setPreselectedCandidateIds] = useState<Set<string>>(new Set());
@@ -468,7 +569,7 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
                   <Users className="w-3.5 h-3.5" />
                   <span>Lanzado Por:</span>
                   <strong className="text-[#161C3A] dark:text-white font-semibold">
-                    {process.launchedBy || 'Tania León'}
+                    {resolvedLaunchedBy}
                   </strong>
                 </span>
 
@@ -728,6 +829,15 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
                         : 'bg-[#5844D8]';
 
                     const isLastCandidate = index >= displayedCandidates.length - 2 || displayedCandidates.length <= 2;
+                    const retryCount = c.retryCount || (() => {
+                      try {
+                        if (typeof window !== 'undefined') {
+                          const raw = localStorage.getItem('evaluar_candidate_retries');
+                          if (raw) return Number(JSON.parse(raw)[c.id] || 0);
+                        }
+                      } catch {}
+                      return 0;
+                    })();
 
                     return (
                       <div
@@ -760,7 +870,7 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
 
                           {/* Candidate Names & Meta */}
                           <div className="space-y-1 min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-xs text-[#6B7494] shrink-0 font-medium">
                                 {index + 1} |
                               </span>
@@ -774,6 +884,17 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
                               >
                                 {c.fullName}
                               </h4>
+
+                              {/* Marca de reintento / reinicio de examen */}
+                              {retryCount > 0 && (
+                                <span
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 shadow-2xs shrink-0"
+                                  title={retryCount === 1 ? 'El postulante está rindiendo el examen por segunda vez (1 reinicio)' : `Examen reiniciado ${retryCount} veces (${retryCount + 1}° intento)`}
+                                >
+                                  <RotateCw className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-600 dark:text-amber-400" />
+                                  <span>{retryCount === 1 ? '2° intento' : `${retryCount + 1}° intento (${retryCount} reinicios)`}</span>
+                                </span>
+                              )}
                             </div>
 
                             {/* Email & Contact Icons */}
@@ -907,18 +1028,18 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
                                 >
                                   Mover a No deseados
                                 </button>
-                                {onSwitchToCandidateExam && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      onSwitchToCandidateExam(c.id);
-                                      setActiveMenuCandidateId(null);
-                                    }}
-                                    className="w-full text-left px-3.5 py-2 hover:bg-[#5844D8]/10 text-[#5844D8]"
-                                  >
-                                    Simular examen
-                                  </button>
-                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveMenuCandidateId(null);
+                                    setCandidateToReset(c);
+                                  }}
+                                  className="w-full text-left px-3.5 py-2 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-2 cursor-pointer transition-colors"
+                                  title="Permite que el postulante rinda nuevamente las evaluaciones desde cero"
+                                >
+                                  <RotateCw className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                                  <span>Reiniciar examen</span>
+                                </button>
                               </div>
                             )}
                           </div>
@@ -1716,7 +1837,7 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
               { text: 'Jean Carlos Baldeon culminó la evaluación con 87% de adecuación', time: 'Hace 1 hora', type: 'success' },
               { text: 'Angelo Sipion culminó la evaluación con 87% de adecuación', time: 'Hace 2 horas', type: 'success' },
               { text: 'Invitaciones despachadas vía WhatsApp y correo a 22 postulantes', time: '28/09/2026 16:47 PM', type: 'mail' },
-              { text: 'Proceso lanzado exitosamente por Tania León', time: '28/09/2026 16:47 PM', type: 'launch' }
+              { text: `Proceso lanzado exitosamente por ${resolvedLaunchedBy}`, time: '28/09/2026 16:47 PM', type: 'launch' }
             ].map((item, idx) => (
               <div key={idx} className="py-3 flex items-start gap-3">
                 <div className="w-2 h-2 rounded-full bg-[#5844D8] mt-1.5 shrink-0" />
@@ -1726,6 +1847,99 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmación: Reiniciar Examen */}
+      {candidateToReset && (
+        <div 
+          onClick={() => setCandidateToReset(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
+        >
+          <div 
+            onClick={e => e.stopPropagation()}
+            className="w-full max-w-md bg-white dark:bg-[#182044] rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] shadow-2xl p-6 space-y-5 animate-in zoom-in-95"
+          >
+            {/* Header Icon + Title */}
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-200 dark:border-amber-800/50 shadow-xs">
+                <RotateCw className="w-6 h-6 stroke-[2.5]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg font-black text-[#161C3A] dark:text-white">
+                  Reiniciar Examen del Postulante
+                </h3>
+                <p className="text-xs text-[#6B7494] dark:text-[#9AA5C4] mt-0.5 truncate">
+                  Proceso: <strong className="text-[#161C3A] dark:text-white">{process.title}</strong>
+                </p>
+              </div>
+            </div>
+
+            {/* Candidate Box */}
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#151D3F] border border-slate-200 dark:border-slate-800 space-y-2 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-[#6B7494] dark:text-[#9AA5C4]">Postulante:</span>
+                <strong className="text-[#161C3A] dark:text-white font-semibold truncate max-w-[220px]">{candidateToReset.fullName}</strong>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[#6B7494] dark:text-[#9AA5C4]">Correo / DNI:</span>
+                <span className="text-slate-700 dark:text-slate-300 font-mono truncate max-w-[200px]">{candidateToReset.email || candidateToReset.dni}</span>
+              </div>
+              <div className="flex justify-between items-center pt-2 border-t border-slate-200/60 dark:border-slate-800/60">
+                <span className="text-[#6B7494] dark:text-[#9AA5C4]">Nuevo intento asignado:</span>
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 flex items-center gap-1">
+                  <RotateCw className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                  <span>
+                    {(candidateToReset.retryCount || 0) === 0 ? '2° intento (1er reinicio)' : `${(candidateToReset.retryCount || 0) + 2}° intento (${(candidateToReset.retryCount || 0) + 1} reinicios)`}
+                  </span>
+                </span>
+              </div>
+            </div>
+
+            {/* Explanation Warning */}
+            <div className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed space-y-1.5 bg-amber-50/60 dark:bg-amber-950/20 p-3.5 rounded-xl border border-amber-200/80 dark:border-amber-900/40">
+              <p className="font-semibold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>¿Qué ocurrirá con el candidato?</span>
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-amber-800/90 dark:text-amber-300/90 pl-1 text-[11.5px]">
+                <li>Se restablecerán a cero sus respuestas y puntajes anteriores.</li>
+                <li>El estado del postulante volverá a <strong>Invitado / Pendiente</strong>.</li>
+                <li>Podrá rendir nuevamente todas las pruebas del proceso asignado.</li>
+                <li>Se mostrará visible la insignia del número de intentos en el listado.</li>
+              </ul>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex items-center justify-end gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setCandidateToReset(null)}
+                disabled={isResettingExam}
+                className="px-4 py-2.5 rounded-xl border border-[#DDE2EF] dark:border-[#2A3563] text-[#6B7494] dark:text-[#9AA5C4] hover:bg-[#F8FAFC] dark:hover:bg-white/5 text-xs font-semibold cursor-pointer transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmResetExam}
+                disabled={isResettingExam}
+                className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex items-center gap-2 cursor-pointer shadow-md transition-all disabled:opacity-50"
+              >
+                {isResettingExam ? (
+                  <>
+                    <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Reiniciando...</span>
+                  </>
+                ) : (
+                  <>
+                    <RotateCw className="w-3.5 h-3.5" />
+                    <span>Sí, reiniciar examen</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

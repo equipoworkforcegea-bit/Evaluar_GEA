@@ -362,7 +362,19 @@ function mapSupabaseToCandidate(row: any): Candidate {
     criticalFlags: row.critical_flags || 0,
     recruiterNotes: row.recruiter_notes,
     isConsentSigned: Boolean(row.consentimiento_firmado || row.is_consent_signed),
-    consentSignedAt: row.consentimiento_firmado_en || row.consent_signed_at
+    consentSignedAt: row.consentimiento_firmado_en || row.consent_signed_at,
+    retryCount: (() => {
+      if (typeof window !== 'undefined' && row.id) {
+        try {
+          const raw = localStorage.getItem('evaluar_candidate_retries');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            return Number(parsed[row.id] || 0);
+          }
+        } catch {}
+      }
+      return 0;
+    })()
   };
 }
 
@@ -923,11 +935,32 @@ export const CandidateDataService = {
         .delete()
         .eq('candidato_id', candidateId);
 
-      // 4. Registrar evento de auditoría del reenvío
+      // 3.1 Eliminar evaluaciones de conocimientos previas para que rinda limpio
+      try {
+        await supabase
+          .from('evaluaciones_conocimientos')
+          .delete()
+          .eq('candidato_id', candidateId);
+      } catch {}
+
+      // 3.2 Eliminar intentos y respuestas previas para permitir reinicio completo
+      try {
+        const { data: intentos } = await supabase
+          .from('intentos_examen')
+          .select('id')
+          .eq('candidato_id', candidateId);
+        if (intentos && intentos.length > 0) {
+          const intentoIds = intentos.map((i: any) => i.id);
+          await supabase.from('respuestas_candidato').delete().in('intento_id', intentoIds);
+          await supabase.from('intentos_examen').delete().eq('candidato_id', candidateId);
+        }
+      } catch {}
+
+      // 4. Registrar evento de auditoría del reenvío y reinicio de examen
       await this.logAuditEvent(
         candidateId,
         'SESSION_START' as AuditEventType,
-        'Administrador reenvió la invitación y reseteó el progreso del candidato.',
+        'Administrador reinició el examen para permitir nuevo intento al candidato.',
         'INFO'
       );
 

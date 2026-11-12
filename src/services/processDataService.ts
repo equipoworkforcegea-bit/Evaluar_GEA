@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient';
 import { EvaluationTest, TestStageConfig } from '../types';
 import { INITIAL_EVALUATION_TESTS } from '../data/testTemplates';
+import { AuthStorage } from './authStorage';
 
 // Helper para validar o generar UUID v4 de forma segura (sin fallar en contextos HTTP sin crypto.randomUUID)
 export function generateSafeUuid(): string {
@@ -21,6 +22,39 @@ function ensureUuid(id?: string): string {
     return id;
   }
   return generateSafeUuid();
+}
+
+/**
+ * Resuelve el nombre del creador o reclutador que lanzó el perfil o proceso
+ */
+function resolveLaunchedByName(row: any, meta?: any): string {
+  // 1. Si existe registrado en localStorage
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem('evaluar_process_creators');
+      if (raw) {
+        const map = JSON.parse(raw);
+        if (row?.id && map[row.id]) return map[row.id];
+        if (row?.codigo && map[row.codigo]) return map[row.codigo];
+      }
+    } catch {}
+  }
+
+  // 2. Si existe en la fila o metadata
+  if (row?.lanzado_por_nombre) return row.lanzado_por_nombre;
+  if (meta?.launchedBy && !meta.launchedBy.includes('Tania León')) return meta.launchedBy;
+  if (meta?.createdBy && !meta.createdBy.includes('Tania León')) return meta.createdBy;
+
+  // 3. Fallback al usuario conectado actual
+  try {
+    const s = AuthStorage.getSession();
+    if (s?.fullName) {
+      const roleLabel = s.role === 'SUPER_ADMIN' ? 'Super Administrador' : s.role === 'ADMIN' ? 'Administrador' : 'Selección';
+      return `${s.fullName} (${s.position || roleLabel})`;
+    }
+  } catch {}
+
+  return 'Luis Zapata (Selección)';
 }
 
 // Mapeo de fila Supabase `procesos_evaluacion` a `EvaluationTest`
@@ -95,7 +129,7 @@ function mapRowToProcess(row: any): EvaluationTest {
     isActive: row.activo !== false,
     startDate: row.fecha_inicio ? new Date(row.fecha_inicio).toLocaleDateString('es-PE') : 'Hoy',
     endDate: row.fecha_fin ? new Date(row.fecha_fin).toLocaleDateString('es-PE') : '31/12/2026',
-    launchedBy: 'Tania León (Selección)',
+    launchedBy: resolveLaunchedByName(row, meta),
     createdAt: row.creado_en || new Date().toISOString(),
     updatedAt: row.actualizado_en || new Date().toISOString(),
     candidateCount: 0,
@@ -157,7 +191,7 @@ function mapRowToProfile(row: any): EvaluationTest {
     isActive: row.activo !== false,
     startDate: new Date(row.creado_en || Date.now()).toLocaleDateString('es-PE'),
     endDate: '31/12/2026',
-    launchedBy: 'Tania León (Líder)',
+    launchedBy: resolveLaunchedByName(row, metadata),
     createdAt: row.creado_en || new Date().toISOString(),
     updatedAt: row.actualizado_en || new Date().toISOString(),
     candidateCount: 0,
@@ -583,6 +617,14 @@ export const ProcessDataService = {
           const localList: EvaluationTest[] = raw ? JSON.parse(raw) : [];
           const updated = [{ ...process, id: uuid }, ...localList.filter(p => p.id !== uuid)];
           localStorage.setItem('evaluar_custom_processes', JSON.stringify(updated));
+
+          if (process.launchedBy) {
+            const rawCreators = localStorage.getItem('evaluar_process_creators') || '{}';
+            const creatorsMap = JSON.parse(rawCreators);
+            creatorsMap[uuid] = process.launchedBy;
+            if (payload.codigo) creatorsMap[payload.codigo] = process.launchedBy;
+            localStorage.setItem('evaluar_process_creators', JSON.stringify(creatorsMap));
+          }
         }
       } catch {}
 

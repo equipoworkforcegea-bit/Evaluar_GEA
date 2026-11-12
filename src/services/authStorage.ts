@@ -41,7 +41,7 @@ export const AuthStorage = {
       }
 
       // Validar que el rol sea uno de los permitidos explícitamente
-      const allowedRoles = ['SUPER_ADMIN', 'ADMIN', 'CANDIDATE'];
+      const allowedRoles = ['SUPER_ADMIN', 'ADMIN', 'RECRUITER', 'PSYCHOLOGIST', 'CANDIDATE'];
       if (!allowedRoles.includes(parsed.role)) {
         this.clearSession();
         return null;

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { EvaluacionesService } from '../../services/evaluacionesService';
 import { Candidate, EvaluationTest } from '../../types';
+import { AuthStorage } from '../../services/authStorage';
 import { ExportReportModal } from './ExportReportModal';
 import { 
   ArrowLeft, 
@@ -812,7 +813,7 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
               <span className="flex items-center gap-1.5 text-xs text-[#6B7494] dark:text-[#9AA5C4] font-medium">
                 <span>Lanzado Por:</span>
                 <strong className="text-[#161C3A] dark:text-white font-semibold">
-                  {process?.launchedBy || 'Tania León'}
+                  {process?.launchedBy && !process.launchedBy.includes('Tania León') ? process.launchedBy : (AuthStorage.getSession()?.fullName ? `${AuthStorage.getSession()!.fullName} (Selección)` : 'Luis Zapata (Selección)')}
                 </strong>
               </span>
 
@@ -1864,7 +1865,9 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
 
             <div className="p-4 flex-1 space-y-4 overflow-y-auto text-xs">
               <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#151D3F] border border-slate-200 space-y-1">
-                <span className="font-bold text-[#161C3A] dark:text-white">Tania León (Reclutadora):</span>
+                <span className="font-bold text-[#161C3A] dark:text-white">
+                  {AuthStorage.getSession()?.fullName || 'Luis Zapata'} (Reclutador):
+                </span>
                 <p className="text-[#6B7494]">Postulante con excelente calidez y dicción telefónica. Apto para el cierre en campaña Claro.</p>
                 <span className="text-[10px] text-slate-400">10/10/2026 16:47 PM</span>
               </div>

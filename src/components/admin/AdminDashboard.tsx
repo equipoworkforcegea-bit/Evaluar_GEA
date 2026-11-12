@@ -525,6 +525,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <ProcessDetailControlView
             process={selectedProcessForControl}
             candidates={candidates}
+            session={session}
             initialTab={controlInitialTab}
             onBack={handleBackFromProcessDetail}
             onViewCandidateDetail={(cand) => setSelectedCandidate(cand)}

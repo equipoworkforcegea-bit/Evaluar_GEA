@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { EvaluationTest, TestStageConfig } from '../../types';
 import { generateSafeUuid, ProcessDataService } from '../../services/processDataService';
+import { AuthStorage } from '../../services/authStorage';
 import { 
   QUESTIONNAIRE_CATALOG, 
   getQuestionsForTopic, 
@@ -1072,7 +1073,11 @@ Requisitos:
       candidateCount: initialProfile?.candidateCount || 0,
       completedCount: initialProfile?.completedCount || 0,
       averageScore: initialProfile?.averageScore || 0,
-      launchedBy: initialProfile?.launchedBy || 'Tania León (Líder)',
+      launchedBy: initialProfile?.launchedBy || (() => {
+        const s = AuthStorage.getSession();
+        if (s?.fullName) return `${s.fullName} (${s.position || (s.role === 'SUPER_ADMIN' ? 'Super Administrador' : 'Líder')})`;
+        return 'Luis Zapata (Selección)';
+      })(),
       startDate: initialProfile?.startDate || new Date().toLocaleDateString('es-PE'),
       endDate: initialProfile?.endDate || '31/12/2026',
       processStatus: 'LANZADO',
@@ -1104,7 +1109,8 @@ Requisitos:
           knowledgeItems,
           selectedList: selectedCompetencies,
           competencyLevels,
-          competencyWeights
+          competencyWeights,
+          launchedBy: newProfile.launchedBy
         };
 
         await supabase

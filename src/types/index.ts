@@ -133,6 +133,7 @@ export interface Candidate {
   recruiterNotes?: string;
   isConsentSigned: boolean;
   consentSignedAt?: string;
+  retryCount?: number; // Veces que se le ha reiniciado el examen para rendir nuevamente
 }
 
 export type SyncState = 'SYNCED' | 'SAVING' | 'OFFLINE_SAVED' | 'SYNCING';
