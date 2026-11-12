@@ -1,7 +1,7 @@
 export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'RECRUITER' | 'PSYCHOLOGIST' | 'CANDIDATE';
 
 export interface AuthSession {
-  role: 'SUPER_ADMIN' | 'ADMIN' | 'CANDIDATE';
+  role: 'SUPER_ADMIN' | 'ADMIN' | 'RECRUITER' | 'PSYCHOLOGIST' | 'CANDIDATE';
   userId: string;
   fullName: string;
   email: string;
@@ -9,6 +9,8 @@ export interface AuthSession {
   dni?: string;
   position?: string;
   candidateId?: string; // set when role === 'CANDIDATE'
+  isActive?: boolean;
+  status?: string; // 'ACTIVO' | 'INACTIVO'
 }
 
 export type CandidateStageStatus = 'INVITED' | 'IN_PROGRESS' | 'SCORED' | 'FINALIST' | 'REJECTED';

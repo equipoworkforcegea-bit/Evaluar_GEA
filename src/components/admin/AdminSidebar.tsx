@@ -344,7 +344,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             {!isCollapsed && <span>Postulantes</span>}
           </button>
 
-          {/* Administrar Usuarios */}
+          {/* Administrar Usuarios - Solo SUPER_ADMIN y ADMIN activos */}
+          {(session.role === 'SUPER_ADMIN' || session.role === 'ADMIN') && session.isActive !== false && (
           <button
             type="button"
             onClick={() => onSelectTab('USUARIOS')}
@@ -358,6 +359,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             <UserCog className={`w-4 h-4 shrink-0 ${activeTab === 'USUARIOS' ? 'text-white' : 'text-[#2F5BA8] dark:text-[#5B8AE0]'}`} />
             {!isCollapsed && <span>Administrar Usuarios</span>}
           </button>
+          )}
         </div>
       </div>
 

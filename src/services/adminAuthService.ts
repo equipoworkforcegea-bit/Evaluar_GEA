@@ -46,12 +46,14 @@ export const AdminAuthService = {
             .then();
 
           return {
-            role: (data.role as 'SUPER_ADMIN' | 'ADMIN') || 'SUPER_ADMIN',
+            role: (data.role as any) || 'SUPER_ADMIN',
             userId: data.id,
             fullName: data.full_name || 'Bryan • Super Admin',
             email: data.email || `${data.username}@geaperu.pe`,
             username: data.username,
-            position: data.position || 'Super Administrador & Creador'
+            position: data.position || 'Super Administrador & Creador',
+            isActive: data.is_active !== false,
+            status: data.is_active !== false ? 'ACTIVO' : 'INACTIVO'
           };
         }
       }
@@ -79,7 +81,9 @@ export const AdminAuthService = {
         fullName: cleanId.includes('equipoworkforce') ? 'Bryan • Super Admin (Workforce GEA)' : 'Bryan • Super Admin (Creador)',
         email: `${cleanId}@geaperu.pe`,
         username: cleanId,
-        position: 'Super Administrador & Creador del Sistema'
+        position: 'Super Administrador & Creador del Sistema',
+        isActive: true,
+        status: 'ACTIVO'
       };
     }
 

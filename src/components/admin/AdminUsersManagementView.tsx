@@ -82,8 +82,14 @@ function generateSecureRandomPassword(): string {
 }
 
 export const AdminUsersManagementView: React.FC<AdminUsersManagementViewProps> = ({
-  session
+  session,
+  onBackToProcesses
 }) => {
+  const isAuthorized = !session || (
+    (session.role === 'SUPER_ADMIN' || session.role === 'ADMIN') && 
+    session.isActive !== false
+  );
+
   const [users, setUsers] = useState<AdminUserRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -147,6 +153,8 @@ export const AdminUsersManagementView: React.FC<AdminUsersManagementViewProps> =
   };
 
   useEffect(() => {
+    if (!isAuthorized) return;
+
     loadUsers();
 
     // Suscripción Realtime para la tabla usuarios_admin
@@ -164,7 +172,7 @@ export const AdminUsersManagementView: React.FC<AdminUsersManagementViewProps> =
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [isAuthorized]);
 
   // Filtrado de usuarios
   const filteredUsers = useMemo(() => {
@@ -398,6 +406,30 @@ export const AdminUsersManagementView: React.FC<AdminUsersManagementViewProps> =
     XLSX.writeFile(workbook, `GEA_Usuarios_Admin_${new Date().toISOString().slice(0, 10)}.xlsx`);
     showToast('✓ Nómina de usuarios exportada a Excel.');
   };
+
+  if (!isAuthorized) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-8 bg-[#F4F6FB] dark:bg-[#0E1326] min-h-[60vh]">
+        <div className="bg-white dark:bg-[#182044] p-8 rounded-2xl shadow-xl max-w-md w-full text-center border border-rose-200 dark:border-rose-900/50">
+          <div className="w-14 h-14 bg-rose-50 dark:bg-rose-950/50 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+          <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Acceso Restringido</h2>
+          <p className="text-sm text-slate-600 dark:text-slate-300 mb-6">
+            Solo los <strong>Super Administradores</strong> y <strong>Administradores</strong> con estado <strong>Activo</strong> tienen permisos para gestionar los usuarios del sistema.
+          </p>
+          {onBackToProcesses && (
+            <button
+              onClick={onBackToProcesses}
+              className="px-5 py-2.5 rounded-xl bg-[#1F2A5E] hover:bg-[#2C3B82] text-white font-semibold text-sm transition-all shadow-md cursor-pointer"
+            >
+              Volver a Procesos
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5 animate-in fade-in font-sans">

@@ -596,6 +596,25 @@ export const CreateProfileView: React.FC<CreateProfileViewProps> = ({
     return levels;
   });
 
+  // Pesos de evaluación para cada competencia (suma debe ser 100%)
+  const [competencyWeights, setCompetencyWeights] = useState<Record<string, number>>(() => {
+    const weights: Record<string, number> = {};
+    const rawComp = (initialProfile as any)?.competencias;
+    const metaWeights = rawComp?._metadata?.competencyWeights || {};
+    const comps = initialProfile?.selectedCompetencies || [];
+    const count = comps.length;
+    comps.forEach((comp, i) => {
+      if (metaWeights[comp] !== undefined) {
+        weights[comp] = metaWeights[comp];
+      } else {
+        const base = count > 0 ? Math.floor(100 / count) : 0;
+        const rem = count > 0 ? 100 % count : 0;
+        weights[comp] = base + (i < rem ? 1 : 0);
+      }
+    });
+    return weights;
+  });
+
   const [openCompetencyMenuId, setOpenCompetencyMenuId] = useState<string | null>(null);
   const [expandedCompetenciesDetails, setExpandedCompetenciesDetails] = useState<Record<string, boolean>>({});
 
@@ -608,7 +627,7 @@ export const CreateProfileView: React.FC<CreateProfileViewProps> = ({
         [compName]: next
       };
       if (initialProfile?.id) {
-        ProcessDataService.updateProfileCompetencies(initialProfile.id, selectedCompetencies, updated);
+        ProcessDataService.updateProfileCompetencies(initialProfile.id, selectedCompetencies, updated, competencyWeights);
       }
       return updated;
     });
@@ -825,6 +844,26 @@ Requisitos:
     setComponents(prev => prev.filter(c => c.id !== id));
   };
 
+  // Ajustar peso de competencia (NUNCA superará el 100%)
+  const handleAdjustCompetencyWeight = (compName: string, delta: number) => {
+    setCompetencyWeights(prev => {
+      const currentTotal = Object.values(prev).reduce((s, w) => s + w, 0);
+      let updatedVal = prev[compName] || 0;
+      if (delta > 0) {
+        const maxAllowed = Math.max(0, 100 - currentTotal);
+        const actualDelta = Math.min(delta, maxAllowed);
+        updatedVal += actualDelta;
+      } else {
+        updatedVal = Math.max(0, updatedVal + delta);
+      }
+      const updated = { ...prev, [compName]: updatedVal };
+      if (initialProfile?.id) {
+        ProcessDataService.updateProfileCompetencies(initialProfile.id, selectedCompetencies, competencyLevels, updated);
+      }
+      return updated;
+    });
+  };
+
   // Ajustar peso de un item de conocimiento (NUNCA superará el 100%)
   const handleAdjustWeight = (itemId: string, delta: number) => {
     setKnowledgeItems(prev => {
@@ -925,6 +964,14 @@ Requisitos:
         ? prev.filter(c => c !== compName)
         : [...prev, compName];
 
+      // Calcular y redistribuir pesos
+      const count = next.length;
+      const base = count > 0 ? Math.floor(100 / count) : 0;
+      const rem = count > 0 ? 100 % count : 0;
+      const newWeights: Record<string, number> = {};
+      next.forEach((c, i) => { newWeights[c] = base + (i < rem ? 1 : 0); });
+      setCompetencyWeights(newWeights);
+
       if (!isRemoving) {
         setCompetencyLevels(curr => ({
           ...curr,
@@ -944,10 +991,15 @@ Requisitos:
       }));
 
       if (initialProfile?.id) {
-        ProcessDataService.updateProfileCompetencies(initialProfile.id, next, {
-          ...competencyLevels,
-          [compName]: competencyLevels[compName] ?? 7
-        });
+        ProcessDataService.updateProfileCompetencies(
+          initialProfile.id, 
+          next, 
+          {
+            ...competencyLevels,
+            [compName]: competencyLevels[compName] ?? 7
+          },
+          newWeights
+        );
       }
       return next;
     });
@@ -1051,7 +1103,8 @@ Requisitos:
           knowledgeQuestionnaires: knowledgeItems.map(k => k.name),
           knowledgeItems,
           selectedList: selectedCompetencies,
-          competencyLevels
+          competencyLevels,
+          competencyWeights
         };
 
         await supabase
@@ -1138,6 +1191,7 @@ Requisitos:
   };
 
   const totalKnowledgeWeight = knowledgeItems.reduce((acc, it) => acc + it.weight, 0);
+  const totalCompetencyWeight = Object.values(competencyWeights).reduce((acc, w) => acc + w, 0);
 
   // =========================================================================
   // PASO 1: DETALLES DEL PERFIL
@@ -1757,6 +1811,25 @@ Requisitos:
                     </div>
                   ) : (
                     <div className="space-y-4 text-left">
+                      {/* Sumatoria de pesos - barra de progreso igual a Conocimientos */}
+                      <div className="p-3 sm:p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/50 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 shrink-0">
+                          <div className="w-5 h-5 rounded-full bg-purple-50 flex items-center justify-center text-[#6355A4]">
+                            <RotateCw className="w-3 h-3" />
+                          </div>
+                          <span>Sumatoria de pesos</span>
+                        </div>
+                        <div className="flex-1 max-w-xl h-2.5 bg-slate-200/90 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                            style={{ width: `${Math.min(100, totalCompetencyWeight)}%` }}
+                          />
+                        </div>
+                        <span className={`text-xs sm:text-sm font-bold shrink-0 ${totalCompetencyWeight === 100 ? 'text-emerald-600' : totalCompetencyWeight > 100 ? 'text-rose-600' : 'text-amber-600'}`}>
+                          {totalCompetencyWeight}%
+                        </span>
+                      </div>
+
                       {/* Lista de competencias en formato idéntico a conocimientos */}
                       <div className="divide-y divide-slate-100 border border-slate-100 rounded-xl overflow-visible">
                         {selectedCompetencies.map((compName) => (
@@ -1783,8 +1856,44 @@ Requisitos:
                               </div>
                             </div>
 
-                            {/* Derecha: Botón Nivel de desarrollo [- 7 +] (1 al 10) + Botón 3 puntos */}
+                            {/* Derecha: Control Peso [- 33% +] + Control Nivel [- 7 +] + Botón 3 puntos */}
                             <div className="flex items-center gap-2 shrink-0 pt-0.5">
+                              {/* Control del peso de la competencia */}
+                              <div
+                                className="flex items-center border border-slate-200 rounded-full px-1.5 py-0.5 bg-white shadow-2xs"
+                                title="Peso de la competencia en la evaluación"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => handleAdjustCompetencyWeight(compName, -5)}
+                                  disabled={(competencyWeights[compName] ?? 0) <= 0}
+                                  className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                                    (competencyWeights[compName] ?? 0) <= 0
+                                      ? 'text-slate-200 cursor-not-allowed'
+                                      : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer'
+                                  }`}
+                                  title="Reducir peso"
+                                >
+                                  -
+                                </button>
+                                <span className="text-xs font-semibold text-slate-700 px-2 min-w-[36px] text-center">
+                                  {competencyWeights[compName] ?? 0}%
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAdjustCompetencyWeight(compName, 5)}
+                                  disabled={totalCompetencyWeight >= 100}
+                                  className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                                    totalCompetencyWeight >= 100
+                                      ? 'text-slate-200 cursor-not-allowed'
+                                      : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer'
+                                  }`}
+                                  title="Aumentar peso"
+                                >
+                                  +
+                                </button>
+                              </div>
+
                               {/* Control del nivel de desarrollo de la prueba (1 al 10, default 7) */}
                               <div 
                                 className="flex items-center border border-slate-200 rounded-full px-1.5 py-0.5 bg-white shadow-2xs"

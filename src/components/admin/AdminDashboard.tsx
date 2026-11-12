@@ -726,7 +726,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* 11. GESTIÓN Y ADMINISTRACIÓN DE USUARIOS (usuarios_admin) */}
       {activeTab === 'USUARIOS' && (
-        <AdminUsersManagementView session={session} />
+        <AdminUsersManagementView 
+          session={session} 
+          onBackToProcesses={() => setActiveTab('PROCESOS')} 
+        />
       )}
 
       {/* ========================================================================= */}
