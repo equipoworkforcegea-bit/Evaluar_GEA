@@ -232,7 +232,7 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
       } catch {}
 
       // 2. Ejecutar reseteo del segmento en Supabase y LocalStorage
-      await CandidateDataService.resetCandidateSegment(candId, segment, process?.id);
+      await CandidateDataService.resetCandidateSegment(candId, segment, process?.id, candidateToReset.email);
 
       // 3. Actualizar datos en memoria del modal
       setCandidateEvalsData(prev => ({
@@ -254,7 +254,7 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
       onUpdateCandidate?.(updatedCand);
 
       const segName = segment === 'DISC' ? 'DISC' : segment === 'CONOCIMIENTOS' ? 'Conocimientos' : 'Competencias';
-      showToast(`✓ Segmento ${segName} reiniciado para ${candidateToReset.fullName}. Rinde su ${nextRetries + 1}° intento.`);
+      showToast(`✓ Segmento ${segName} reiniciado para ${candidateToReset.fullName} (${nextRetries} reinicio${nextRetries > 1 ? 's' : ''}).`);
     } catch (err) {
       console.warn('Error al reiniciar segmento:', err);
       showToast('⚠️ No se pudo reiniciar el segmento. Intente nuevamente.');
@@ -346,7 +346,7 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
       setLiveCandidates(prev => prev.map(c => c.id === candId ? updatedCand : c));
       onUpdateCandidate?.(updatedCand);
 
-      showToast(`✓ Examen reiniciado para ${candidateToReset.fullName}. Rinde su ${nextRetries + 1}° intento.`);
+      showToast(`✓ Examen reiniciado para ${candidateToReset.fullName} (${nextRetries} reinicio${nextRetries > 1 ? 's' : ''}).`);
       setCandidateToReset(null);
     } catch (err: any) {
       console.warn('Error al reiniciar examen:', err);
@@ -1045,10 +1045,10 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
                               {retryCount > 0 && (
                                 <span
                                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 shadow-2xs shrink-0"
-                                  title={retryCount === 1 ? 'El postulante está rindiendo el examen por segunda vez (1 reinicio)' : `Examen reiniciado ${retryCount} veces (${retryCount + 1}° intento)`}
+                                  title={retryCount === 1 ? 'El postulante ha reiniciado el examen 1 vez' : `Examen reiniciado ${retryCount} veces`}
                                 >
                                   <RotateCw className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-600 dark:text-amber-400" />
-                                  <span>{retryCount === 1 ? '2° intento' : `${retryCount + 1}° intento (${retryCount} reinicios)`}</span>
+                                  <span>{retryCount} {retryCount === 1 ? 'reinicio' : 'reinicios'}</span>
                                 </span>
                               )}
                             </div>
@@ -2053,11 +2053,11 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
                 <span className="text-slate-700 dark:text-slate-300 font-mono truncate max-w-[260px]">{candidateToReset.email || candidateToReset.dni}</span>
               </div>
               <div className="flex justify-between items-center pt-2 border-t border-slate-200/60 dark:border-slate-800/60">
-                <span className="text-[#6B7494] dark:text-[#9AA5C4]">Intento actual / asignado:</span>
+                <span className="text-[#6B7494] dark:text-[#9AA5C4]">Reinicios:</span>
                 <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 flex items-center gap-1.5">
                   <RotateCw className="w-3 h-3 text-amber-600 dark:text-amber-400" />
                   <span>
-                    {(candidateToReset.retryCount || 0) === 0 ? '1er intento asignado' : `${(candidateToReset.retryCount || 0) + 1}° intento (${candidateToReset.retryCount} reinicio${(candidateToReset.retryCount || 0) > 1 ? 's' : ''})`}
+                    {(candidateToReset.retryCount || 0) === 0 ? 'Sin reinicios' : `${candidateToReset.retryCount} reinicio${(candidateToReset.retryCount || 0) > 1 ? 's' : ''}`}
                   </span>
                 </span>
               </div>
@@ -2210,8 +2210,8 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
               </p>
               <ul className="list-disc list-inside space-y-1 text-amber-800/90 dark:text-amber-300/90 pl-1 text-[11.5px]">
                 <li>Puede <strong>reiniciar un segmento específico</strong> para que el postulante repita únicamente esa evaluación manteniendo las demás intactas.</li>
-                <li>O puede presionar <strong>"Reiniciar todo el examen"</strong> para restablecer a cero todos los segmentos y permitir un intento completo nuevo.</li>
-                <li>En cualquier caso, se registrará el nuevo intento con su respectiva insignia en el listado.</li>
+                <li>O puede presionar <strong>"Reiniciar todo el examen"</strong> para restablecer a cero todos los segmentos y permitir un reinicio completo.</li>
+                <li>En cualquier caso, se registrará el número de reinicios con su respectiva insignia en el listado.</li>
               </ul>
             </div>
 

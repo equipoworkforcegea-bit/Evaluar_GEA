@@ -1021,55 +1021,129 @@ export const CandidateDataService = {
   async resetCandidateSegment(
     candidateId: string, 
     segment: 'DISC' | 'CONOCIMIENTOS' | 'COMPETENCIAS',
-    processId?: string
+    processId?: string,
+    email?: string
   ): Promise<boolean> {
     try {
+      // Obtener todos los IDs de candidato asociados al email (distintos registros del mismo postulante)
+      let allCandidateIds: string[] = [candidateId];
+      if (email) {
+        try {
+          const { data: candList } = await supabase
+            .from('candidatos')
+            .select('id')
+            .ilike('correo', email);
+          if (candList && candList.length > 0) {
+            const ids = candList.map((c: any) => c.id);
+            allCandidateIds = Array.from(new Set([candidateId, ...ids]));
+          }
+        } catch {}
+      }
+
       if (segment === 'DISC') {
-        await supabase.from('evaluaciones_disc').delete().eq('candidato_id', candidateId);
+        // Borrar de evaluaciones_disc para todos los IDs del mismo email
+        await supabase.from('evaluaciones_disc').delete().in('candidato_id', allCandidateIds);
+        // Limpiar localStorage (clave real usada por EvaluacionesService)
         if (typeof window !== 'undefined') {
           try {
-            const raw = localStorage.getItem('evaluar_resultados_disc');
+            const raw = localStorage.getItem('gea_evaluaciones_disc');
             if (raw) {
               const list = JSON.parse(raw);
-              const filtered = list.filter((x: any) => x.candidatoId !== candidateId);
-              localStorage.setItem('evaluar_resultados_disc', JSON.stringify(filtered));
+              const filtered = list.filter((x: any) =>
+                !allCandidateIds.includes(x.candidatoId) &&
+                (!processId || x.procesoId !== processId) &&
+                (!email || x.email !== email)
+              );
+              localStorage.setItem('gea_evaluaciones_disc', JSON.stringify(filtered));
+            }
+          } catch {}
+          // También limpiar clave alternativa por si acaso
+          try { localStorage.removeItem('evaluar_resultados_disc'); } catch {}
+        }
+      } else if (segment === 'CONOCIMIENTOS') {
+        // Borrar de evaluaciones_conocimientos solo filas que NO sean competencias (tema no ilike 'COMPETENCIA:%')
+        // Supabase no soporta NOT ILIKE directamente en delete, así que borramos todo y luego
+        // para candidato, borramos las filas de conocimientos normales
+        for (const cid of allCandidateIds) {
+          try {
+            // Obtener IDs de filas de conocimientos que NO son competencias
+            const { data: knowRows } = await supabase
+              .from('evaluaciones_conocimientos')
+              .select('id, tema')
+              .eq('candidato_id', cid);
+            if (knowRows && knowRows.length > 0) {
+              const idsToDelete = knowRows
+                .filter((r: any) => !String(r.tema || '').match(/^COMPETENCIA:/i))
+                .map((r: any) => r.id);
+              if (idsToDelete.length > 0) {
+                await supabase.from('evaluaciones_conocimientos').delete().in('id', idsToDelete);
+              }
             }
           } catch {}
         }
-      } else if (segment === 'CONOCIMIENTOS') {
-        await supabase.from('evaluaciones_conocimientos').delete().eq('candidato_id', candidateId);
+        // Borrar intentos y respuestas
         try {
           const { data: intentos } = await supabase
             .from('intentos_examen')
             .select('id')
-            .eq('candidato_id', candidateId);
+            .in('candidato_id', allCandidateIds);
           if (intentos && intentos.length > 0) {
             const intentoIds = intentos.map((i: any) => i.id);
             await supabase.from('respuestas_candidato').delete().in('intento_id', intentoIds);
-            await supabase.from('intentos_examen').delete().eq('candidato_id', candidateId);
+            await supabase.from('intentos_examen').delete().in('candidato_id', allCandidateIds);
           }
         } catch {}
+        // Limpiar localStorage
         if (typeof window !== 'undefined') {
           try {
-            const raw = localStorage.getItem('evaluar_resultados_conocimientos');
+            const raw = localStorage.getItem('gea_evaluaciones_conocimientos');
             if (raw) {
               const list = JSON.parse(raw);
-              const filtered = list.filter((x: any) => x.candidatoId !== candidateId);
-              localStorage.setItem('evaluar_resultados_conocimientos', JSON.stringify(filtered));
+              const filtered = list.filter((x: any) =>
+                !allCandidateIds.includes(x.candidatoId) &&
+                (!processId || x.procesoId !== processId) &&
+                (!email || x.email !== email)
+              );
+              localStorage.setItem('gea_evaluaciones_conocimientos', JSON.stringify(filtered));
+            }
+          } catch {}
+          try { localStorage.removeItem('evaluar_resultados_conocimientos'); } catch {}
+        }
+      } else if (segment === 'COMPETENCIAS') {
+        // Borrar de evaluaciones_competencias para todos los IDs
+        await supabase.from('evaluaciones_competencias').delete().in('candidato_id', allCandidateIds);
+        // Borrar de evaluaciones_conocimientos donde tema ilike 'COMPETENCIA:%' (fallback histórico)
+        for (const cid of allCandidateIds) {
+          try {
+            const { data: compRows } = await supabase
+              .from('evaluaciones_conocimientos')
+              .select('id, tema')
+              .eq('candidato_id', cid);
+            if (compRows && compRows.length > 0) {
+              const idsToDelete = compRows
+                .filter((r: any) => String(r.tema || '').match(/^COMPETENCIA:/i))
+                .map((r: any) => r.id);
+              if (idsToDelete.length > 0) {
+                await supabase.from('evaluaciones_conocimientos').delete().in('id', idsToDelete);
+              }
             }
           } catch {}
         }
-      } else if (segment === 'COMPETENCIAS') {
-        await supabase.from('evaluaciones_competencias').delete().eq('candidato_id', candidateId);
+        // Limpiar localStorage
         if (typeof window !== 'undefined') {
           try {
-            const raw = localStorage.getItem('evaluar_resultados_competencias');
+            const raw = localStorage.getItem('gea_evaluaciones_competencias');
             if (raw) {
               const list = JSON.parse(raw);
-              const filtered = list.filter((x: any) => x.candidatoId !== candidateId);
-              localStorage.setItem('evaluar_resultados_competencias', JSON.stringify(filtered));
+              const filtered = list.filter((x: any) =>
+                !allCandidateIds.includes(x.candidatoId) &&
+                (!processId || x.procesoId !== processId) &&
+                (!email || x.email !== email)
+              );
+              localStorage.setItem('gea_evaluaciones_competencias', JSON.stringify(filtered));
             }
           } catch {}
+          try { localStorage.removeItem('evaluar_resultados_competencias'); } catch {}
         }
       }
 
