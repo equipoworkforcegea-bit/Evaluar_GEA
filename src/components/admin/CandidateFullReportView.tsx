@@ -80,6 +80,9 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
   const [knowledgeResults, setKnowledgeResults] = useState<any[]>([]);
   const [discResult, setDiscResult] = useState<any | null>(null);
   const [competencyResults, setCompetencyResults] = useState<any[]>([]);
+  const [historyCompetencies, setHistoryCompetencies] = useState<any[]>([]);
+  const [historyKnowledge, setHistoryKnowledge] = useState<any[]>([]);
+  const [historyDisc, setHistoryDisc] = useState<any[]>([]);
   const [activeProfileCompetencies, setActiveProfileCompetencies] = useState<string[]>([]);
   const [minApprovalScore, setMinApprovalScore] = useState<number>(() => {
     const pMin = (process as any)?.competenciesMinApprovalScore ?? (process as any)?.competencias?._metadata?.competenciesMinApprovalScore;
@@ -95,10 +98,13 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
       try {
         const procId = process?.id || candidate.testId;
 
-        const [kList, dRes, cList] = await Promise.all([
+        const [kList, dRes, cList, kHist, dHist, cHist] = await Promise.all([
           EvaluacionesService.obtenerResultadosConocimientos(candidate.id, procId, candidate.email),
           EvaluacionesService.obtenerResultadoDISC(candidate.id, procId, candidate.email),
-          EvaluacionesService.obtenerResultadosCompetencias(candidate.id, procId, candidate.email)
+          EvaluacionesService.obtenerResultadosCompetencias(candidate.id, procId, candidate.email),
+          EvaluacionesService.obtenerHistorialConocimientos(candidate.id, procId, candidate.email),
+          EvaluacionesService.obtenerHistorialDISC(candidate.id, procId, candidate.email),
+          EvaluacionesService.obtenerHistorialCompetencias(candidate.id, procId, candidate.email)
         ]);
 
         // Cargar competencias activas correspondientes al perfil usado en el proceso
@@ -150,6 +156,9 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
           setKnowledgeResults(kList || []);
           setDiscResult(dRes || null);
           setCompetencyResults(cList || []);
+          setHistoryKnowledge(kHist || []);
+          setHistoryDisc(dHist || []);
+          setHistoryCompetencies(cHist || []);
           setActiveProfileCompetencies(loadedComps);
           setMinApprovalScore(loadedMinScore);
 
@@ -158,6 +167,8 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
           } else if (dRes) {
             setActiveMainTab('DISC');
           } else if (cList && cList.length > 0) {
+            setActiveMainTab('COMPETENCIAS');
+          } else if (cHist && cHist.length > 0) {
             setActiveMainTab('COMPETENCIAS');
           }
         }
@@ -1549,6 +1560,26 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                 </div>
               </div>
 
+              {/* Alerta si la prueba fue reiniciada y tiene nueva oportunidad pendiente */}
+              {competencyResults.length === 0 && historyCompetencies.length > 0 && (
+                <div className="p-4 rounded-2xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 flex items-start gap-3 shadow-xs">
+                  <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0 border border-amber-300/60 mt-0.5">
+                    <RotateCw className="w-4 h-4 animate-spin" style={{ animationDuration: '4s' }} />
+                  </div>
+                  <div className="space-y-1 text-xs">
+                    <h4 className="font-bold text-amber-950 dark:text-amber-100 flex items-center gap-2">
+                      <span>Oportunidad de Evaluación Reiniciada</span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200">
+                        Pendiente de rendición
+                      </span>
+                    </h4>
+                    <p className="leading-relaxed text-amber-800 dark:text-amber-300 text-[11px]">
+                      El administrador otorgó una nueva oportunidad para que el postulante rinda la prueba de competencias. La prueba se encuentra habilitada en su portal. Todos los datos de intentos anteriores se preservan íntegros en la base de datos y se muestran en el historial inferior.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {activeCompetenciesData.length === 0 ? (
                 <div className="p-8 text-center rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 text-slate-400 text-xs">
                   No se han configurado competencias activas para este perfil.
@@ -1671,6 +1702,80 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                       )}
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* HISTORIAL COMPLETO DE INTENTOS PREVIOS PRESERVADOS EN BASE DE DATOS */}
+              {historyCompetencies.length > 0 && (
+                <div className="mt-6 p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#151D3F] border border-[#DDE2EF] dark:border-[#2A3563] space-y-3.5 shadow-2xs">
+                  <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-xs">
+                        📜
+                      </div>
+                      <h4 className="text-xs sm:text-sm font-bold text-[#161C3A] dark:text-white">
+                        Histórico de Intentos de Competencias ({historyCompetencies.length})
+                      </h4>
+                    </div>
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      Información protegida en base de datos
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {historyCompetencies.map((hItem, hIdx) => {
+                      const isCurrentActive = competencyResults.some(cr => (cr.id && cr.id === hItem.id) || (cr.completadoEn === hItem.completadoEn));
+                      const hScore = Number(hItem.puntaje ?? 0);
+                      const passed = hScore >= minApprovalScore;
+
+                      return (
+                        <div 
+                          key={hIdx}
+                          className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-800 dark:text-slate-200">
+                                {hItem.competencia}
+                              </span>
+                              {isCurrentActive ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                                  Oportunidad Actual
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                  Intento Previo #{historyCompetencies.length - hIdx}
+                                </span>
+                              )}
+                              <span className="text-slate-500 text-[11px]">
+                                • Nivel: <strong>{hItem.nivel || 'Básico'}</strong>
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-400">
+                              {hItem.completadoEn ? (
+                                <span>Rendido el {new Date(hItem.completadoEn).toLocaleString('es-PE')}</span>
+                              ) : (
+                                <span>Registro de evaluación</span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
+                            <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                              passed 
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-300' 
+                                : 'bg-rose-50 text-rose-700 border-rose-300'
+                            }`}>
+                              {passed ? 'Alcanzó el % pedido' : 'No alcanzó el %'}
+                            </span>
+                            <span className={`font-black text-sm ${passed ? 'text-emerald-600' : 'text-amber-600'}`}>
+                              {hScore}%
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>

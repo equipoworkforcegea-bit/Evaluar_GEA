@@ -154,8 +154,8 @@ export const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
 
     setIsSearchingEmail(true);
     try {
-      // 1. Buscar en la tabla `candidatos` de Supabase
-      const { data: foundCand } = await supabase
+      // 1. Buscar EXCLUSIVAMENTE en la tabla `candidatos` de la base de datos Supabase
+      const { data: foundCand, error } = await supabase
         .from('candidatos')
         .select('nombre_completo, dni, telefono, correo, whatsapp_user')
         .ilike('correo', clean)
@@ -163,7 +163,7 @@ export const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
         .limit(1)
         .maybeSingle();
 
-      if (foundCand && foundCand.nombre_completo) {
+      if (!error && foundCand && foundCand.nombre_completo) {
         const rawName = foundCand.nombre_completo.trim();
         const parts = rawName.split(/\s+/);
         let fName = '';
@@ -191,49 +191,7 @@ export const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
         return;
       }
 
-      // 2. Fallback: buscar en tabla `postulantes` si existiera
-      try {
-        const { data: foundPost } = await supabase
-          .from('postulantes')
-          .select('nombre, apellido, dni, telefono, correo')
-          .ilike('correo', clean)
-          .limit(1)
-          .maybeSingle();
-
-        if (foundPost && (foundPost.nombre || foundPost.apellido)) {
-          setNewFirstName((foundPost.nombre || '').toUpperCase());
-          setNewLastName((foundPost.apellido || '').toUpperCase());
-          setFoundDni(foundPost.dni || '');
-          setFoundPhone(foundPost.telefono || '');
-          setAutoFilledNotice(true);
-          return;
-        }
-      } catch {}
-
-      // 3. Fallback: buscar en caché local del navegador
-      try {
-        const localRaw = localStorage.getItem('evaluar_candidates_cache') || localStorage.getItem('evaluar_candidates');
-        if (localRaw) {
-          const list = JSON.parse(localRaw);
-          if (Array.isArray(list)) {
-            const match = list.find((c: any) => (c.email || c.correo || '').toLowerCase() === clean);
-            if (match) {
-              const fullName = (match.fullName || match.nombre_completo || `${match.firstName || ''} ${match.lastName || ''}`).trim();
-              const parts = fullName.split(/\s+/);
-              let fName = parts.slice(0, Math.ceil(parts.length / 2)).join(' ');
-              let lName = parts.slice(Math.ceil(parts.length / 2)).join(' ');
-              setNewFirstName(fName.toUpperCase());
-              setNewLastName(lName.toUpperCase());
-              setFoundDni(match.dni || '');
-              setFoundPhone(match.phone || match.telefono || '');
-              setAutoFilledNotice(true);
-              return;
-            }
-          }
-        }
-      } catch {}
-
-      // Si no se encontró en ninguna base de datos, NO llenar nada y limpiar campos
+      // Si no se encuentra en la tabla de candidatos de la base de datos, NO llenar nada
       setNewFirstName('');
       setNewLastName('');
       setFoundDni('');
@@ -275,18 +233,24 @@ export const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
   };
 
   // =========================================================================
-  // SUBMIT DEL SUB-MODAL: Agregar candidato a la lista
+  // SUBMIT DEL SUB-MODAL: Agregar candidato a la lista (Datos únicos: Correo y DNI)
   // =========================================================================
-  const handleAddCandidateSubmit = (e: React.FormEvent) => {
+  const handleAddCandidateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddModalError(null);
 
     const emailClean = newEmail.trim().toLowerCase();
+    const dniClean = (foundDni || '').trim();
     const fName = newFirstName.trim();
     const lName = newLastName.trim();
 
     if (!emailClean || !emailClean.includes('@') || !emailClean.includes('.')) {
       setAddModalError('Ingresa un correo electrónico válido.');
+      return;
+    }
+
+    if (!dniClean || dniClean.length < 8) {
+      setAddModalError('Por favor ingresa un DNI válido de 8 dígitos.');
       return;
     }
 
@@ -297,10 +261,53 @@ export const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
 
     const fullName = `${fName} ${lName}`.trim().toUpperCase();
 
-    // Comprobar si el correo ya está en la lista actual
+    // 1. Validar unicidad en la lista actual a convocar (candidateList)
     if (candidateList.some(c => c.email.toLowerCase() === emailClean)) {
-      setAddModalError('Este correo electrónico ya está agregado en la lista.');
+      setAddModalError('Este correo electrónico ya está en la lista de postulantes.');
       return;
+    }
+
+    if (candidateList.some(c => c.dni && c.dni.trim() === dniClean)) {
+      setAddModalError('Este DNI ya está en la lista de postulantes.');
+      return;
+    }
+
+    // 2. Validar unicidad en la base de datos (tabla candidatos):
+    try {
+      // 2.1 Unicidad para este proceso de evaluación
+      const { data: dupInProcess } = await supabase
+        .from('candidatos')
+        .select('id, correo, dni')
+        .eq('proceso_id', selectedTest.id)
+        .or(`correo.ilike.${emailClean},dni.eq.${dniClean}`)
+        .limit(1)
+        .maybeSingle();
+
+      if (dupInProcess) {
+        if (dupInProcess.correo?.toLowerCase() === emailClean) {
+          setAddModalError('Este correo electrónico ya está registrado en este proceso de evaluación.');
+          return;
+        }
+        if (dupInProcess.dni === dniClean) {
+          setAddModalError('Este DNI ya está registrado en este proceso de evaluación.');
+          return;
+        }
+      }
+
+      // 2.2 Unicidad cruzada en el sistema: el DNI y correo son datos únicos
+      const { data: candByDni } = await supabase
+        .from('candidatos')
+        .select('correo, dni, nombre_completo')
+        .eq('dni', dniClean)
+        .limit(1)
+        .maybeSingle();
+
+      if (candByDni && candByDni.correo && candByDni.correo.toLowerCase() !== emailClean) {
+        setAddModalError(`El DNI ${dniClean} ya pertenece a ${candByDni.nombre_completo || 'otro postulante'} (${candByDni.correo}). El correo y DNI son datos únicos.`);
+        return;
+      }
+    } catch (errCheck) {
+      console.warn('[InviteCandidateModal] Advertencia validando unicidad:', errCheck);
     }
 
     const newCandidateItem: StagedCandidateItem = {
@@ -310,7 +317,7 @@ export const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
       lastName: lName,
       email: emailClean,
       country: newCountry || 'Perú',
-      dni: foundDni || undefined,
+      dni: dniClean,
       phone: foundPhone || undefined
     };
 
@@ -382,7 +389,18 @@ export const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
         if (newItems.length > 0) {
           setCandidateList(prev => {
             const existingEmails = new Set(prev.map(c => c.email.toLowerCase()));
-            const uniqueIncoming = newItems.filter(item => !existingEmails.has(item.email.toLowerCase()));
+            const existingDnis = new Set(prev.map(c => (c.dni || '').trim()).filter(Boolean));
+            const uniqueIncoming: StagedCandidateItem[] = [];
+
+            for (const item of newItems) {
+              const e = item.email.toLowerCase();
+              const d = (item.dni || '').trim();
+              if (!existingEmails.has(e) && (!d || !existingDnis.has(d))) {
+                existingEmails.add(e);
+                if (d) existingDnis.add(d);
+                uniqueIncoming.push(item);
+              }
+            }
             return [...prev, ...uniqueIncoming];
           });
         } else {

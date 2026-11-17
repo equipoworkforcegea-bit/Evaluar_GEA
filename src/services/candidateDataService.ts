@@ -544,26 +544,45 @@ export const CandidateDataService = {
   },
 
   /**
-   * Crea o actualiza un nuevo candidato real en Supabase con esquema en español
+   * Crea o actualiza un nuevo candidato real en Supabase garantizando que Correo y DNI son ÚNICOS
    */
   async createCandidate(candidate: Candidate): Promise<Candidate | null> {
     try {
-      const candUuid = ensureUuid(candidate.id);
+      const emailClean = candidate.email.toLowerCase().trim();
+      const dniClean = candidate.dni.trim();
       const procUuid = (candidate.testId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidate.testId))
         ? candidate.testId
         : DEFAULT_PROCESS_UUID;
 
+      // 1. Verificar si ya existe este candidato en este proceso por Correo o DNI para no duplicar
+      let targetUuid = ensureUuid(candidate.id);
+      try {
+        const { data: existingInProc } = await supabase
+          .from('candidatos')
+          .select('id, correo, dni')
+          .eq('proceso_id', procUuid)
+          .or(`correo.ilike.${emailClean},dni.eq.${dniClean}`)
+          .limit(1)
+          .maybeSingle();
+
+        if (existingInProc?.id) {
+          targetUuid = existingInProc.id; // Reutilizar el ID existente en este proceso
+        }
+      } catch (errCheck) {
+        console.warn('[createCandidate] Advertencia buscando candidato existente:', errCheck);
+      }
+
       const dbStatus = (candidate.status && (candidate.status === 'IN_PROGRESS' ? 'EN_CURSO' : candidate.status === 'SCORED' ? 'EVALUADO' : candidate.status === 'FINALIST' ? 'FINALISTA' : candidate.status === 'REJECTED' ? 'RECHAZADO' : candidate.status)) || 'INVITADO';
 
       const payload = {
-        id: candUuid,
+        id: targetUuid,
         proceso_id: procUuid,
         nombre_completo: candidate.fullName.trim(),
-        correo: candidate.email.toLowerCase().trim(),
+        correo: emailClean,
         telefono: candidate.phone || '+51 984 123 456',
         whatsapp_user: candidate.whatsappUser || candidate.phone || '+51 984 123 456',
-        dni: candidate.dni.trim(),
-        codigo_invitacion: candidate.invitationCode || `GEA-${candidate.dni}-${Date.now().toString(36).toUpperCase()}`,
+        dni: dniClean,
+        codigo_invitacion: candidate.invitationCode || `GEA-${dniClean}-${Date.now().toString(36).toUpperCase()}`,
         estado: dbStatus === 'INVITED' ? 'INVITADO' : dbStatus,
         etapa_actual: 'ETAPA_1_PSICOTECNICA',
         consentimiento_firmado: Boolean(candidate.isConsentSigned),
@@ -590,52 +609,32 @@ export const CandidateDataService = {
   },
 
   /**
-   * Inserta múltiples candidatos en bloque (Bulk Batch) de forma atómica en Supabase
+   * Inserta múltiples candidatos en bloque garantizando datos únicos (sin duplicar correo o DNI)
    */
   async createCandidatesBatch(candidates: Candidate[]): Promise<Candidate[]> {
     if (!candidates || candidates.length === 0) return [];
     try {
-      const rows = candidates.map(c => {
-        const candUuid = ensureUuid(c.id);
-        const procUuid = (c.testId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.testId))
-          ? c.testId
-          : DEFAULT_PROCESS_UUID;
+      // Deduplicar dentro de la misma tanda por correo y DNI
+      const seenEmails = new Set<string>();
+      const seenDnis = new Set<string>();
+      const uniqueCandidates: Candidate[] = [];
 
-        const dbStatus = (c.status && (c.status === 'IN_PROGRESS' ? 'EN_CURSO' : c.status === 'SCORED' ? 'EVALUADO' : c.status === 'FINALIST' ? 'FINALISTA' : c.status === 'REJECTED' ? 'RECHAZADO' : c.status)) || 'INVITADO';
-
-        return {
-          id: candUuid,
-          proceso_id: procUuid,
-          nombre_completo: c.fullName.trim(),
-          correo: c.email.toLowerCase().trim(),
-          telefono: c.phone || '+51 984 123 456',
-          whatsapp_user: c.whatsappUser || c.phone || '+51 984 123 456',
-          dni: c.dni.trim(),
-          codigo_invitacion: c.invitationCode || `GEA-${c.dni}-${Date.now().toString(36).toUpperCase()}-${Math.floor(10 + Math.random() * 90)}`,
-          estado: dbStatus === 'INVITED' ? 'INVITADO' : dbStatus,
-          etapa_actual: 'ETAPA_1_PSICOTECNICA',
-          consentimiento_firmado: Boolean(c.isConsentSigned),
-          invitado_en: c.invitedAt || new Date().toISOString(),
-          actualizado_en: new Date().toISOString()
-        };
-      });
-
-      const { data, error } = await supabase
-        .from('candidatos')
-        .upsert(rows)
-        .select('*, procesos_evaluacion(titulo, puesto_objetivo)');
-
-      if (error) {
-        console.warn('[CandidateDataService] Error en batch, intentando individual:', error.message);
-        const successful: Candidate[] = [];
-        for (const cand of candidates) {
-          const res = await this.createCandidate(cand);
-          if (res) successful.push(res);
+      for (const c of candidates) {
+        const e = (c.email || '').toLowerCase().trim();
+        const d = (c.dni || '').trim();
+        if (e && !seenEmails.has(e) && (!d || !seenDnis.has(d))) {
+          seenEmails.add(e);
+          if (d) seenDnis.add(d);
+          uniqueCandidates.push(c);
         }
-        return successful;
       }
 
-      return (data || []).map(mapSupabaseToCandidate);
+      const successful: Candidate[] = [];
+      for (const cand of uniqueCandidates) {
+        const res = await this.createCandidate(cand);
+        if (res) successful.push(res);
+      }
+      return successful;
     } catch (err) {
       console.warn('[CandidateDataService] Excepción en createCandidatesBatch:', err);
       return [];
@@ -884,16 +883,17 @@ export const CandidateDataService = {
   },
 
   /**
-   * Resetea el progreso de un candidato para reenvío de invitación.
-   * Limpia localStorage, reinicia estado en Supabase y elimina el puntaje en notas_candidato,
-   * evaluaciones de DISC, conocimientos y competencias.
+   * Resetea el progreso de un candidato otorgándole una NUEVA OPORTUNIDAD completa.
+   * NO borra los registros previos de la base de datos (mantiene el histórico íntegro).
+   * Registra el reinicio en el rastreador de oportunidades activas y actualiza el estado en Supabase.
    */
   async resetCandidateForResend(candidateId: string): Promise<boolean> {
     try {
-      // 0. Obtener correo y proceso del candidato para limpiar TODOS sus registros y variantes
+      const nowIso = new Date().toISOString();
+
+      // 0. Obtener correo y proceso del candidato
       let allCandidateIds: string[] = [candidateId];
       let candidateEmail: string | undefined;
-      let candidateProcessId: string | undefined;
 
       try {
         const { data: candData } = await supabase
@@ -904,7 +904,6 @@ export const CandidateDataService = {
 
         if (candData) {
           candidateEmail = candData.correo;
-          candidateProcessId = candData.proceso_id;
           if (candData.correo) {
             const { data: siblingCands } = await supabase
               .from('candidatos')
@@ -920,146 +919,74 @@ export const CandidateDataService = {
         console.warn('[resetCandidateForResend] Error buscando datos del candidato:', lookupErr);
       }
 
-      // Helper para determinar si un item de localStorage es de este candidato
-      const isItemOfCandidate = (x: any): boolean => {
-        const matchById = allCandidateIds.includes(x.candidatoId);
-        const matchByEmail = candidateEmail ? (x.email && x.email.toLowerCase() === candidateEmail.toLowerCase()) : false;
-        const matchByProc = candidateProcessId && x.procesoId === candidateProcessId && (!x.candidatoId || allCandidateIds.includes(x.candidatoId));
-        return matchById || matchByEmail || Boolean(matchByProc);
-      };
-
-      // 1. Limpiar caché de localStorage del candidato
+      // 1. Guardar la marca de reinicio total en localStorage (evaluar_active_resets)
+      // Se conservan todos los registros en base de datos como histórico.
       if (typeof window !== 'undefined') {
-        const keysToRemove: string[] = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && (allCandidateIds.some(cid => key.includes(cid)) || (candidateEmail && key.includes(candidateEmail)))) {
-            keysToRemove.push(key);
-          }
-        }
-        keysToRemove.forEach(k => localStorage.removeItem(k));
-
-        // Limpiar arrays globales de evaluaciones en localStorage para este candidato
         try {
-          const rawDisc = localStorage.getItem('gea_evaluaciones_disc');
-          if (rawDisc) {
-            const list = JSON.parse(rawDisc);
-            localStorage.setItem('gea_evaluaciones_disc', JSON.stringify(list.filter((x: any) => !isItemOfCandidate(x))));
+          const raw = localStorage.getItem('evaluar_active_resets');
+          const resets = raw ? JSON.parse(raw) : {};
+          const entry = {
+            ALL: nowIso,
+            DISC: nowIso,
+            CONOCIMIENTOS: nowIso,
+            COMPETENCIAS: nowIso,
+            resetAt: nowIso
+          };
+          for (const cid of allCandidateIds) {
+            resets[cid] = entry;
           }
+          if (candidateEmail) {
+            resets[candidateEmail.toLowerCase().trim()] = entry;
+          }
+          localStorage.setItem('evaluar_active_resets', JSON.stringify(resets));
         } catch {}
-        try { localStorage.removeItem('evaluar_resultados_disc'); } catch {}
-
-        try {
-          const rawKnow = localStorage.getItem('gea_evaluaciones_conocimientos');
-          if (rawKnow) {
-            const list = JSON.parse(rawKnow);
-            localStorage.setItem('gea_evaluaciones_conocimientos', JSON.stringify(list.filter((x: any) => !isItemOfCandidate(x))));
-          }
-        } catch {}
-        try { localStorage.removeItem('evaluar_resultados_conocimientos'); } catch {}
-
-        try {
-          const rawComp = localStorage.getItem('gea_evaluaciones_competencias');
-          if (rawComp) {
-            const list = JSON.parse(rawComp);
-            localStorage.setItem('gea_evaluaciones_competencias', JSON.stringify(list.filter((x: any) => !isItemOfCandidate(x))));
-          }
-        } catch {}
-        try { localStorage.removeItem('evaluar_resultados_competencias'); } catch {}
-
-        // También limpiar sessionStorage
-        const sessionKeysToRemove: string[] = [];
-        for (let i = 0; i < sessionStorage.length; i++) {
-          const key = sessionStorage.key(i);
-          if (key && (allCandidateIds.some(cid => key.includes(cid)) || (candidateEmail && key.includes(candidateEmail)))) {
-            sessionKeysToRemove.push(key);
-          }
-        }
-        sessionKeysToRemove.forEach(k => sessionStorage.removeItem(k));
       }
 
-      // 2. Reiniciar estado del candidato en la tabla candidatos
-      const { error: resetError } = await supabase
-        .from('candidatos')
-        .update({
-          estado: 'INVITADO',
-          etapa_actual: 'ETAPA_1_PSICOTECNICA',
-          consentimiento_firmado: false,
-          consentimiento_firmado_en: null,
-          iniciado_en: null,
-          completado_en: null,
-          duracion_total_segundos: null,
-          actualizado_en: new Date().toISOString()
-        })
-        .in('id', allCandidateIds);
-
-      if (resetError) {
-        console.warn('[CandidateDataService] Error al resetear candidato:', resetError.message);
+      // 2. Reiniciar estado en la tabla candidatos a INVITADO para habilitar la nueva oportunidad
+      try {
+        await supabase
+          .from('candidatos')
+          .update({
+            estado: 'INVITADO',
+            etapa_actual: 'ETAPA_1_PSICOTECNICA',
+            consentimiento_firmado: false,
+            consentimiento_firmado_en: null,
+            iniciado_en: null,
+            completado_en: null,
+            duracion_total_segundos: null,
+            actualizado_en: nowIso
+          })
+          .in('id', allCandidateIds);
+      } catch (errUp) {
+        console.warn('[resetCandidateForResend] Error actualizando candidatos en Supabase:', errUp);
       }
 
-      // 3. Eliminar el puntaje en notas_candidato
+      // 3. Registrar reset total en notificaciones de Supabase para sincronización multi-dispositivo
       try {
-        await supabase
-          .from('notas_candidato')
-          .delete()
-          .in('candidato_id', allCandidateIds);
+        await supabase.from('notificaciones').insert({
+          tipo: 'SISTEMA',
+          titulo: 'RESET_ALL',
+          mensaje: JSON.stringify({
+            candidato_id: candidateId,
+            email: candidateEmail?.toLowerCase().trim(),
+            segment: 'ALL',
+            resetAt: nowIso
+          }),
+          candidato_id: candidateId,
+          leido: false,
+          creado_en: nowIso
+        });
       } catch {}
 
-      // 3.1 Eliminar evaluaciones de conocimientos previas
-      try {
-        await supabase
-          .from('evaluaciones_conocimientos')
-          .delete()
-          .in('candidato_id', allCandidateIds);
-      } catch {}
-
-      // 3.2 Eliminar evaluaciones DISC
-      try {
-        await supabase
-          .from('evaluaciones_disc')
-          .delete()
-          .in('candidato_id', allCandidateIds);
-      } catch {}
-
-      // 3.3 Eliminar evaluaciones de Competencias (tabla oficial y fallback)
-      try {
-        await supabase
-          .from('evaluaciones_competencias')
-          .delete()
-          .in('candidato_id', allCandidateIds);
-        if (candidateProcessId) {
-          await supabase
-            .from('evaluaciones_competencias')
-            .delete()
-            .eq('proceso_id', candidateProcessId)
-            .in('candidato_id', allCandidateIds);
-        }
-      } catch (compErr) {
-        console.warn('[resetCandidateForResend] Error borrando evaluaciones_competencias:', compErr);
-      }
-
-      // 3.4 Eliminar intentos y respuestas previas para permitir reinicio completo
-      try {
-        const { data: intentos } = await supabase
-          .from('intentos_examen')
-          .select('id')
-          .in('candidato_id', allCandidateIds);
-        if (intentos && intentos.length > 0) {
-          const intentoIds = intentos.map((i: any) => i.id);
-          await supabase.from('respuestas_candidato').delete().in('intento_id', intentoIds);
-          await supabase.from('intentos_examen').delete().in('candidato_id', allCandidateIds);
-        }
-      } catch {}
-
-      // 4. Registrar evento de auditoría del reenvío y reinicio de examen
+      // 3. Registrar evento de auditoría
       await this.logAuditEvent(
         candidateId,
         'SESSION_START' as AuditEventType,
-        'Administrador reinició el examen para permitir nuevo intento al candidato.',
+        'Administrador habilitó nueva oportunidad completa de examen para el postulante. Histórico preservado.',
         'INFO'
       );
 
-      // 5. Despacho del correo de reenvío de invitación vía API Vercel / Local
+      // 4. Despacho del correo de reenvío de invitación vía API Vercel / Local
       try {
         const { data: candData } = await supabase
           .from('candidatos')
@@ -1068,7 +995,7 @@ export const CandidateDataService = {
           .maybeSingle();
 
         if (candData?.correo) {
-          const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+          const origin = typeof window !== 'undefined' ? window.location.origin : 'https://evaluar-gea.vercel.app';
           const inviteUrl = `${origin}/login?code=${encodeURIComponent(candData.codigo_invitacion || '')}&dni=${encodeURIComponent(candData.dni || '')}&email=${encodeURIComponent(candData.correo)}`;
           
           await fetch('/api/send-email', {
@@ -1083,11 +1010,9 @@ export const CandidateDataService = {
             })
           }).catch(() => {});
         }
-      } catch (mailErr) {
-        console.warn('[CandidateDataService] Aviso al reenviar correo:', mailErr);
-      }
+      } catch {}
 
-      return !resetError;
+      return true;
     } catch (err) {
       console.warn('[CandidateDataService] Excepción en resetCandidateForResend:', err);
       return false;
@@ -1095,7 +1020,8 @@ export const CandidateDataService = {
   },
 
   /**
-   * Reinicia un segmento específico de evaluación (DISC, CONOCIMIENTOS o COMPETENCIAS) para el candidato
+   * Reinicia un segmento específico de evaluación (DISC, CONOCIMIENTOS o COMPETENCIAS)
+   * otorgando una NUEVA OPORTUNIDAD sin borrar información histórica de la base de datos.
    */
   async resetCandidateSegment(
     candidateId: string, 
@@ -1104,7 +1030,9 @@ export const CandidateDataService = {
     email?: string
   ): Promise<boolean> {
     try {
-      // Obtener todos los IDs de candidato asociados al email (distintos registros del mismo postulante)
+      const nowIso = new Date().toISOString();
+
+      // 1. Obtener todos los IDs de candidato asociados al email
       let allCandidateIds: string[] = [candidateId];
       if (email) {
         try {
@@ -1119,155 +1047,67 @@ export const CandidateDataService = {
         } catch {}
       }
 
-      // Helper: determina si un item de localStorage pertenece al candidato que se reinicia
-      const isItemOfCandidate = (x: any): boolean => {
-        const matchById = allCandidateIds.includes(x.candidatoId);
-        const matchByEmail = email ? (x.email && x.email.toLowerCase() === email.toLowerCase()) : false;
-        const matchByProc = processId && x.procesoId === processId && (!x.candidatoId || allCandidateIds.includes(x.candidatoId));
-        return matchById || matchByEmail || Boolean(matchByProc);
-      };
-
-      if (segment === 'DISC') {
-        // Borrar de evaluaciones_disc para todos los IDs del mismo email
-        await supabase.from('evaluaciones_disc').delete().in('candidato_id', allCandidateIds);
-        if (processId) {
-          await supabase.from('evaluaciones_disc').delete().eq('proceso_id', processId).in('candidato_id', allCandidateIds);
-        }
-        // Limpiar localStorage (clave real usada por EvaluacionesService) — eliminar TODOS los items del candidato
-        if (typeof window !== 'undefined') {
-          try {
-            const raw = localStorage.getItem('gea_evaluaciones_disc');
-            if (raw) {
-              const list = JSON.parse(raw);
-              const filtered = list.filter((x: any) => !isItemOfCandidate(x));
-              localStorage.setItem('gea_evaluaciones_disc', JSON.stringify(filtered));
-            }
-          } catch {}
-          try { localStorage.removeItem('evaluar_resultados_disc'); } catch {}
-        }
-      } else if (segment === 'CONOCIMIENTOS') {
-        // Borrar de evaluaciones_conocimientos solo filas que NO sean competencias
-        for (const cid of allCandidateIds) {
-          try {
-            const { data: knowRows } = await supabase
-              .from('evaluaciones_conocimientos')
-              .select('id, tema')
-              .eq('candidato_id', cid);
-            if (knowRows && knowRows.length > 0) {
-              const idsToDelete = knowRows
-                .filter((r: any) => !String(r.tema || '').match(/^COMPETENCIA:/i))
-                .map((r: any) => r.id);
-              if (idsToDelete.length > 0) {
-                await supabase.from('evaluaciones_conocimientos').delete().in('id', idsToDelete);
-              }
-            }
-          } catch {}
-        }
-        // Borrar intentos y respuestas
+      // 2. Guardar la marca de nueva oportunidad en evaluar_active_resets
+      // NO BORRA NINGÚN REGISTRO DE LA BASE DE DATOS. Los intentos previos quedan en el histórico.
+      if (typeof window !== 'undefined') {
         try {
-          const { data: intentos } = await supabase
-            .from('intentos_examen')
-            .select('id')
-            .in('candidato_id', allCandidateIds);
-          if (intentos && intentos.length > 0) {
-            const intentoIds = intentos.map((i: any) => i.id);
-            await supabase.from('respuestas_candidato').delete().in('intento_id', intentoIds);
-            await supabase.from('intentos_examen').delete().in('candidato_id', allCandidateIds);
-          }
-        } catch {}
-        // Limpiar localStorage — eliminar TODOS los items del candidato
-        if (typeof window !== 'undefined') {
-          try {
-            const raw = localStorage.getItem('gea_evaluaciones_conocimientos');
-            if (raw) {
-              const list = JSON.parse(raw);
-              const filtered = list.filter((x: any) => !isItemOfCandidate(x));
-              localStorage.setItem('gea_evaluaciones_conocimientos', JSON.stringify(filtered));
-            }
-          } catch {}
-          try { localStorage.removeItem('evaluar_resultados_conocimientos'); } catch {}
-        }
-      } else if (segment === 'COMPETENCIAS') {
-        // 1. Borrar directamente en evaluaciones_competencias en Supabase
-        try {
-          if (allCandidateIds.length > 0) {
-            await supabase.from('evaluaciones_competencias').delete().in('candidato_id', allCandidateIds);
-          }
-          if (processId) {
-            await supabase.from('evaluaciones_competencias').delete().eq('proceso_id', processId).in('candidato_id', allCandidateIds);
-          }
-        } catch (e) {
-          console.warn('[resetSegment] Excepción borrando competencias en tabla oficial:', e);
-        }
-
-        // 2. Borrar también el fallback histórico en evaluaciones_conocimientos (tema COMPETENCIA:%)
-        try {
+          const raw = localStorage.getItem('evaluar_active_resets');
+          const resets = raw ? JSON.parse(raw) : {};
+          const entry = {
+            [segment]: nowIso,
+            resetAt: nowIso
+          };
           for (const cid of allCandidateIds) {
-            const { data: knowComp } = await supabase
-              .from('evaluaciones_conocimientos')
-              .select('id, tema')
-              .eq('candidato_id', cid);
-            if (knowComp && knowComp.length > 0) {
-              const idsComp = knowComp
-                .filter((r: any) => String(r.tema || '').match(/^COMPETENCIA:/i))
-                .map((r: any) => r.id);
-              if (idsComp.length > 0) {
-                await supabase.from('evaluaciones_conocimientos').delete().in('id', idsComp);
-              }
-            }
+            resets[cid] = { ...(resets[cid] || {}), ...entry };
           }
-          if (processId) {
-            const { data: knowCompProc } = await supabase
-              .from('evaluaciones_conocimientos')
-              .select('id, tema')
-              .eq('proceso_id', processId);
-            if (knowCompProc && knowCompProc.length > 0) {
-              const idsComp = knowCompProc
-                .filter((r: any) => String(r.tema || '').match(/^COMPETENCIA:/i))
-                .map((r: any) => r.id);
-              if (idsComp.length > 0) {
-                await supabase.from('evaluaciones_conocimientos').delete().in('id', idsComp);
-              }
-            }
+          if (email) {
+            resets[email.toLowerCase().trim()] = { ...(resets[email.toLowerCase().trim()] || {}), ...entry };
           }
-        } catch (e) {
-          console.warn('[resetSegment] Excepción borrando fallback de competencias:', e);
-        }
-
-        // 3. Limpiar localStorage de competencias — eliminar TODOS los items del candidato
-        if (typeof window !== 'undefined') {
-          try {
-            const raw = localStorage.getItem('gea_evaluaciones_competencias');
-            if (raw) {
-              const list = JSON.parse(raw);
-              const filtered = list.filter((x: any) => !isItemOfCandidate(x));
-              localStorage.setItem('gea_evaluaciones_competencias', JSON.stringify(filtered));
-            }
-          } catch {}
-          try { localStorage.removeItem('evaluar_resultados_competencias'); } catch {}
-        }
+          localStorage.setItem('evaluar_active_resets', JSON.stringify(resets));
+        } catch {}
       }
 
-      // Resetear estado del candidato a EN_CURSO y limpiar completado_en para todos los IDs
-      // Esto es crítico para que la vista del candidato muestre las pruebas como pendientes
+      // 3. Resetear estado del candidato a EN_CURSO y limpiar completado_en para habilitar la nueva oportunidad
       try {
         await supabase
           .from('candidatos')
           .update({
             estado: 'EN_CURSO',
             completado_en: null,
-            actualizado_en: new Date().toISOString()
+            actualizado_en: nowIso
           })
           .in('id', allCandidateIds);
-      } catch {}
+      } catch (errUp) {
+        console.warn('[resetCandidateSegment] Error actualizando estado en Supabase:', errUp);
+      }
 
-      // Reevaluar estado del candidato según las pruebas restantes
+      // 4. Registrar evento de reset en la tabla notificaciones de Supabase para sincronización multi-dispositivo
+      try {
+        await supabase.from('notificaciones').insert({
+          tipo: 'SISTEMA',
+          titulo: `RESET_${segment}`,
+          mensaje: JSON.stringify({
+            candidato_id: candidateId,
+            email: email?.toLowerCase().trim(),
+            segment,
+            resetAt: nowIso
+          }),
+          candidato_id: candidateId,
+          proceso_id: processId,
+          leido: false,
+          creado_en: nowIso
+        });
+      } catch (notifErr) {
+        console.warn('[resetCandidateSegment] Error guardando notificación de reset:', notifErr);
+      }
+
+      // 5. Reevaluar estado del candidato según las pruebas restantes
       await EvaluacionesService.actualizarEstadoCandidatoTrasPrueba(candidateId, processId);
 
       await this.logAuditEvent(
         candidateId,
         'STAGE_FAIL' as AuditEventType,
-        `Administrador reinició el segmento de ${segment} para el candidato.`,
+        `Administrador habilitó nueva oportunidad de evaluación para el segmento ${segment}. Histórico preservado.`,
         'INFO'
       );
 

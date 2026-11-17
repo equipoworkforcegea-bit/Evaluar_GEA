@@ -207,10 +207,11 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
         }
 
         // Consultar resultados DISC, Conocimientos y Competencias para este proceso y candidato
+        const candEmail = candRow?.correo || candidate.email;
         const [completedDisc, completedKnowledgeList, completedCompetenciesList] = await Promise.all([
-          EvaluacionesService.obtenerResultadoDISC(candIdForThisProcess, procId),
-          EvaluacionesService.obtenerResultadosConocimientos(candIdForThisProcess, procId),
-          EvaluacionesService.obtenerResultadosCompetencias(candIdForThisProcess, procId)
+          EvaluacionesService.obtenerResultadoDISC(candIdForThisProcess, procId, candEmail),
+          EvaluacionesService.obtenerResultadosConocimientos(candIdForThisProcess, procId, candEmail),
+          EvaluacionesService.obtenerResultadosCompetencias(candIdForThisProcess, procId, candEmail)
         ]);
 
         const isDiscDone = Boolean(completedDisc);
@@ -227,6 +228,7 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
           }
         });
 
+        // La lista autorizada de competencias de la oportunidad actual proviene de completedCompetenciesList
         const competenciesScoresMap: Record<string, { score: number; level: string }> = {};
         completedCompetenciesList.forEach((c: any) => {
           if (c.competencia) {
@@ -234,17 +236,6 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
             const norm = normalizeTopicString(c.competencia);
             competenciesScoresMap[raw] = { score: c.puntaje, level: c.nivel || 'Avanzado' };
             competenciesScoresMap[norm] = { score: c.puntaje, level: c.nivel || 'Avanzado' };
-          }
-        });
-        completedKnowledgeList.forEach((k: any) => {
-          if (k.tema && k.tema.toLowerCase().startsWith('competencia:')) {
-            const rawName = k.tema.replace(/^competencia:\s*/i, '').trim();
-            const raw = rawName.toLowerCase();
-            const norm = normalizeTopicString(rawName);
-            if (!competenciesScoresMap[raw]) {
-              competenciesScoresMap[raw] = { score: k.puntaje, level: k.dificultad || 'Avanzado' };
-              competenciesScoresMap[norm] = { score: k.puntaje, level: k.dificultad || 'Avanzado' };
-            }
           }
         });
 

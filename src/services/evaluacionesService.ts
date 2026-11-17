@@ -156,9 +156,116 @@ export const EvaluacionesService = {
   },
 
   /**
-   * Obtiene los resultados de conocimientos completados por un candidato
+   * Registra una marca de reinicio en localStorage para un candidato
    */
-  async obtenerResultadosConocimientos(candidatoId: string, procesoId?: string, email?: string): Promise<any[]> {
+  recordActiveReset(candidatoId?: string, email?: string, segment: string = 'ALL', dateStr?: string): void {
+    if (typeof window === 'undefined') return;
+    try {
+      const nowIso = dateStr || new Date().toISOString();
+      const raw = localStorage.getItem('evaluar_active_resets');
+      const resets = raw ? JSON.parse(raw) : {};
+      const keys = [candidatoId, email ? email.toLowerCase().trim() : null].filter(Boolean) as string[];
+      for (const k of keys) {
+        resets[k] = {
+          ...(resets[k] || {}),
+          [segment]: nowIso,
+          resetAt: nowIso
+        };
+      }
+      localStorage.setItem('evaluar_active_resets', JSON.stringify(resets));
+    } catch {}
+  },
+
+  /**
+   * Resuelve de forma asíncrona y sincronizada el timestamp de reinicio para un candidato y segmento.
+   * Consulta localStorage y notificaciones/candidatos en Supabase para sincronización multi-dispositivo.
+   */
+  async resolveActiveResetTimestamp(
+    candidatoId?: string, 
+    email?: string, 
+    segment?: 'DISC' | 'CONOCIMIENTOS' | 'COMPETENCIAS'
+  ): Promise<number | null> {
+    // 1. Verificación rápida local
+    const localTs = this.getActiveResetTimestamp(candidatoId, email, segment);
+    if (localTs) return localTs;
+
+    // 2. Verificación en base de datos Supabase
+    try {
+      if (candidatoId && !candidatoId.startsWith('cand_')) {
+        const { data: notifs } = await supabase
+          .from('notificaciones')
+          .select('titulo, creado_en, mensaje')
+          .eq('candidato_id', candidatoId)
+          .eq('tipo', 'SISTEMA')
+          .order('creado_en', { ascending: false })
+          .limit(10);
+
+        if (notifs && notifs.length > 0) {
+          for (const n of notifs) {
+            const tit = String(n.titulo || '').toUpperCase();
+            if (tit === 'RESET_ALL' || (segment && tit === `RESET_${segment}`)) {
+              const ts = new Date(n.creado_en).getTime();
+              this.recordActiveReset(candidatoId, email, segment || 'ALL', n.creado_en);
+              return ts;
+            }
+          }
+        }
+
+        // Consultar candidato: si está en INVITADO o EN_CURSO con actualizado_en reciente
+        const { data: cand } = await supabase
+          .from('candidatos')
+          .select('estado, actualizado_en, completado_en')
+          .eq('id', candidatoId)
+          .maybeSingle();
+
+        if (cand?.estado === 'INVITADO' && cand.actualizado_en) {
+          const ts = new Date(cand.actualizado_en).getTime();
+          this.recordActiveReset(candidatoId, email, 'ALL', cand.actualizado_en);
+          return ts;
+        }
+      }
+    } catch {}
+
+    return null;
+  },
+
+  /**
+   * Determina si existe una orden de reinicio activa para el candidato y segmento.
+   * Retorna el timestamp (ms) del reinicio si existe, o null.
+   */
+  getActiveResetTimestamp(
+    candidatoId?: string, 
+    email?: string, 
+    segment?: 'DISC' | 'CONOCIMIENTOS' | 'COMPETENCIAS'
+  ): number | null {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = localStorage.getItem('evaluar_active_resets');
+      if (!raw) return null;
+      const resets = JSON.parse(raw);
+      const keys = [candidatoId, email ? email.toLowerCase().trim() : null].filter(Boolean) as string[];
+      for (const k of keys) {
+        const item = resets[k];
+        if (item) {
+          if (segment && item[segment]) {
+            return new Date(item[segment]).getTime();
+          }
+          if (item.ALL) {
+            return new Date(item.ALL).getTime();
+          }
+          if (item.resetAt) {
+            return new Date(item.resetAt).getTime();
+          }
+        }
+      }
+    } catch {}
+    return null;
+  },
+
+  /**
+   * Obtiene el historial completo de todas las pruebas de conocimientos rendidas por un candidato (incluyendo intentos previos)
+   */
+  async obtenerHistorialConocimientos(candidatoId: string, procesoId?: string, email?: string): Promise<any[]> {
     let supabaseReachable = false;
     try {
       // 1. Intentar por candidato_id exacto
@@ -167,8 +274,7 @@ export const EvaluacionesService = {
         if (procesoId) query = query.eq('proceso_id', procesoId);
         const { data, error } = await query.order('completado_en', { ascending: false });
         if (!error) {
-          supabaseReachable = true; // Supabase respondió OK
-          // Filtrar para que solo devuelva conocimientos reales (no fallback de competencias)
+          supabaseReachable = true;
           const filtered = (data || []).filter((r: any) => !String(r.tema || '').match(/^COMPETENCIA:/i));
           if (filtered.length > 0) return filtered;
         }
@@ -205,8 +311,6 @@ export const EvaluacionesService = {
       console.warn('[EvaluacionesService] Error consultando Supabase:', err);
     }
 
-    // Solo hacer fallback a LocalStorage si Supabase NO fue alcanzable (error de red)
-    // Si Supabase respondió OK pero devolvió vacío = datos borrados = NO usar localStorage
     if (supabaseReachable) return [];
 
     try {
@@ -222,23 +326,37 @@ export const EvaluacionesService = {
   },
 
   /**
-   * Obtiene el resultado DISC de un candidato
+   * Obtiene los resultados de conocimientos completados por un candidato para la oportunidad actual.
+   * Si existe un reinicio activo, solo devuelve los rendidos después del reinicio.
    */
-  async obtenerResultadoDISC(candidatoId: string, procesoId?: string, email?: string): Promise<any | null> {
+  async obtenerResultadosConocimientos(candidatoId: string, procesoId?: string, email?: string): Promise<any[]> {
+    const all = await this.obtenerHistorialConocimientos(candidatoId, procesoId, email);
+    const resetTs = await this.resolveActiveResetTimestamp(candidatoId, email, 'CONOCIMIENTOS');
+    if (!resetTs) return all;
+
+    return all.filter((item: any) => {
+      const cDate = item.completado_en || item.completadoEn;
+      if (!cDate) return false;
+      return new Date(cDate).getTime() > resetTs;
+    });
+  },
+
+  /**
+   * Obtiene el historial completo de DISC (incluyendo intentos previos)
+   */
+  async obtenerHistorialDISC(candidatoId: string, procesoId?: string, email?: string): Promise<any[]> {
     let supabaseReachable = false;
     try {
-      // 1. Intentar por candidato_id exacto
       if (candidatoId) {
         let query = supabase.from('evaluaciones_disc').select('*').eq('candidato_id', candidatoId);
         if (procesoId) query = query.eq('proceso_id', procesoId);
-        const { data, error } = await query.order('completado_en', { ascending: false }).limit(1);
+        const { data, error } = await query.order('completado_en', { ascending: false });
         if (!error) {
           supabaseReachable = true;
-          if (data && data.length > 0) return data[0];
+          if (data && data.length > 0) return data;
         }
       }
 
-      // 2. Si no hubo resultados y tenemos email, buscar todos los candidato_id asociados a ese email
       if (email) {
         const { data: candList } = await supabase.from('candidatos').select('id').eq('correo', email);
         if (candList && candList.length > 0) {
@@ -247,41 +365,57 @@ export const EvaluacionesService = {
             .from('evaluaciones_disc')
             .select('*')
             .in('candidato_id', ids)
-            .order('completado_en', { ascending: false })
-            .limit(1);
+            .order('completado_en', { ascending: false });
           if (!errByEmail) {
             supabaseReachable = true;
-            if (dataByEmail && dataByEmail.length > 0) return dataByEmail[0];
+            if (dataByEmail && dataByEmail.length > 0) return dataByEmail;
           }
         }
       }
 
-      // 3. Si no hay candidatoId pero hay procesoId
       if (procesoId && !candidatoId) {
-        const { data, error } = await supabase.from('evaluaciones_disc').select('*').eq('proceso_id', procesoId).order('completado_en', { ascending: false }).limit(1);
+        const { data, error } = await supabase.from('evaluaciones_disc').select('*').eq('proceso_id', procesoId).order('completado_en', { ascending: false });
         if (!error) {
           supabaseReachable = true;
-          if (data && data.length > 0) return data[0];
+          if (data && data.length > 0) return data;
         }
       }
     } catch (err) {
       console.warn('[EvaluacionesService] Error consultando DISC en Supabase:', err);
     }
 
-    // Solo hacer fallback a LocalStorage si Supabase NO fue alcanzable (error de red)
-    if (supabaseReachable) return null;
+    if (supabaseReachable) return [];
 
     try {
       const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY_DISC) || '[]');
-      const matches = stored.filter((item: any) => 
+      return stored.filter((item: any) => 
         (candidatoId && item.candidatoId === candidatoId) ||
         (procesoId && item.procesoId === procesoId) ||
         (email && item.email === email)
       );
-      return matches[matches.length - 1] || null;
     } catch {
-      return null;
+      return [];
     }
+  },
+
+  /**
+   * Obtiene el resultado DISC activo de un candidato para la oportunidad actual.
+   * Si existe un reinicio activo de DISC, devuelve null para que el postulante rinda de nuevo.
+   */
+  async obtenerResultadoDISC(candidatoId: string, procesoId?: string, email?: string): Promise<any | null> {
+    const list = await this.obtenerHistorialDISC(candidatoId, procesoId, email);
+    if (!list || list.length === 0) return null;
+
+    const latest = list[0];
+    const resetTs = await this.resolveActiveResetTimestamp(candidatoId, email, 'DISC');
+    if (!resetTs) return latest;
+
+    const cDate = latest.completado_en || latest.completadoEn;
+    if (!cDate || new Date(cDate).getTime() <= resetTs) {
+      return null; // Oportunidad activa pendiente
+    }
+
+    return latest;
   },
 
   /**
@@ -364,10 +498,10 @@ export const EvaluacionesService = {
   },
 
   /**
-   * Obtiene los resultados de competencias completadas por un candidato
+   * Obtiene el historial completo de todas las pruebas de competencias rendidas (incluyendo intentos previos)
    */
-  async obtenerResultadosCompetencias(candidatoId: string, procesoId?: string, email?: string): Promise<any[]> {
-    const resultsMap = new Map<string, any>();
+  async obtenerHistorialCompetencias(candidatoId: string, procesoId?: string, email?: string): Promise<any[]> {
+    const allList: any[] = [];
     let supabaseReachable = false;
 
     // 1. Consultar tabla oficial `evaluaciones_competencias` en Supabase
@@ -389,8 +523,9 @@ export const EvaluacionesService = {
         if (data && data.length > 0) {
           data.forEach((item: any) => {
             const rawName = (item.competencia || '').trim();
-            if (rawName && !resultsMap.has(rawName.toLowerCase())) {
-              resultsMap.set(rawName.toLowerCase(), {
+            if (rawName) {
+              allList.push({
+                id: item.id,
                 competencia: rawName,
                 puntaje: item.puntaje,
                 puntajeMaximo: item.puntaje_maximo,
@@ -406,7 +541,7 @@ export const EvaluacionesService = {
       console.warn('[EvaluacionesService] Error consultando evaluaciones_competencias en Supabase:', err);
     }
 
-    // 2. Fallback a evaluaciones_conocimientos para compatibilidad histórica (solo si Supabase responde)
+    // 2. Fallback a evaluaciones_conocimientos para compatibilidad histórica
     try {
       let query = supabase
         .from('evaluaciones_conocimientos')
@@ -426,8 +561,9 @@ export const EvaluacionesService = {
         if (data && data.length > 0) {
           data.forEach((item: any) => {
             const rawName = item.tema.replace(/^COMPETENCIA:\s*/i, '').trim();
-            if (rawName && !resultsMap.has(rawName.toLowerCase())) {
-              resultsMap.set(rawName.toLowerCase(), {
+            if (rawName) {
+              allList.push({
+                id: item.id,
                 competencia: rawName,
                 puntaje: item.puntaje,
                 puntajeMaximo: item.puntaje_maximo,
@@ -443,8 +579,7 @@ export const EvaluacionesService = {
       console.warn('[EvaluacionesService] Error consultando competencias en Supabase:', err);
     }
 
-    // 3. Solo usar LocalStorage si Supabase NO fue alcanzable (error de red)
-    // Si Supabase respondió OK pero devolvió vacío = datos borrados = NO usar localStorage
+    // 3. Fallback a LocalStorage solo si Supabase no estuvo disponible
     if (!supabaseReachable) {
       try {
         const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY_COMPETENCIAS) || '[]');
@@ -454,21 +589,54 @@ export const EvaluacionesService = {
           const matchMail = !email || item.email === email;
 
           if (matchCand && matchProc && matchMail && item.competencia) {
-            const key = item.competencia.trim().toLowerCase();
-            if (!resultsMap.has(key)) {
-              resultsMap.set(key, {
-                competencia: item.competencia,
-                puntaje: item.puntaje,
-                puntajeMaximo: item.puntajeMaximo || 20,
-                nivel: item.nivel,
-                completadoEn: item.completadoEn,
-                tiempoSegundos: item.tiempoSegundos
-              });
-            }
+            allList.push({
+              competencia: item.competencia,
+              puntaje: item.puntaje,
+              puntajeMaximo: item.puntajeMaximo || 20,
+              nivel: item.nivel,
+              completadoEn: item.completadoEn,
+              tiempoSegundos: item.tiempoSegundos
+            });
           }
         });
       } catch {}
     }
+
+    // Ordenar por fecha descendente
+    allList.sort((a, b) => {
+      const ta = a.completadoEn ? new Date(a.completadoEn).getTime() : 0;
+      const tb = b.completadoEn ? new Date(b.completadoEn).getTime() : 0;
+      return tb - ta;
+    });
+
+    return allList;
+  },
+
+  /**
+   * Obtiene los resultados de competencias completadas por un candidato para la oportunidad actual.
+   * Si la prueba fue reiniciada, solo se consideran como completadas las rendidas con posterioridad
+   * a la fecha del reinicio; los intentos previos se mantienen archivados en el histórico.
+   */
+  async obtenerResultadosCompetencias(candidatoId: string, procesoId?: string, email?: string): Promise<any[]> {
+    const all = await this.obtenerHistorialCompetencias(candidatoId, procesoId, email);
+    const resetTs = await this.resolveActiveResetTimestamp(candidatoId, email, 'COMPETENCIAS');
+
+    // Filtrar: si hay reinicio activo, solo las completadas DESPUÉS del reinicio
+    const activeList = all.filter((item: any) => {
+      if (!resetTs) return true;
+      const cDate = item.completadoEn || item.completado_en;
+      if (!cDate) return false;
+      return new Date(cDate).getTime() > resetTs;
+    });
+
+    // Mapear por nombre único de competencia para la oportunidad actual
+    const resultsMap = new Map<string, any>();
+    activeList.forEach((item: any) => {
+      const rawName = (item.competencia || '').trim();
+      if (rawName && !resultsMap.has(rawName.toLowerCase())) {
+        resultsMap.set(rawName.toLowerCase(), item);
+      }
+    });
 
     return Array.from(resultsMap.values());
   },
@@ -550,22 +718,22 @@ export const EvaluacionesService = {
         compList = Object.keys(perfil.competencias).filter(k => !k.startsWith('_'));
       }
 
-      // 3. Consultar pruebas completadas por el candidato
-      const [discRes, knowRes, compRes] = await Promise.all([
-        supabase.from('evaluaciones_disc').select('id').eq('candidato_id', candidatoId),
-        supabase.from('evaluaciones_conocimientos').select('tema').eq('candidato_id', candidatoId),
-        supabase.from('evaluaciones_competencias').select('competencia').eq('candidato_id', candidatoId)
+      // 3. Consultar pruebas activas del candidato pertenecientes a la oportunidad actual (filtrando históricos)
+      const [discRes, activeKnowList, activeCompList] = await Promise.all([
+        this.obtenerResultadoDISC(candidatoId, safeProcId),
+        this.obtenerResultadosConocimientos(candidatoId, safeProcId),
+        this.obtenerResultadosCompetencias(candidatoId, safeProcId)
       ]);
 
-      const discDone = !hasDisc || ((discRes.data || []).length > 0);
+      const discDone = !hasDisc || Boolean(discRes);
       
-      const completedKnowledgeTopics = (knowRes.data || []).map((k: any) => (k.tema || '').toLowerCase().trim());
+      const completedKnowledgeTopics = (activeKnowList || []).map((k: any) => (k.tema || '').toLowerCase().trim());
       const knowDone = rawKnowledgeList.length === 0 || rawKnowledgeList.every(kReq => {
         const kClean = kReq.toLowerCase().trim();
         return completedKnowledgeTopics.some(done => done.includes(kClean) || kClean.includes(done));
       });
 
-      const completedCompNames = (compRes.data || []).map((c: any) => (c.competencia || '').toLowerCase().trim());
+      const completedCompNames = (activeCompList || []).map((c: any) => (c.competencia || '').toLowerCase().trim());
       const compDone = compList.length === 0 || compList.every(cReq => {
         const cClean = cReq.toLowerCase().trim();
         return completedCompNames.some(done => done === cClean || done.includes(cClean) || cClean.includes(done));
