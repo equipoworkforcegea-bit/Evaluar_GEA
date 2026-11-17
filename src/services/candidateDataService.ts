@@ -240,7 +240,9 @@ function mapSupabaseToCandidate(row: any): Candidate {
   const rawStatus = String(row.estado || row.status || '').toUpperCase();
   const hasCompletedDate = Boolean(row.completado_en || row.completed_at);
 
-  if (rawStatus === 'EN_CURSO' || rawStatus === 'IN_PROGRESS' || rawStatus === 'EN_PROCESO') {
+  if (rawStatus === 'INVITADO' || rawStatus === 'INVITED' || rawStatus === 'SIN_INICIAR') {
+    status = 'INVITED';
+  } else if (rawStatus === 'EN_CURSO' || rawStatus === 'IN_PROGRESS' || rawStatus === 'EN_PROCESO') {
     status = 'IN_PROGRESS';
   } else if (rawStatus === 'EVALUADO' || rawStatus === 'SCORED' || rawStatus === 'COMPLETADO') {
     status = 'SCORED';
@@ -280,7 +282,7 @@ function mapSupabaseToCandidate(row: any): Candidate {
     ? Number(notasRow.puntaje)
     : (row.puntaje != null ? Number(row.puntaje) : null);
 
-  if (typeof window !== 'undefined' && row.id) {
+  if (typeof window !== 'undefined' && row.id && status !== 'INVITED') {
     try {
       const cachedScores = localStorage.getItem(`evaluar_candidate_scores_${row.id}`);
       if (cachedScores) scores = JSON.parse(cachedScores);
@@ -294,9 +296,9 @@ function mapSupabaseToCandidate(row: any): Candidate {
   const isCompletedOrEvaluated = (
     status === 'SCORED' ||
     status === 'FINALIST' ||
-    Boolean(row.completado_en) ||
-    hasRealScoreInDb
-  ) && status !== 'IN_PROGRESS';
+    (Boolean(row.completado_en) && status !== 'INVITED') ||
+    (hasRealScoreInDb && status !== 'INVITED')
+  ) && status !== 'IN_PROGRESS' && status !== 'INVITED';
   if (isCompletedOrEvaluated) {
     if (notasRow && Array.isArray(notasRow.notas) && notasRow.notas.length >= 3) {
       scores = {
@@ -419,10 +421,11 @@ export const CandidateDataService = {
       }
 
       // Obtener evaluaciones de conocimientos, competencias y DISC para calcular puntajes y estado completado
+      // Filtrando rigurosamente los intentos históricos de pruebas reiniciadas
       try {
         const [kRes, cRes, dRes] = await Promise.all([
-          supabase.from('evaluaciones_conocimientos').select('candidato_id, puntaje, puntaje_maximo, completado_en'),
-          supabase.from('evaluaciones_competencias').select('candidato_id, puntaje, puntaje_maximo, completado_en'),
+          supabase.from('evaluaciones_conocimientos').select('candidato_id, puntaje, puntaje_maximo, completado_en, tema'),
+          supabase.from('evaluaciones_competencias').select('candidato_id, puntaje, puntaje_maximo, completado_en, competencia'),
           supabase.from('evaluaciones_disc').select('candidato_id, completado_en')
         ]);
 
@@ -430,9 +433,84 @@ export const CandidateDataService = {
         const cList = cRes.data || [];
         const dList = dRes.data || [];
 
+        // Obtener marcas de reinicios para aislar estrictamente los resultados activos
+        const localResets = (() => {
+          if (typeof window === 'undefined') return {};
+          try {
+            const raw = localStorage.getItem('evaluar_active_resets');
+            return raw ? JSON.parse(raw) : {};
+          } catch { return {}; }
+        })();
+
+        let notifResets: any[] = [];
+        try {
+          const { data: nData } = await supabase
+            .from('notificaciones')
+            .select('candidato_id, titulo, creado_en, mensaje')
+            .eq('tipo', 'SISTEMA')
+            .ilike('titulo', 'RESET%')
+            .order('creado_en', { ascending: false });
+          notifResets = nData || [];
+        } catch {}
+
+        const getCandidateResetTs = (candId?: string, email?: string, segment?: string): number | null => {
+          const keys = [candId, email ? email.toLowerCase().trim() : null].filter(Boolean) as string[];
+          let latestTs: number | null = null;
+
+          for (const k of keys) {
+            const rec = localResets[k];
+            if (rec) {
+              if (rec.ALL) {
+                const ts = new Date(rec.ALL).getTime();
+                if (!latestTs || ts > latestTs) latestTs = ts;
+              }
+              if (segment && rec[segment]) {
+                const ts = new Date(rec[segment]).getTime();
+                if (!latestTs || ts > latestTs) latestTs = ts;
+              }
+            }
+          }
+
+          if (notifResets.length > 0) {
+            const segUpper = segment ? segment.toUpperCase() : '';
+            const segAlt = segment ? segment.replace(':', '_').toUpperCase() : '';
+
+            for (const n of notifResets) {
+              if (candId && n.candidato_id === candId) {
+                const tit = String(n.titulo || '').toUpperCase();
+                let match = tit === 'RESET_ALL';
+                if (!match && segment) {
+                  if (tit === `RESET_${segUpper}` || tit === `RESET_${segAlt}`) match = true;
+                  else if (n.mensaje && n.mensaje.includes(segUpper)) match = true;
+                }
+                if (match) {
+                  const ts = new Date(n.creado_en).getTime();
+                  if (!latestTs || ts > latestTs) latestTs = ts;
+                }
+              }
+            }
+          }
+
+          return latestTs;
+        };
+
         const kStatsMap = new Map<string, { totalScore: number; totalMax: number; lastDate: string }>();
         kList.forEach((k: any) => {
-          if (!k.candidato_id) return;
+          if (!k.candidato_id || !k.completado_en) return;
+          const kTs = new Date(k.completado_en).getTime();
+          const candObj = candidatesData.find((cd: any) => cd.id === k.candidato_id);
+          const candEmail = candObj?.correo;
+          const topicName = (k.tema || '').trim();
+
+          const rAll = getCandidateResetTs(k.candidato_id, candEmail, 'ALL');
+          const rKnow = getCandidateResetTs(k.candidato_id, candEmail, 'CONOCIMIENTOS');
+          const rTopic = topicName ? getCandidateResetTs(k.candidato_id, candEmail, `KNOW:${topicName}`) : null;
+          const maxReset = Math.max(rAll || 0, rKnow || 0, rTopic || 0);
+
+          if (maxReset > 0 && kTs <= maxReset) {
+            return; // Histórico, omitir de pruebas activas
+          }
+
           const sc = Number(k.puntaje || 0);
           const mx = Number(k.puntaje_maximo || 20);
           const cur = kStatsMap.get(k.candidato_id) || { totalScore: 0, totalMax: 0, lastDate: k.completado_en };
@@ -445,7 +523,21 @@ export const CandidateDataService = {
 
         const cStatsMap = new Map<string, { totalScore: number; count: number; lastDate: string }>();
         cList.forEach((c: any) => {
-          if (!c.candidato_id) return;
+          if (!c.candidato_id || !c.completado_en) return;
+          const cTs = new Date(c.completado_en).getTime();
+          const candObj = candidatesData.find((cd: any) => cd.id === c.candidato_id);
+          const candEmail = candObj?.correo;
+          const compName = (c.competencia || '').trim();
+
+          const rAll = getCandidateResetTs(c.candidato_id, candEmail, 'ALL');
+          const rComp = getCandidateResetTs(c.candidato_id, candEmail, 'COMPETENCIAS');
+          const rTopic = compName ? getCandidateResetTs(c.candidato_id, candEmail, `COMP:${compName}`) : null;
+          const maxReset = Math.max(rAll || 0, rComp || 0, rTopic || 0);
+
+          if (maxReset > 0 && cTs <= maxReset) {
+            return; // Histórico, omitir de pruebas activas
+          }
+
           const sc = Number(c.puntaje || 0);
           const maxP = Number(c.puntaje_maximo || 100);
           const percent = maxP === 20 ? Math.round((sc / 20) * 100) : sc;
@@ -459,7 +551,20 @@ export const CandidateDataService = {
 
         const dMap = new Map<string, string>();
         dList.forEach((d: any) => {
-          if (d.candidato_id) dMap.set(d.candidato_id, d.completado_en);
+          if (!d.candidato_id || !d.completado_en) return;
+          const dTs = new Date(d.completado_en).getTime();
+          const candObj = candidatesData.find((cd: any) => cd.id === d.candidato_id);
+          const candEmail = candObj?.correo;
+
+          const rAll = getCandidateResetTs(d.candidato_id, candEmail, 'ALL');
+          const rDisc = getCandidateResetTs(d.candidato_id, candEmail, 'DISC');
+          const maxReset = Math.max(rAll || 0, rDisc || 0);
+
+          if (maxReset > 0 && dTs <= maxReset) {
+            return; // Histórico, omitir de pruebas activas
+          }
+
+          dMap.set(d.candidato_id, d.completado_en);
         });
 
         candidatesData = candidatesData.map((c: any) => {
@@ -479,19 +584,30 @@ export const CandidateDataService = {
             finalScore = kAvg;
           }
 
-          const hasAnyActivity = Boolean(kStats || cStats || hasD || c.iniciado_en);
-          const isEvaluated = String(c.estado || '').toUpperCase() === 'EVALUADO';
-          const lastDate = kStats?.lastDate || cStats?.lastDate || dMap.get(c.id);
+          const hasAnyActiveTest = Boolean(kStats || cStats || hasD);
+          const rawStatus = String(c.estado || '').toUpperCase();
+          const isExplicitlyEvaluated = rawStatus === 'EVALUADO' || rawStatus === 'FINALISTA';
 
-          if (finalScore !== null || hasAnyActivity) {
+          if (hasAnyActiveTest) {
             return {
               ...c,
-              puntaje: finalScore !== null ? finalScore : c.puntaje,
-              estado: isEvaluated ? 'EVALUADO' : (hasAnyActivity ? 'EN_CURSO' : (c.estado || 'INVITADO')),
-              completado_en: isEvaluated ? (c.completado_en || lastDate) : null
+              puntaje: finalScore,
+              estado: isExplicitlyEvaluated ? 'EVALUADO' : 'EN_CURSO',
+              completado_en: isExplicitlyEvaluated ? (c.completado_en || kStats?.lastDate || cStats?.lastDate || dMap.get(c.id)) : null
+            };
+          } else {
+            // Sin pruebas activas completadas: si fue reiniciado o nunca inició, figura como INVITADO / Sin Iniciar
+            const rAll = getCandidateResetTs(c.id, c.correo, 'ALL');
+            const isReset = Boolean(rAll);
+            return {
+              ...c,
+              puntaje: null,
+              estado: (isReset || rawStatus === 'INVITADO' || rawStatus === 'SIN_INICIAR' || !isExplicitlyEvaluated) ? 'INVITADO' : c.estado,
+              iniciado_en: isReset ? null : c.iniciado_en,
+              completado_en: isReset ? null : (isExplicitlyEvaluated ? c.completado_en : null),
+              notas_candidato: isReset ? null : c.notas_candidato
             };
           }
-          return c;
         });
       } catch (errEval) {
         console.warn('[CandidateDataService] Error cargando evaluaciones para calcular puntajes:', errEval);
@@ -997,6 +1113,24 @@ export const CandidateDataService = {
             actualizado_en: nowIso
           })
           .in('id', allCandidateIds);
+
+        // Limpiar puntajes de notas_candidato para no arrastrar resultados históricos
+        try {
+          await supabase
+            .from('notas_candidato')
+            .update({ puntaje: null, notas: null })
+            .in('candidato_id', allCandidateIds);
+        } catch {}
+
+        // Limpiar caché local de puntajes para reflejar inmediatamente estado limpio
+        if (typeof window !== 'undefined') {
+          for (const cid of allCandidateIds) {
+            try {
+              localStorage.removeItem(`evaluar_candidate_scores_${cid}`);
+              localStorage.removeItem(`evaluar_candidate_report_${cid}`);
+            } catch {}
+          }
+        }
       } catch (errUp) {
         console.warn('[resetCandidateForResend] Error actualizando candidatos en Supabase:', errUp);
       }

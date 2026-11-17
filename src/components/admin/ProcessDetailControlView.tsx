@@ -267,10 +267,28 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
       });
 
       // 4. Actualizar estado del candidato en la tabla de candidatos
+      // Comprobar si tras reiniciar este segmento queda alguna otra evaluación activa completada
+      const remainingDisc = segment === 'DISC' ? null : candidateEvalsData.disc;
+      const remainingKnow = segment === 'CONOCIMIENTOS' 
+        ? [] 
+        : (segment.startsWith('KNOW:') 
+            ? candidateEvalsData.knowledge.filter(k => (k.tema || '').toLowerCase().trim() !== segment.replace('KNOW:', '').toLowerCase().trim())
+            : candidateEvalsData.knowledge);
+      const remainingComp = segment === 'COMPETENCIAS'
+        ? []
+        : (segment.startsWith('COMP:')
+            ? candidateEvalsData.competencies.filter(c => (c.competencia || '').toLowerCase().trim() !== segment.replace('COMP:', '').toLowerCase().trim())
+            : candidateEvalsData.competencies);
+
+      const hasRemainingActive = Boolean(remainingDisc) || remainingKnow.length > 0 || remainingComp.length > 0;
+      const nextStatus: any = hasRemainingActive ? 'IN_PROGRESS' : 'INVITED';
+
       const updatedCand: Candidate = {
         ...candidateToReset,
-        status: 'EN_PROGRESO',
+        status: nextStatus,
+        startedAt: hasRemainingActive ? candidateToReset.startedAt : undefined,
         completedAt: undefined,
+        scores: hasRemainingActive ? candidateToReset.scores : { overall: 0, stage1Psycho: 0, stage2Emotional: 0, stage3WorkCases: 0, percentile: 0 },
         retryCount: nextRetries
       };
       setLiveCandidates(prev => prev.map(c => c.id === candId ? updatedCand : c));
@@ -460,6 +478,9 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
       const isFin = finalizedList.some(f => f.id === c.id);
       if (isFin) return false;
       const s = String(c.status || '').toUpperCase();
+      // Si el postulante figura como invitado o sin iniciar tras un reinicio, NO es "En progreso"
+      if (s === 'INVITADO' || s === 'INVITED' || s === 'SIN_INICIAR') return false;
+
       const stage = String(c.currentStage || '').toUpperCase();
       const hasScores = (c.scores && (c.scores.overall || 0) > 0) || Boolean((c as any).puntaje);
       return (

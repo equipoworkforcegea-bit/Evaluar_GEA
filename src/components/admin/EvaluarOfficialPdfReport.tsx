@@ -149,47 +149,50 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
       }, 0) / competencyResults.length)
     : 0;
 
-  // 1. Puntaje General Real del Postulante (ponderado con evaluaciones reales)
-  const rawOverall = candidate.scores?.overall != null && candidate.scores.overall > 0
-    ? Math.round(candidate.scores.overall)
-    : (candidate.detailedReport?.jobFitPercentage != null && candidate.detailedReport.jobFitPercentage > 0
-        ? Math.round(candidate.detailedReport.jobFitPercentage)
-        : ((candidate as any).puntaje != null && (candidate as any).puntaje > 0
-            ? Math.round((candidate as any).puntaje)
-            : (hasKnowledge && hasCompetencies
-                ? Math.round((avgKnowledgePercent + avgCompetencyPercent) / 2)
-                : (hasKnowledge ? avgKnowledgePercent : (hasCompetencies ? avgCompetencyPercent : 0)))));
+  // 1. Puntaje General Real del Postulante: calculado ESTRICTAMENTE a partir de evaluaciones activas
+  const rawStatus = String(candidate.status || '').toUpperCase();
+  const isCandidateResetOrInvited = rawStatus === 'INVITADO' || rawStatus === 'INVITED' || rawStatus === 'SIN_INICIAR';
 
-  const overallScore = rawOverall;
+  const overallScore = (isCandidateResetOrInvited || (!hasKnowledge && !hasCompetencies && !discResult))
+    ? 0
+    : (hasKnowledge && hasCompetencies
+        ? Math.round((avgKnowledgePercent + avgCompetencyPercent) / 2)
+        : (hasKnowledge ? avgKnowledgePercent : (hasCompetencies ? avgCompetencyPercent : (candidate.scores?.overall || 0))));
 
+  const isPending = overallScore === 0;
   const isAdecuado = overallScore >= 75;
   const isEnDesarrollo = overallScore >= 50 && overallScore < 75;
 
-  const adecuacionText = isAdecuado ? 'ADECUADO' : isEnDesarrollo ? 'EN DESARROLLO' : 'NO ADECUADO';
-  const adecuacionBadgeClass = isAdecuado
-    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-    : isEnDesarrollo
-      ? 'bg-amber-50 text-amber-700 border-amber-200'
-      : 'bg-rose-50 text-rose-700 border-rose-200';
-  const adecuacionColor = isAdecuado ? '#10B981' : isEnDesarrollo ? '#F59E0B' : '#EF4444';
-  const adecuacionTextColor = isAdecuado ? 'text-emerald-600' : isEnDesarrollo ? 'text-amber-600' : 'text-rose-600';
+  const adecuacionText = isPending ? 'PENDIENTE DE EVALUACIÓN' : (isAdecuado ? 'ADECUADO' : isEnDesarrollo ? 'EN DESARROLLO' : 'NO ADECUADO');
+  const adecuacionBadgeClass = isPending
+    ? 'bg-slate-50 text-slate-700 border-slate-200'
+    : (isAdecuado
+        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+        : isEnDesarrollo
+          ? 'bg-amber-50 text-amber-700 border-amber-200'
+          : 'bg-rose-50 text-rose-700 border-rose-200');
+  const adecuacionColor = isPending ? '#94A3B8' : (isAdecuado ? '#10B981' : isEnDesarrollo ? '#F59E0B' : '#EF4444');
+  const adecuacionTextColor = isPending ? 'text-slate-600' : (isAdecuado ? 'text-emerald-600' : isEnDesarrollo ? 'text-amber-600' : 'text-rose-600');
 
-  const interpretacionDesc = isAdecuado
-    ? 'De acuerdo al CAP el evaluado se encuentra en un nivel ADECUADO. Es decir, que cuenta con las competencias requeridas para su contratación, el índice de dispersión respecto al nivel deseado es muy bajo.'
-    : isEnDesarrollo
-      ? 'De acuerdo al CAP el evaluado se encuentra en un nivel EN DESARROLLO. Requiere afianzar competencias específicas y acompañamiento en su curva de aprendizaje previo a la autonomía completa.'
-      : 'De acuerdo al CAP el evaluado se encuentra en un nivel NO ADECUADO. Muestra brechas importantes respecto al perfil óptimo requerido para las exigencias críticas del puesto.';
+  const interpretacionDesc = isPending
+    ? 'El postulante cuenta con una nueva oportunidad activa de evaluación. No registra pruebas completadas en la oportunidad actual.'
+    : (isAdecuado
+        ? 'De acuerdo al CAP el evaluado se encuentra en un nivel ADECUADO. Es decir, que cuenta con las competencias requeridas para su contratación, el índice de dispersión respecto al nivel deseado es muy bajo.'
+        : isEnDesarrollo
+          ? 'De acuerdo al CAP el evaluado se encuentra en un nivel EN DESARROLLO. Requiere afianzar competencias específicas y acompañamiento en su curva de aprendizaje previo a la autonomía completa.'
+          : 'De acuerdo al CAP el evaluado se encuentra en un nivel NO ADECUADO. Muestra brechas importantes respecto al perfil óptimo requerido para las exigencias críticas del puesto.');
 
   // Circunferencia del medidor circular (r = 42 -> 2 * PI * 42 = 263.89 ~ 264)
   const strokeDashoffset = Math.max(0, Math.min(264, Math.round(264 - (264 * Math.max(0, Math.min(100, overallScore))) / 100)));
 
   // Sub-puntajes de etapas o derivados proporcionales
-  const s1 = candidate.scores?.stage1Psycho ?? overallScore;
-  const s2 = candidate.scores?.stage2Emotional ?? overallScore;
-  const s3 = candidate.scores?.stage3WorkCases ?? overallScore;
+  const s1 = isPending ? 0 : (candidate.scores?.stage1Psycho ?? overallScore);
+  const s2 = isPending ? 0 : (candidate.scores?.stage2Emotional ?? overallScore);
+  const s3 = isPending ? 0 : (candidate.scores?.stage3WorkCases ?? overallScore);
 
   // Helper para resolver puntajes reales de competencias si existen en las evaluaciones del candidato
   const resolveCompetencyScore = (keywords: string[], fallbackVal: number): number => {
+    if (isPending) return 0;
     if (!competencyResults || competencyResults.length === 0) return fallbackVal;
     
     for (const r of competencyResults) {

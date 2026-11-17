@@ -96,22 +96,29 @@ export const InformesView: React.FC<InformesViewProps> = ({
     });
   }, [candidates, tests, selectedTestId, statusFilter, searchTerm]);
 
-  // Exportar a Excel
+  // Exportar a Excel (solo datos y resultados de pruebas activas)
   const handleExportExcel = () => {
-    const dataToExport = filteredCandidates.map((c, idx) => ({
-      'N°': idx + 1,
-      'Nombres': c.firstName,
-      'Apellidos': c.lastName,
-      'DNI / Documento': c.documentId || 'S/D',
-      'Email': c.email,
-      'Teléfono': c.phone || 'S/T',
-      'Campaña / Proceso': tests.find(t => t.id === c.testId)?.title || c.testId || 'Proceso General',
-      'Estado': c.status || 'INVITADO',
-      'Puntaje General': c.scores?.overall ? `${c.scores.overall}%` : 'Pendiente',
-      'Consentimiento Datos (Ley 29733)': c.isConsentSigned ? 'Aceptado' : 'Pendiente',
-      'Fecha Invitación': c.invitedAt ? new Date(c.invitedAt).toLocaleDateString() : 'N/A',
-      'Fecha Finalización': c.completedAt ? new Date(c.completedAt).toLocaleDateString() : 'N/A'
-    }));
+    const dataToExport = filteredCandidates.map((c, idx) => {
+      const rawStatus = String(c.status || '').toUpperCase();
+      const isInvited = rawStatus === 'INVITADO' || rawStatus === 'INVITED' || rawStatus === 'SIN_INICIAR';
+      const isEvaluated = !isInvited && (rawStatus === 'SCORED' || rawStatus === 'EVALUADO' || rawStatus === 'FINALIST' || rawStatus === 'FINALISTA');
+      const resolvedScore = !isInvited ? (c.scores?.overall || (c as any).puntaje || null) : null;
+
+      return {
+        'N°': idx + 1,
+        'Nombres': c.firstName,
+        'Apellidos': c.lastName,
+        'DNI / Documento': c.documentId || 'S/D',
+        'Email': c.email,
+        'Teléfono': c.phone || 'S/T',
+        'Campaña / Proceso': tests.find(t => t.id === c.testId)?.title || c.testId || 'Proceso General',
+        'Estado': isInvited ? 'INVITADO' : (isEvaluated ? 'EVALUADO' : 'EN_PROCESO'),
+        'Puntaje General': (resolvedScore && resolvedScore > 0) ? `${resolvedScore}%` : 'Pendiente',
+        'Consentimiento Datos (Ley 29733)': c.isConsentSigned ? 'Aceptado' : 'Pendiente',
+        'Fecha Invitación': c.invitedAt ? new Date(c.invitedAt).toLocaleDateString() : 'N/A',
+        'Fecha Finalización': isEvaluated && c.completedAt ? new Date(c.completedAt).toLocaleDateString() : 'N/A'
+      };
+    });
 
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
@@ -227,8 +234,10 @@ export const InformesView: React.FC<InformesViewProps> = ({
                       </td>
                       <td className="p-3.5 text-center font-bold">
                         {(() => {
-                          const resolvedScore = c.scores?.overall || candidateScores[c.id] || (c as any).puntaje;
-                          return resolvedScore ? (
+                          const rawStatus = String(c.status || '').toUpperCase();
+                          const isInvited = rawStatus === 'INVITADO' || rawStatus === 'INVITED' || rawStatus === 'SIN_INICIAR';
+                          const resolvedScore = !isInvited ? (c.scores?.overall || (c as any).puntaje || null) : null;
+                          return (resolvedScore && resolvedScore > 0) ? (
                             <span className={`px-2 py-0.5 rounded-md ${
                               resolvedScore >= 80 ? 'bg-[#2FA58B]/10 text-[#2FA58B]' : 'bg-[#F28C28]/10 text-[#F28C28]'
                             }`}>
@@ -241,11 +250,19 @@ export const InformesView: React.FC<InformesViewProps> = ({
                       </td>
                       <td className="p-3.5 text-center">
                         {(() => {
-                          const resolvedScore = c.scores?.overall || candidateScores[c.id] || (c as any).puntaje;
-                          const effectiveStatus = resolvedScore ? 'EVALUADO' : (c.status || 'INVITADO');
+                          const rawStatus = String(c.status || '').toUpperCase();
+                          const isInvited = rawStatus === 'INVITADO' || rawStatus === 'INVITED' || rawStatus === 'SIN_INICIAR';
+                          const isEvaluated = !isInvited && (rawStatus === 'SCORED' || rawStatus === 'EVALUADO' || rawStatus === 'FINALIST' || rawStatus === 'FINALISTA');
+                          const isInProgress = !isInvited && !isEvaluated && (rawStatus === 'IN_PROGRESS' || rawStatus === 'EN_CURSO' || rawStatus === 'EN_PROCESO');
+                          
+                          const effectiveStatus = isEvaluated ? 'EVALUADO' : (isInProgress ? 'EN_CURSO' : 'INVITADO');
                           return (
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              effectiveStatus === 'EVALUADO' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' : 'bg-[#1F2A5E]/10 text-[#1F2A5E] dark:text-[#5B8AE0]'
+                              effectiveStatus === 'EVALUADO' 
+                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' 
+                                : effectiveStatus === 'EN_CURSO'
+                                  ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'
+                                  : 'bg-[#1F2A5E]/10 text-[#1F2A5E] dark:text-[#5B8AE0]'
                             }`}>
                               {effectiveStatus}
                             </span>

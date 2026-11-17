@@ -857,6 +857,7 @@ export const EvaluacionesService = {
 
       // Total de requerimientos evaluados
       const allCompleted = discDone && knowDone && compDone;
+      const anyActiveCompleted = Boolean(discRes) || (activeKnowList && activeKnowList.length > 0) || (activeCompList && activeCompList.length > 0);
 
       if (allCompleted) {
         await supabase
@@ -868,7 +869,8 @@ export const EvaluacionesService = {
           })
           .eq('id', candidatoId);
         return 'EVALUADO';
-      } else {
+      } else if (anyActiveCompleted) {
+        // Tiene al menos una prueba completada que no fue reiniciada (en progreso)
         await supabase
           .from('candidatos')
           .update({
@@ -879,6 +881,27 @@ export const EvaluacionesService = {
           })
           .eq('id', candidatoId);
         return 'EN_CURSO';
+      } else {
+        // Todas las pruebas fueron reiniciadas o ninguna ha sido rendida aún -> Sin Iniciar / INVITADO
+        await supabase
+          .from('candidatos')
+          .update({
+            estado: 'INVITADO',
+            completado_en: null,
+            iniciado_en: null,
+            actualizado_en: new Date().toISOString()
+          })
+          .eq('id', candidatoId);
+
+        // Limpiar nota de notas_candidato para no arrastrar puntajes históricos
+        try {
+          await supabase
+            .from('notas_candidato')
+            .update({ puntaje: null, notas: null })
+            .eq('candidato_id', candidatoId);
+        } catch {}
+
+        return 'INVITADO' as any;
       }
     } catch (err) {
       console.warn('[EvaluacionesService] Error en actualizarEstadoCandidatoTrasPrueba:', err);
