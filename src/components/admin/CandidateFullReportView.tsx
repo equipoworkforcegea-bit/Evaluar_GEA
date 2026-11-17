@@ -33,7 +33,9 @@ import {
   CheckCircle2,
   XCircle,
   FileText,
-  Award
+  Award,
+  Percent,
+  AlertTriangle
 } from 'lucide-react';
 
 interface CandidateFullReportViewProps {
@@ -79,6 +81,10 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
   const [discResult, setDiscResult] = useState<any | null>(null);
   const [competencyResults, setCompetencyResults] = useState<any[]>([]);
   const [activeProfileCompetencies, setActiveProfileCompetencies] = useState<string[]>([]);
+  const [minApprovalScore, setMinApprovalScore] = useState<number>(() => {
+    const pMin = (process as any)?.competenciesMinApprovalScore ?? (process as any)?.competencias?._metadata?.competenciesMinApprovalScore;
+    return pMin != null && !isNaN(Number(pMin)) ? Number(pMin) : 70;
+  });
   const [loadingResults, setLoadingResults] = useState<boolean>(true);
   const [expandedExamIndex, setExpandedExamIndex] = useState<number | null>(null);
 
@@ -97,6 +103,7 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
 
         // Cargar competencias activas correspondientes al perfil usado en el proceso
         let loadedComps: string[] = [];
+        let loadedMinScore = 70;
 
         if (procId) {
           try {
@@ -109,6 +116,10 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
             if (procRow) {
               const perfil = procRow.perfiles_puesto;
               const meta = perfil?.competencias?._metadata || {};
+              const metaMin = meta.competenciesMinApprovalScore ?? meta.competenciesApprovalPercentage ?? (procRow as any)?.competencias_min_score;
+              if (metaMin != null && !isNaN(Number(metaMin))) {
+                loadedMinScore = Number(metaMin);
+              }
               if (Array.isArray(meta.selectedList) && meta.selectedList.length > 0) {
                 loadedComps = meta.selectedList;
               } else if (perfil?.competencias && typeof perfil.competencias === 'object') {
@@ -127,6 +138,10 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
           loadedComps = process.selectedCompetencies;
         }
 
+        if (process?.competenciesMinApprovalScore != null && !isNaN(Number(process.competenciesMinApprovalScore))) {
+          loadedMinScore = Number(process.competenciesMinApprovalScore);
+        }
+
         if (loadedComps.length === 0) {
           loadedComps = ['Orientación al Cliente', 'Integridad', 'Temple y Serenidad'];
         }
@@ -136,6 +151,7 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
           setDiscResult(dRes || null);
           setCompetencyResults(cList || []);
           setActiveProfileCompetencies(loadedComps);
+          setMinApprovalScore(loadedMinScore);
 
           if (kList && kList.length > 0) {
             setActiveMainTab('CONOCIMIENTOS');
@@ -233,12 +249,14 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
       const isCompleted = Boolean(match);
       const scoreNum = match ? Number(match.puntaje ?? 0) : 0;
       const scorePercent = match?.puntajeMaximo === 20 ? Math.round((scoreNum / 20) * 100) : scoreNum;
-      const levelStr = match?.nivel || (scorePercent >= 70 ? 'Apto' : scorePercent >= 50 ? 'En Desarrollo' : 'No Apto');
+      const isPassed = isCompleted && scorePercent >= minApprovalScore;
+      const levelStr = match?.nivel || (scorePercent >= minApprovalScore ? 'Apto' : scorePercent >= 50 ? 'En Desarrollo' : 'No Apto');
       const desc = COMPETENCY_DESCRIPTIONS[compName] || 'Evaluación conductual de aptitudes y desempeño profesional orientada a la vacante.';
 
       return {
         name: compName,
         isCompleted,
+        isPassed,
         score: scorePercent,
         level: levelStr,
         desc,
@@ -246,7 +264,7 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
         completadoEn: match?.completadoEn
       };
     });
-  }, [activeProfileCompetencies, competencyResults]);
+  }, [activeProfileCompetencies, competencyResults, minApprovalScore]);
 
 
   // Preguntas del acordeón de descripción (las 10 preguntas exactas de la captura de Evaluar)
@@ -1489,6 +1507,48 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                 </div>
               </div>
 
+              {/* Banner informativo de Criterio de Aprobación configurado en el Perfil */}
+              <div className="p-3.5 rounded-2xl bg-white dark:bg-[#151D3F] border border-[#DDE2EF] dark:border-[#2A3563] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-700 dark:text-emerald-300 shrink-0">
+                    <Percent className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-[#1F2A5E] dark:text-white block">
+                      Criterio del Perfil: Mínimo {minApprovalScore}% para Aprobación
+                    </span>
+                    <span className="text-[11px] text-[#6B7494] dark:text-[#9AA5C4]">
+                      Porcentaje requerido configurado en los componentes de evaluación del perfil
+                    </span>
+                  </div>
+                </div>
+
+                <div className="shrink-0 self-end sm:self-center">
+                  {(() => {
+                    const completedComps = activeCompetenciesData.filter(c => c.isCompleted);
+                    if (completedComps.length === 0) {
+                      return (
+                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                          Pendiente de evaluación
+                        </span>
+                      );
+                    }
+                    const allPassed = completedComps.every(c => c.score >= minApprovalScore);
+                    return allPassed ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800 shadow-2xs">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Alcanzó el porcentaje pedido</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-300 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800 shadow-2xs">
+                        <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                        <span>No alcanzó el porcentaje pedido</span>
+                      </span>
+                    );
+                  })()}
+                </div>
+              </div>
+
               {activeCompetenciesData.length === 0 ? (
                 <div className="p-8 text-center rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 text-slate-400 text-xs">
                   No se han configurado competencias activas para este perfil.
@@ -1506,7 +1566,7 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                             className="w-2.5 h-2.5 rounded-full shrink-0" 
                             style={{ 
                               backgroundColor: c.isCompleted 
-                                ? (c.score >= 70 ? '#10B981' : c.score >= 50 ? '#F59E0B' : '#EF4444') 
+                                ? (c.score >= minApprovalScore ? '#10B981' : '#F59E0B') 
                                 : '#94A3B8' 
                             }} 
                           />
@@ -1515,19 +1575,35 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                           </h4>
                         </div>
 
-                        <div className="flex items-center gap-2.5 shrink-0">
+                        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
                           {c.isCompleted ? (
                             <>
-                              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                                c.score >= 70 
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800' 
-                                  : c.score >= 50
-                                    ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
-                                    : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800'
-                              }`}>
+                              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                                 {c.level}
                               </span>
-                              <span className="text-base sm:text-lg font-black text-[#2FA58B]">
+
+                              {/* Insignia clara de si alcanzó o no el porcentaje pedido */}
+                              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border flex items-center gap-1 ${
+                                c.score >= minApprovalScore
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
+                                  : 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800'
+                              }`}>
+                                {c.score >= minApprovalScore ? (
+                                  <>
+                                    <Check className="w-3 h-3 stroke-[2.5]" />
+                                    <span>Alcanzó el porcentaje pedido</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <AlertTriangle className="w-3 h-3 text-rose-600" />
+                                    <span>No alcanzó el porcentaje pedido</span>
+                                  </>
+                                )}
+                              </span>
+
+                              <span className={`text-base sm:text-lg font-black ${
+                                c.score >= minApprovalScore ? 'text-[#2FA58B]' : 'text-amber-600 dark:text-amber-400'
+                              }`}>
                                 {c.score}%
                               </span>
                             </>
@@ -1539,15 +1615,25 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                         </div>
                       </div>
 
-                      {/* Barra de progreso visual */}
-                      <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                        <div 
-                          className="h-full rounded-full transition-all duration-500" 
-                          style={{ 
-                            width: `${c.isCompleted ? c.score : 0}%`,
-                            backgroundColor: c.score >= 70 ? '#2FA58B' : c.score >= 50 ? '#F59E0B' : '#EF4444'
-                          }} 
-                        />
+                      {/* Barra de progreso visual con marca del porcentaje mínimo exigido */}
+                      <div className="space-y-1">
+                        <div className="relative w-full h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                          <div 
+                            className="h-full rounded-full transition-all duration-500" 
+                            style={{ 
+                              width: `${c.isCompleted ? c.score : 0}%`,
+                              backgroundColor: c.score >= minApprovalScore ? '#2FA58B' : '#F59E0B'
+                            }} 
+                          />
+                        </div>
+                        <div className="flex justify-between items-center text-[10px] text-slate-500 dark:text-slate-400">
+                          <span>0%</span>
+                          <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            Mínimo pedido: {minApprovalScore}%
+                          </span>
+                          <span>100%</span>
+                        </div>
                       </div>
 
                       {/* Descripción conductual oficial */}
@@ -1557,11 +1643,24 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
 
                       {/* Detalle si fue completado */}
                       {c.isCompleted && (
-                        <div className="pt-1.5 flex flex-wrap items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400 border-t border-slate-200/60 dark:border-slate-800/60">
+                        <div className="pt-2 flex flex-wrap items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400 border-t border-slate-200/60 dark:border-slate-800/60">
                           <span className="flex items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400">
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             <span>Prueba completada</span>
                           </span>
+
+                          <span className="font-semibold">
+                            • Criterio: {c.score >= minApprovalScore ? (
+                              <span className="text-emerald-700 dark:text-emerald-300 font-bold">
+                                ✓ Alcanzó el porcentaje pedido ({c.score}% ≥ {minApprovalScore}%)
+                              </span>
+                            ) : (
+                              <span className="text-rose-600 dark:text-rose-400 font-bold">
+                                ✕ No alcanzó el porcentaje pedido ({c.score}% &lt; {minApprovalScore}%)
+                              </span>
+                            )}
+                          </span>
+
                           {c.tiempoSegundos && (
                             <span>• Tiempo empleado: {Math.floor(c.tiempoSegundos / 60)}m {c.tiempoSegundos % 60}s</span>
                           )}

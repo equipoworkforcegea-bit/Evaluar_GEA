@@ -7,6 +7,7 @@ interface CompetencyExamViewProps {
   competencyName: string;
   candidateId: string;
   processId?: string;
+  email?: string;
   onComplete: (score: number, level: string) => void;
   onExit?: () => void;
 }
@@ -15,6 +16,7 @@ export const CompetencyExamView: React.FC<CompetencyExamViewProps> = ({
   competencyName,
   candidateId,
   processId,
+  email,
   onComplete
 }) => {
   // Cargar bloques de evaluación adaptados específicamente a la competencia
@@ -152,6 +154,7 @@ export const CompetencyExamView: React.FC<CompetencyExamViewProps> = ({
       await EvaluacionesService.guardarResultadoCompetencia({
         candidatoId: candidateId,
         procesoId: processId || 'proc_default',
+        email,
         competencia: competencyName,
         puntaje: porcentaje,
         puntajeMaximo: 100,

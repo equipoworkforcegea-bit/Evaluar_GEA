@@ -47,7 +47,8 @@ import {
   ChevronRight,
   Edit3,
   Layers,
-  Star
+  Star,
+  Percent
 } from 'lucide-react';
 
 export type DifficultyLevel = 'BAJO' | 'MEDIO' | 'ALTO';
@@ -616,6 +617,17 @@ export const CreateProfileView: React.FC<CreateProfileViewProps> = ({
     return weights;
   });
 
+  // Porcentaje mínimo de aprobación para la evaluación de competencias (por defecto 70%)
+  const [competenciesMinApprovalScore, setCompetenciesMinApprovalScore] = useState<number>(() => {
+    const rawComp = (initialProfile as any)?.competencias;
+    const metaMin = rawComp?._metadata?.competenciesMinApprovalScore ?? rawComp?._metadata?.competenciesApprovalPercentage;
+    if (metaMin != null && !isNaN(Number(metaMin))) return Number(metaMin);
+    const directProp = (initialProfile as any)?.competenciesMinApprovalScore;
+    if (directProp != null && !isNaN(Number(directProp))) return Number(directProp);
+    return 70;
+  });
+  const [showApprovalDropdown, setShowApprovalDropdown] = useState<boolean>(false);
+
   const [openCompetencyMenuId, setOpenCompetencyMenuId] = useState<string | null>(null);
   const [expandedCompetenciesDetails, setExpandedCompetenciesDetails] = useState<Record<string, boolean>>({});
 
@@ -1086,6 +1098,7 @@ Requisitos:
       inProgressCount: initialProfile?.inProgressCount || 0,
       difficultyLevel,
       selectedCompetencies,
+      competenciesMinApprovalScore,
       knowledgeQuestionnaires: knowledgeItems.map(k => k.name),
       knowledgeItems: knowledgeItems,
       stages
@@ -1110,6 +1123,8 @@ Requisitos:
           selectedList: selectedCompetencies,
           competencyLevels,
           competencyWeights,
+          competenciesMinApprovalScore,
+          competenciesApprovalPercentage: competenciesMinApprovalScore,
           launchedBy: newProfile.launchedBy
         };
 
@@ -1546,23 +1561,118 @@ Requisitos:
                   )}
 
                   {isCompetencias && (
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
-                      selectedCompetencies.length > 0 
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                        : 'bg-amber-50 text-amber-700 border-amber-200'
-                    }`}>
-                      {selectedCompetencies.length > 0 ? (
-                        <>
-                          <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                          <span>Completo</span>
-                        </>
-                      ) : (
-                        <>
-                          <Clock className="w-3.5 h-3.5" />
-                          <span>Incompleto</span>
-                        </>
-                      )}
-                    </span>
+                    <>
+                      {/* Botón interactivo de % para elegir el umbral de aprobación de competencias */}
+                      <div className="relative" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => setShowApprovalDropdown(!showApprovalDropdown)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-900 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors shadow-2xs cursor-pointer"
+                          title="Elegir porcentaje mínimo para considerar aprobadas las pruebas de competencias en el resumen del postulante"
+                        >
+                          <Percent className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 stroke-[2.5]" />
+                          <span>{competenciesMinApprovalScore}% Aprobación</span>
+                          <ChevronDown className={`w-3 h-3 text-emerald-600 dark:text-emerald-400 transition-transform ${showApprovalDropdown ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {showApprovalDropdown && (
+                          <div 
+                            className="absolute right-0 top-full mt-2 w-72 p-3.5 bg-white dark:bg-[#182044] rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 z-50 animate-in fade-in zoom-in-95 space-y-3"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div>
+                              <span className="text-xs font-bold text-slate-800 dark:text-white block">
+                                Criterio de Aprobación de Competencias
+                              </span>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
+                                Porcentaje mínimo que el postulante debe alcanzar para que la prueba se considere aprobada en su resumen.
+                              </p>
+                            </div>
+
+                            {/* Stepper manual [- 70% +] */}
+                            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800">
+                              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                Porcentaje elegido:
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setCompetenciesMinApprovalScore(prev => Math.max(10, prev - 5))}
+                                  className="w-6 h-6 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer shadow-2xs"
+                                >
+                                  -
+                                </button>
+                                <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 w-11 text-center font-mono">
+                                  {competenciesMinApprovalScore}%
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setCompetenciesMinApprovalScore(prev => Math.min(100, prev + 5))}
+                                  className="w-6 h-6 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer shadow-2xs"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Chips con valores rápidos preestablecidos */}
+                            <div className="space-y-1.5">
+                              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
+                                Valores rápidos
+                              </span>
+                              <div className="grid grid-cols-4 gap-1.5">
+                                {[50, 60, 70, 75, 80, 85, 90, 100].map(val => (
+                                  <button
+                                    key={val}
+                                    type="button"
+                                    onClick={() => {
+                                      setCompetenciesMinApprovalScore(val);
+                                      setShowApprovalDropdown(false);
+                                    }}
+                                    className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                      competenciesMinApprovalScore === val
+                                        ? 'bg-emerald-600 text-white shadow-2xs scale-102'
+                                        : 'bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 text-slate-700 dark:text-slate-300'
+                                    }`}
+                                  >
+                                    {val}%
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="pt-1.5 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-[10px] text-slate-500">
+                              <span>Sugerido: 70%</span>
+                              <button
+                                type="button"
+                                onClick={() => setShowApprovalDropdown(false)}
+                                className="px-3 py-1 text-xs font-bold bg-[#1F2A5E] text-white rounded-lg hover:bg-[#161F46] cursor-pointer"
+                              >
+                                Aplicar
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
+                        selectedCompetencies.length > 0 
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                      }`}>
+                        {selectedCompetencies.length > 0 ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                            <span>Completo</span>
+                          </>
+                        ) : (
+                          <>
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>Incompleto</span>
+                          </>
+                        )}
+                      </span>
+                    </>
                   )}
 
                   {/* Icono de recargar/reset */}
@@ -1817,6 +1927,26 @@ Requisitos:
                     </div>
                   ) : (
                     <div className="space-y-4 text-left">
+                      {/* Criterio de aprobación de competencias configurado */}
+                      <div className="px-3.5 py-2.5 rounded-xl border border-emerald-200/90 bg-emerald-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+                        <div className="flex items-center gap-2 text-emerald-900 font-semibold">
+                          <Percent className="w-3.5 h-3.5 text-emerald-600 stroke-[2.5] shrink-0" />
+                          <span>Criterio para considerar aprobadas las pruebas de competencias:</span>
+                        </div>
+                        <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                          <span className="font-bold text-emerald-700 bg-white border border-emerald-200 px-2.5 py-0.5 rounded-full shadow-2xs">
+                            ≥ {competenciesMinApprovalScore}% requerido
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setShowApprovalDropdown(true)}
+                            className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 underline cursor-pointer"
+                          >
+                            Cambiar %
+                          </button>
+                        </div>
+                      </div>
+
                       {/* Sumatoria de pesos - barra de progreso igual a Conocimientos */}
                       <div className="p-3 sm:p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/50 flex items-center justify-between gap-4">
                         <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 shrink-0">

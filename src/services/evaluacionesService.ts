@@ -34,6 +34,7 @@ export interface DISCResultadoPayload {
 export interface CompetenciaResultadoPayload {
   candidatoId: string;
   procesoId: string;
+  email?: string;
   competencia: string;
   puntaje: number;
   puntajeMaximo?: number;

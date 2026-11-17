@@ -197,6 +197,7 @@ export interface EvaluationTest {
   totalDurationMinutes: number;
   stages: TestStageConfig[];
   selectedCompetencies: string[]; // Competencias específicas elegidas para evaluar al postulante
+  competenciesMinApprovalScore?: number; // Porcentaje mínimo para considerar aprobadas las competencias (ej: 70)
   knowledgeQuestionnaires?: string[]; // Nombres de cuestionarios de conocimientos configurados
   knowledgeItems?: any[]; // Items de configuración detallada de conocimientos
   profileId?: string; // ID de perfil_puesto vinculado en Supabase

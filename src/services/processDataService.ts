@@ -138,6 +138,7 @@ function mapRowToProcess(row: any): EvaluationTest {
     hiredCount: 0,
     averageScore: 0,
     selectedCompetencies: comps,
+    competenciesMinApprovalScore: Number(meta.competenciesMinApprovalScore ?? meta.competenciesApprovalPercentage ?? 70),
     knowledgeQuestionnaires,
     knowledgeItems: meta.knowledgeItems || [],
     competencyLevels: meta.competencyLevels || {},
@@ -200,6 +201,7 @@ function mapRowToProfile(row: any): EvaluationTest {
     hiredCount: 0,
     averageScore: 0,
     selectedCompetencies: compKeys,
+    competenciesMinApprovalScore: Number(metadata.competenciesMinApprovalScore ?? metadata.competenciesApprovalPercentage ?? 70),
     knowledgeQuestionnaires: parsedKnowledgeQuestionnaires,
     knowledgeItems: metadata.knowledgeItems || [],
     stages: metadata.stages || []

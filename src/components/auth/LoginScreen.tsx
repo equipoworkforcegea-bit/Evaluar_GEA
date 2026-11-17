@@ -451,7 +451,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       {/* ========================================================================= */}
       {/* MAIN CONTAINER: RESPONSIVE 2-COLUMN SPLIT (MOBILE-FIRST REORDERED)        */}
       {/* ========================================================================= */}
-      <div className="relative z-10 w-full max-w-[1600px] mx-auto min-h-screen flex flex-col lg:flex-row justify-between p-4 sm:p-8 lg:p-12 gap-6 lg:gap-10 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))]">
+      <div className="relative z-10 w-full max-w-[1600px] mx-auto min-h-screen flex flex-col lg:flex-row justify-between lg:items-center p-4 sm:p-8 lg:p-12 gap-6 lg:gap-10 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))]">
         
         {/* Mobile Header: Visible on mobile devices at top */}
         <div className="w-full flex lg:hidden items-center justify-between pb-2 border-b border-slate-200/80">
@@ -490,7 +490,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         {/* ======================================================================= */}
         {/* RIGHT COLUMN ON DESKTOP / TOP ACCESS CARD ON MOBILE (ORDER-1 LG:ORDER-2) */}
         {/* ======================================================================= */}
-        <div className="w-full lg:w-1/2 flex flex-col justify-between items-center lg:items-end order-1 lg:order-2">
+        <div className="w-full lg:w-1/2 flex flex-col justify-between items-center lg:items-end order-1 lg:order-2 lg:self-stretch">
           
           {/* Top Right Floating Settings / Theme Button (Desktop only) */}
           <div className="w-full hidden lg:flex justify-end">
@@ -1023,7 +1023,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         {/* ======================================================================= */}
         {/* LEFT COLUMN ON DESKTOP / INSPIRATION & BENEFITS (ORDER-2 LG:ORDER-1)   */}
         {/* ======================================================================= */}
-        <div className="w-full lg:w-1/2 flex flex-col justify-between order-2 lg:order-1 pt-6 lg:pt-0">
+        <div className="w-full lg:w-1/2 flex flex-col justify-between order-2 lg:order-1 pt-6 lg:pt-0 lg:self-stretch">
           
           {/* Top Brand Header (Desktop) */}
           <div className="hidden lg:block">

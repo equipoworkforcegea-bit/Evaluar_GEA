@@ -329,6 +329,7 @@ function ProcesosInvitadosViewWrapper({
         competencyName={activeExam.topicName || 'Orientación al Cliente'}
         candidateId={activeExam.candidateId || candidate.id}
         processId={activeExam.testId}
+        email={candidate.email}
         onComplete={(_score, _level) => {
           setRefreshKey(k => k + 1);
           setActiveExam(null);

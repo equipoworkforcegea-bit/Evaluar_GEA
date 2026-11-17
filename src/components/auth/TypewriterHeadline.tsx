@@ -116,13 +116,25 @@ export const TypewriterHeadline: React.FC = () => {
   const l3High = getSlice(currentPhrase.line3Highlight);
   const l3Suf = getSlice(currentPhrase.line3Suffix);
 
+  // Determine which line the cursor is currently on
+  const isTypingL1 = charCount <= (currentPhrase.line1Prefix.length + currentPhrase.line1Highlight.length + currentPhrase.line1Suffix.length);
+  const isTypingL2 = !isTypingL1 && charCount <= (currentPhrase.line1Prefix.length + currentPhrase.line1Highlight.length + currentPhrase.line1Suffix.length + 1 + currentPhrase.line2Prefix.length + currentPhrase.line2Highlight.length);
+  const isTypingL3 = !isTypingL1 && !isTypingL2;
+
+  const cursorElement = (
+    <span 
+      className="inline-block w-1 sm:w-1.5 h-[0.85em] bg-[#1F2A5E] ml-1.5 align-middle shadow-[0_0_8px_rgba(31,42,94,0.4)] rounded-xs animate-pulse"
+      style={{ animationDuration: '0.8s' }}
+    />
+  );
+
   return (
     <div className="relative">
-      {/* Main Headline with Typewriter Rendering & Harmonic Colors */}
-      <h1 className="text-3xl sm:text-4xl xl:text-[44px] font-black tracking-tight leading-[1.15] uppercase select-none min-h-[140px] sm:min-h-[160px] text-slate-900">
+      {/* Main Headline with Typewriter Rendering & Harmonic Colors - Fixed stable height so it never shifts layout */}
+      <h1 className="text-3xl sm:text-4xl xl:text-[44px] font-black tracking-tight leading-[1.18] uppercase select-none min-h-[195px] sm:min-h-[210px] xl:min-h-[225px] text-slate-900 flex flex-col justify-start">
         
-        {/* Line 1 */}
-        <span className="block">
+        {/* Line 1 - Always reserved height */}
+        <span className="block min-h-[1.2em]">
           <span className="text-slate-900">{l1Pre}</span>
           {l1High && (
             <span className="bg-gradient-to-r from-[#1F2A5E] via-[#2F5BA8] to-[#2F5BA8] bg-clip-text text-transparent drop-shadow-[0_2px_12px_rgba(31,42,94,0.2)]">
@@ -130,40 +142,45 @@ export const TypewriterHeadline: React.FC = () => {
             </span>
           )}
           <span className="text-slate-800">{l1Suf}</span>
+          {isTypingL1 && cursorElement}
         </span>
 
-        {/* Line 2 */}
-        {(l2Pre || l2High) && (
-          <span className="block mt-1">
-            <span className="bg-gradient-to-r from-[#2FA58B] via-[#2FA58B] to-[#1F2A5E] bg-clip-text text-transparent drop-shadow-[0_2px_10px_rgba(47,165,139,0.2)]">
-              {l2Pre}
-            </span>
-            <span className="text-slate-900">{l2High}</span>
-          </span>
-        )}
-
-        {/* Line 3 */}
-        {(l3Pre || l3High || l3Suf) && (
-          <span className="block mt-1">
-            <span className="text-slate-700">{l3Pre}</span>
-            {l3High && (
-              <span className="bg-gradient-to-r from-[#1F2A5E] via-[#2F5BA8] to-[#2FA58B] bg-clip-text text-transparent drop-shadow-[0_2px_10px_rgba(31,42,94,0.2)]">
-                {l3High}
+        {/* Line 2 - Always reserved height */}
+        <span className="block mt-1 min-h-[1.2em]">
+          {(l2Pre || l2High) ? (
+            <>
+              <span className="bg-gradient-to-r from-[#2FA58B] via-[#2FA58B] to-[#1F2A5E] bg-clip-text text-transparent drop-shadow-[0_2px_10px_rgba(47,165,139,0.2)]">
+                {l2Pre}
               </span>
-            )}
-            {l3Suf && (
-              <span className="text-[#E4572E] drop-shadow-[0_0_10px_rgba(228,87,46,0.4)]">
-                {l3Suf}
-              </span>
-            )}
-          </span>
-        )}
+              <span className="text-slate-900">{l2High}</span>
+              {isTypingL2 && cursorElement}
+            </>
+          ) : (
+            <span className="opacity-0 select-none pointer-events-none">&nbsp;</span>
+          )}
+        </span>
 
-        {/* Glowing Mechanical Blinking Cursor */}
-        <span 
-          className="inline-block w-1 sm:w-1.5 h-[0.85em] bg-[#1F2A5E] ml-1.5 align-middle shadow-[0_0_8px_rgba(31,42,94,0.4)] rounded-xs animate-pulse"
-          style={{ animationDuration: '0.8s' }}
-        />
+        {/* Line 3 - Always reserved height */}
+        <span className="block mt-1 min-h-[1.2em]">
+          {(l3Pre || l3High || l3Suf) ? (
+            <>
+              <span className="text-slate-700">{l3Pre}</span>
+              {l3High && (
+                <span className="bg-gradient-to-r from-[#1F2A5E] via-[#2F5BA8] to-[#2FA58B] bg-clip-text text-transparent drop-shadow-[0_2px_10px_rgba(31,42,94,0.2)]">
+                  {l3High}
+                </span>
+              )}
+              {l3Suf && (
+                <span className="text-[#E4572E] drop-shadow-[0_0_10px_rgba(228,87,46,0.4)]">
+                  {l3Suf}
+                </span>
+              )}
+              {isTypingL3 && cursorElement}
+            </>
+          ) : (
+            <span className="opacity-0 select-none pointer-events-none">&nbsp;</span>
+          )}
+        </span>
       </h1>
     </div>
   );
