@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { EvaluacionesService } from '../../services/evaluacionesService';
+import { supabase } from '../../services/supabaseClient';
 import { Candidate, EvaluationTest } from '../../types';
 import { AuthStorage } from '../../services/authStorage';
 import { ExportReportModal } from './ExportReportModal';
