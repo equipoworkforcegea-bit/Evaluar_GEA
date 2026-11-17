@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Candidate, EvaluationTest } from '../../types';
 import { 
   X, 
@@ -61,6 +61,21 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
   const handleDownload = () => {
     setShowFullPdfView(true);
   };
+
+  // Cerrar modal o vista completa al presionar ESC
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        if (showFullPdfView) {
+          setShowFullPdfView(false);
+        } else {
+          onClose();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showFullPdfView, onClose]);
 
   return (
     <>

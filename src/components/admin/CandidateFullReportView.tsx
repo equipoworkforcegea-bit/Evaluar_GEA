@@ -91,6 +91,10 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
     const pMin = (process as any)?.competenciesMinApprovalScore ?? (process as any)?.competencias?._metadata?.competenciesMinApprovalScore;
     return pMin != null && !isNaN(Number(pMin)) ? Number(pMin) : 70;
   });
+  const [knowledgeMinApprovalScore, setKnowledgeMinApprovalScore] = useState<number>(() => {
+    const kMin = (process as any)?.knowledgeMinApprovalScore ?? (process as any)?.competencias?._metadata?.knowledgeMinApprovalScore;
+    return kMin != null && !isNaN(Number(kMin)) ? Number(kMin) : 70;
+  });
   const [loadingResults, setLoadingResults] = useState<boolean>(true);
   const [expandedExamIndex, setExpandedExamIndex] = useState<number | null>(null);
 
@@ -113,6 +117,7 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
         // Cargar competencias activas correspondientes al perfil usado en el proceso
         let loadedComps: string[] = [];
         let loadedMinScore = 70;
+        let loadedKnowledgeMinScore = 70;
 
         if (procId) {
           try {
@@ -128,6 +133,10 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
               const metaMin = meta.competenciesMinApprovalScore ?? meta.competenciesApprovalPercentage ?? (procRow as any)?.competencias_min_score;
               if (metaMin != null && !isNaN(Number(metaMin))) {
                 loadedMinScore = Number(metaMin);
+              }
+              const metaKMin = meta.knowledgeMinApprovalScore ?? meta.knowledgeApprovalPercentage ?? (procRow as any)?.conocimientos_min_score;
+              if (metaKMin != null && !isNaN(Number(metaKMin))) {
+                loadedKnowledgeMinScore = Number(metaKMin);
               }
               if (Array.isArray(meta.selectedList) && meta.selectedList.length > 0) {
                 loadedComps = meta.selectedList;
@@ -150,6 +159,9 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
         if (process?.competenciesMinApprovalScore != null && !isNaN(Number(process.competenciesMinApprovalScore))) {
           loadedMinScore = Number(process.competenciesMinApprovalScore);
         }
+        if ((process as any)?.knowledgeMinApprovalScore != null && !isNaN(Number((process as any).knowledgeMinApprovalScore))) {
+          loadedKnowledgeMinScore = Number((process as any).knowledgeMinApprovalScore);
+        }
 
         if (loadedComps.length === 0) {
           loadedComps = ['Orientación al Cliente', 'Integridad', 'Temple y Serenidad'];
@@ -164,6 +176,7 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
           setHistoryCompetencies(cHist || []);
           setActiveProfileCompetencies(loadedComps);
           setMinApprovalScore(loadedMinScore);
+          setKnowledgeMinApprovalScore(loadedKnowledgeMinScore);
 
           if (kList && kList.length > 0) {
             setActiveMainTab('CONOCIMIENTOS');
@@ -1379,23 +1392,86 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                   </div>
                 ) : (
                   <>
+                    {/* Banner informativo de Criterio de Aprobación configurado en el Perfil para Conocimientos */}
+                    <div className="p-3.5 rounded-2xl bg-white dark:bg-[#151D3F] border border-[#DDE2EF] dark:border-[#2A3563] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-700 dark:text-indigo-300 shrink-0">
+                          <Percent className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-[#1F2A5E] dark:text-white block">
+                            Criterio del Perfil: Mínimo {knowledgeMinApprovalScore}% para Aprobación · Obtenido: {avgKnowledgePercent}%
+                          </span>
+                          <span className="text-[11px] text-[#6B7494] dark:text-[#9AA5C4]">
+                            Porcentaje mínimo requerido configurado en los componentes de evaluación técnica
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 self-end sm:self-center">
+                        {!hasKnowledge ? (
+                          <span className="px-3 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                            Pendiente de evaluación
+                          </span>
+                        ) : avgKnowledgePercent >= knowledgeMinApprovalScore ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800 shadow-2xs">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Alcanzó el porcentaje pedido ({avgKnowledgePercent}% ≥ {knowledgeMinApprovalScore}%)</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-300 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800 shadow-2xs">
+                            <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                            <span>No alcanzó el porcentaje pedido ({avgKnowledgePercent}% &lt; {knowledgeMinApprovalScore}%)</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Alerta si la prueba de conocimientos fue reiniciada y tiene nueva oportunidad pendiente */}
+                    {knowledgeResults.length === 0 && historyKnowledge.length > 0 && (
+                      <div className="p-4 rounded-2xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 flex items-start gap-3 shadow-xs">
+                        <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0 border border-amber-300/60 mt-0.5">
+                          <RotateCw className="w-4 h-4 animate-spin" style={{ animationDuration: '4s' }} />
+                        </div>
+                        <div className="space-y-1 text-xs">
+                          <h4 className="font-bold text-amber-950 dark:text-amber-100 flex items-center gap-2">
+                            <span>Oportunidad de Evaluación Técnica Reiniciada</span>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200">
+                              Pendiente de rendición
+                            </span>
+                          </h4>
+                          <p className="leading-relaxed text-amber-800 dark:text-amber-300 text-[11px]">
+                            El administrador otorgó una nueva oportunidad para que el postulante rinda la prueba técnica de conocimientos. La prueba se encuentra habilitada en su portal. Todos los datos de intentos anteriores se preservan íntegros en la base de datos y se pueden consultar en la pestaña <strong>Historial de Reinicios</strong>.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setActiveMainTab('HISTORIAL')}
+                            className="inline-flex items-center gap-1.5 font-bold text-amber-900 dark:text-amber-200 underline hover:text-amber-700 cursor-pointer pt-1"
+                          >
+                            <History className="w-3.5 h-3.5" />
+                            <span>Ver resultados del intento anterior en Historial de Reinicios →</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Dictamen: RECOMENDADO o NO RECOMENDADO */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white dark:bg-[#182044] border border-[#DDE2EF] dark:border-[#2A3563] shadow-2xs">
                       <div>
                         <span className="text-[10px] font-bold text-[#6B7494] uppercase tracking-wider block">Dictamen de Evaluación Técnica</span>
                         <h3 className="text-xl sm:text-2xl font-black text-[#1F2A5E] dark:text-white flex items-center gap-2">
                           <span>Resultado:</span>
-                          <span className={scoreVal >= 70 ? 'text-[#2FA58B]' : scoreVal >= 60 ? 'text-amber-500' : 'text-rose-500'}>
-                            {scoreVal >= 70 ? 'RECOMENDADO' : scoreVal >= 60 ? 'RECOMENDADO CON OBSERVACIONES' : 'NO RECOMENDADO'}
+                          <span className={avgKnowledgePercent >= knowledgeMinApprovalScore ? 'text-[#2FA58B]' : avgKnowledgePercent >= (knowledgeMinApprovalScore - 15) ? 'text-amber-500' : 'text-rose-500'}>
+                            {avgKnowledgePercent >= knowledgeMinApprovalScore ? 'RECOMENDADO' : avgKnowledgePercent >= (knowledgeMinApprovalScore - 15) ? 'RECOMENDADO CON OBSERVACIONES' : 'NO RECOMENDADO'}
                           </span>
                         </h3>
                       </div>
                       <div className={`px-4 py-1.5 rounded-full text-xs font-black border uppercase tracking-wider self-start sm:self-center ${
-                        scoreVal >= 70 ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300' :
-                        scoreVal >= 60 ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300' :
+                        avgKnowledgePercent >= knowledgeMinApprovalScore ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300' :
+                        avgKnowledgePercent >= (knowledgeMinApprovalScore - 15) ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300' :
                         'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300'
                       }`}>
-                        {scoreVal >= 70 ? 'RECOMENDADO' : scoreVal >= 60 ? 'OBSERVADO' : 'NO RECOMENDADO'}
+                        {avgKnowledgePercent >= knowledgeMinApprovalScore ? 'RECOMENDADO' : avgKnowledgePercent >= (knowledgeMinApprovalScore - 15) ? 'OBSERVADO' : 'NO RECOMENDADO'}
                       </div>
                     </div>
 
@@ -1412,38 +1488,115 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                     </div>
 
                     {/* Lista de cuestionarios */}
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {knowledgeResults.map((item, idx) => {
                         const score = Number(item.puntaje ?? 0);
                         const maxScore = Number(item.puntaje_maximo ?? 20);
                         const pct = Math.round((score / maxScore) * 100);
                         const isExpanded = expandedExamIndex === idx;
-                        const scoreColor = pct >= 80 ? '#2FA58B' : pct >= 60 ? '#F59E0B' : '#EF4444';
+                        const reached = pct >= knowledgeMinApprovalScore;
+                        const scoreColor = reached ? '#2FA58B' : pct >= 60 ? '#F59E0B' : '#EF4444';
                         return (
-                          <div key={idx} className="rounded-xl border border-[#DDE2EF] dark:border-[#2A3563] bg-white dark:bg-[#182044] overflow-hidden">
-                            <button
-                              type="button"
-                              onClick={() => setExpandedExamIndex(isExpanded ? null : idx)}
-                              className="w-full flex items-center justify-between p-4 text-left hover:bg-slate-50 dark:hover:bg-white/5 transition-colors cursor-pointer"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${scoreColor}20` }}>
+                          <div key={idx} className="rounded-2xl border border-[#DDE2EF] dark:border-[#2A3563] bg-white dark:bg-[#182044] p-4 sm:p-5 space-y-3 transition-all hover:border-[#6355A4]/40">
+                            {/* Cabecera del cuestionario */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${scoreColor}20` }}>
                                   <FileText className="w-4 h-4" style={{ color: scoreColor }} />
                                 </div>
-                                <div>
-                                  <p className="text-xs font-bold text-[#161C3A] dark:text-white">{item.tema || 'Cuestionario'}</p>
-                                  <p className="text-[10px] text-[#6B7494]">
+                                <div className="min-w-0">
+                                  <h4 className="text-sm font-bold text-[#161C3A] dark:text-white truncate">
+                                    {item.tema || 'Cuestionario'}
+                                  </h4>
+                                  <p className="text-[10px] text-[#6B7494] mt-0.5">
                                     {item.aciertos ?? '—'}/{item.total_preguntas ?? (item.puntaje_maximo ?? '—')} aciertos · {new Date(item.completado_en).toLocaleDateString('es-PE')}
                                   </p>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-3">
-                                <span className="text-sm font-black" style={{ color: scoreColor }}>{score}/{maxScore} pts</span>
-                                {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+
+                              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
+                                {/* Insignia de criterio alcanzado / no alcanzado */}
+                                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border flex items-center gap-1 ${
+                                  reached
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
+                                    : 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800'
+                                }`}>
+                                  {reached ? (
+                                    <>
+                                      <CheckCircle2 className="w-3.5 h-3.5" />
+                                      <span>Alcanzó el % pedido</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <AlertTriangle className="w-3.5 h-3.5" />
+                                      <span>No alcanzó el % pedido</span>
+                                    </>
+                                  )}
+                                </span>
+
+                                {/* Porcentaje numérico */}
+                                <span className="text-base font-black px-2" style={{ color: scoreColor }}>
+                                  {pct}%
+                                </span>
+
+                                <span className="text-xs font-semibold text-slate-500">
+                                  ({score}/{maxScore} pts)
+                                </span>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedExamIndex(isExpanded ? null : idx)}
+                                  className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400 cursor-pointer transition-colors"
+                                  title={isExpanded ? 'Contraer detalle de preguntas' : 'Ver detalle de preguntas'}
+                                >
+                                  {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
+                                </button>
                               </div>
-                            </button>
+                            </div>
+
+                            {/* Barra de progreso y umbral mínimo requerido */}
+                            <div className="space-y-1">
+                              <div className="flex items-center justify-between text-[11px] text-[#6B7494]">
+                                <span>0%</span>
+                                <span className="font-semibold text-slate-600 dark:text-slate-400">
+                                  • Mínimo pedido: {knowledgeMinApprovalScore}%
+                                </span>
+                                <span>100%</span>
+                              </div>
+                              <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden relative">
+                                <div 
+                                  className="h-full rounded-full transition-all"
+                                  style={{ 
+                                    width: `${Math.min(100, pct)}%`,
+                                    backgroundColor: reached ? '#10B981' : '#F59E0B'
+                                  }}
+                                />
+                                <div 
+                                  className="absolute top-0 bottom-0 w-0.5 bg-slate-900 dark:bg-white z-10 opacity-70"
+                                  style={{ left: `${knowledgeMinApprovalScore}%` }}
+                                  title={`Mínimo requerido: ${knowledgeMinApprovalScore}%`}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Sub-fila de estado de la prueba */}
+                            <div className="flex items-center justify-between text-[11px] text-[#6B7494] pt-1 border-t border-slate-100 dark:border-slate-800">
+                              <div className="flex items-center gap-1.5 text-emerald-600 font-medium">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>Prueba completada</span>
+                                <span className="text-slate-300 dark:text-slate-700">•</span>
+                                <span className={reached ? 'text-emerald-700 font-bold' : 'text-rose-600 font-bold'}>
+                                  Criterio: {reached ? `✓ Alcanzó el porcentaje pedido (${pct}% ≥ ${knowledgeMinApprovalScore}%)` : `✗ No alcanzó el porcentaje pedido (${pct}% < ${knowledgeMinApprovalScore}%)`}
+                                </span>
+                              </div>
+                              <span className="text-[10px] text-slate-400">
+                                Finalizado el {new Date(item.completado_en).toLocaleDateString('es-PE')}
+                              </span>
+                            </div>
+
+                            {/* Desglose de preguntas si está expandido */}
                             {isExpanded && Array.isArray(item.respuestas) && item.respuestas.length > 0 && (
-                              <div className="border-t border-[#DDE2EF] dark:border-[#2A3563] px-4 pb-4 pt-3 space-y-2 max-h-64 overflow-y-auto">
+                              <div className="border-t border-[#DDE2EF] dark:border-[#2A3563] px-2 pt-3 space-y-2 max-h-64 overflow-y-auto">
                                 {item.respuestas.map((r: any, ri: number) => (
                                   <div key={ri} className="flex items-start gap-2 text-[11px]">
                                     {r.esCorrecta

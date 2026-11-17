@@ -63,6 +63,7 @@ interface AdminDashboardProps {
   onSelectModuleFilter?: (filter: ProcessModuleFilter) => void;
   session?: AuthSession;
   resetProfilesTrigger?: number;
+  resetProcessesTrigger?: number;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -77,7 +78,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   activeModuleFilter: activeModuleFilterProp,
   onSelectModuleFilter: onSelectModuleFilterProp,
   session,
-  resetProfilesTrigger
+  resetProfilesTrigger,
+  resetProcessesTrigger
 }) => {
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
   const [reportCandidate, setReportCandidate] = useState<Candidate | null>(null);
@@ -124,6 +126,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setSelectedEditingProfile(null);
     }
   }, [resetProfilesTrigger]);
+
+  // Reset drilldown and return to main processes list when clicking Procesos in sidebar
+  useEffect(() => {
+    if (resetProcessesTrigger && resetProcessesTrigger > 0) {
+      setSelectedCandidate(null);
+      setSelectedProcessForControl(null);
+      setSummaryProcess(null);
+      setShowCreateProcessModal(false);
+      setCreateProcessPreselectedProfileId(null);
+    }
+  }, [resetProcessesTrigger]);
 
   const activeTab: MainAdminTab = activeTabProp || internalTab;
   const setActiveTab = (tab: MainAdminTab) => {
@@ -181,6 +194,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
     } else if (!activeProcessId) {
       setSelectedProcessForControl(null);
+      setSelectedCandidate(null);
+      setSummaryProcess(null);
     }
   }, [activeProcessId, processes]);
 

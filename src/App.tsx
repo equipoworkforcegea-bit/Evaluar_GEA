@@ -126,10 +126,14 @@ function AdminView({
   }, [moduloQuery, activeTab, rawModulo]);
 
   const [profileResetTrigger, setProfileResetTrigger] = useState(0);
+  const [processResetTrigger, setProcessResetTrigger] = useState(0);
 
   const handleTabChange = (newTab: MainAdminTab) => {
     if (newTab === 'PERFILES') {
       setProfileResetTrigger(prev => prev + 1);
+    }
+    if (newTab === 'PROCESOS') {
+      setProcessResetTrigger(prev => prev + 1);
     }
     const pathSuffix = TAB_TO_PATH[newTab] || 'procesos';
     navigate(`/admin/${pathSuffix}`);
@@ -148,6 +152,7 @@ function AdminView({
     if (id) {
       navigate(`/admin/procesos/${id}`);
     } else {
+      setProcessResetTrigger(prev => prev + 1);
       navigate('/admin/procesos');
     }
   };
@@ -166,7 +171,10 @@ function AdminView({
         onLogout={onLogout}
         onOpenArchitecture={() => navigate('/arquitectura')}
         onOpenCandidateView={() => navigate('/examen')}
-        onResetProcessDetail={() => handleSelectProcess(null)}
+        onResetProcessDetail={() => {
+          handleSelectProcess(null);
+          setProcessResetTrigger(prev => prev + 1);
+        }}
         onOpenNotifications={() => setNotifPanelOpen(true)}
         unreadNotifications={unreadNotifications}
       />
@@ -187,6 +195,7 @@ function AdminView({
             onSelectModuleFilter={handleSelectModuleFilter}
             session={session}
             resetProfilesTrigger={profileResetTrigger}
+            resetProcessesTrigger={processResetTrigger}
           />
         </main>
       </div>

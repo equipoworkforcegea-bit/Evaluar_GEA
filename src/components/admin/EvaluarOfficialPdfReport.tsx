@@ -75,6 +75,17 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
   const [competencyResults, setCompetencyResults] = useState<any[]>([]);
   const [activeProfileCompetencies, setActiveProfileCompetencies] = useState<string[]>([]);
 
+  // Cerrar el reporte oficial al presionar la tecla ESC
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        onClose?.();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   useEffect(() => {
     let isMounted = true;
     const fetchEvals = async () => {
