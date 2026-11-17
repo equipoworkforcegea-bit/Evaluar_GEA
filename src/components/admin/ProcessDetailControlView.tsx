@@ -213,8 +213,8 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
     return () => { isMounted = false; };
   }, [candidateToReset, process?.id, evalsReloadKey]);
 
-  // Manejador para reiniciar un segmento individual (DISC, Conocimientos o Competencias)
-  const handleResetSingleSegment = async (segment: 'DISC' | 'CONOCIMIENTOS' | 'COMPETENCIAS') => {
+  // Manejador para reiniciar un segmento o subevaluación individual (DISC, Conocimientos, Competencias o sub-items)
+  const handleResetSingleSegment = async (segment: string) => {
     if (!candidateToReset) return;
     setResettingSegment(segment);
     try {
@@ -234,20 +234,39 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
         localStorage.setItem('evaluar_candidate_retries', JSON.stringify(storedRetries));
       } catch {}
 
-      // 2. Ejecutar reseteo del segmento en Supabase y LocalStorage
-      // Usar process?.id como processId primario y candidateToReset.testId como fallback
+      // 2. Ejecutar reseteo del segmento o subevaluación en Supabase y LocalStorage
       const effectiveProcessId = process?.id || candidateToReset.testId;
       await CandidateDataService.resetCandidateSegment(candId, segment, effectiveProcessId, candidateToReset.email);
 
-      // 3. Limpiar inmediatamente el estado del modal para ese segmento
-      setCandidateEvalsData(prev => ({
-        ...prev,
-        disc: segment === 'DISC' ? null : prev.disc,
-        knowledge: segment === 'CONOCIMIENTOS' ? [] : prev.knowledge,
-        competencies: segment === 'COMPETENCIAS' ? [] : prev.competencies
-      }));
+      // 3. Limpiar inmediatamente el estado del modal para ese segmento/subevaluación
+      setCandidateEvalsData(prev => {
+        if (segment === 'DISC') {
+          return { ...prev, disc: null };
+        }
+        if (segment === 'CONOCIMIENTOS') {
+          return { ...prev, knowledge: [] };
+        }
+        if (segment.startsWith('KNOW:')) {
+          const topicClean = segment.replace('KNOW:', '').trim().toLowerCase();
+          return {
+            ...prev,
+            knowledge: prev.knowledge.filter(k => (k.tema || '').trim().toLowerCase() !== topicClean)
+          };
+        }
+        if (segment === 'COMPETENCIAS') {
+          return { ...prev, competencies: [] };
+        }
+        if (segment.startsWith('COMP:')) {
+          const compClean = segment.replace('COMP:', '').trim().toLowerCase();
+          return {
+            ...prev,
+            competencies: prev.competencies.filter(c => (c.competencia || '').trim().toLowerCase() !== compClean)
+          };
+        }
+        return prev;
+      });
 
-      // 4. Actualizar estado del candidato en la tabla de candidatos (sin cambiar referencia del modal para no relanzar useEffect aún)
+      // 4. Actualizar estado del candidato en la tabla de candidatos
       const updatedCand: Candidate = {
         ...candidateToReset,
         status: 'EN_PROGRESO',
@@ -257,15 +276,20 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
       setLiveCandidates(prev => prev.map(c => c.id === candId ? updatedCand : c));
       onUpdateCandidate?.(updatedCand);
 
-      // 5. Forzar recarga real desde Supabase con delay para que el DELETE haya propagado
+      // 5. Forzar recarga real desde Supabase con delay
       setTimeout(() => {
-        // Actualiza el candidato y el reload key juntos para una sola recarga
         setCandidateToReset(updatedCand);
         setEvalsReloadKey(k => k + 1);
       }, 1000);
 
-      const segName = segment === 'DISC' ? 'DISC' : segment === 'CONOCIMIENTOS' ? 'Conocimientos' : 'Competencias';
-      showToast(`✓ Segmento ${segName} reiniciado para ${candidateToReset.fullName} (${nextRetries} reinicio${nextRetries > 1 ? 's' : ''}).`);
+      let segName = segment;
+      if (segment === 'DISC') segName = 'DISC';
+      else if (segment === 'CONOCIMIENTOS') segName = 'todas las pruebas de Conocimiento';
+      else if (segment.startsWith('KNOW:')) segName = `cuestionario "${segment.replace('KNOW:', '')}"`;
+      else if (segment === 'COMPETENCIAS') segName = 'todas las Competencias';
+      else if (segment.startsWith('COMP:')) segName = `competencia "${segment.replace('COMP:', '')}"`;
+
+      showToast(`✓ Reinicio aplicado para ${segName} (${nextRetries} reinicio${nextRetries > 1 ? 's' : ''}).`);
     } catch (err) {
       console.warn('Error al reiniciar segmento:', err);
       showToast('⚠️ No se pudo reiniciar el segmento. Intente nuevamente.');
@@ -2131,84 +2155,192 @@ export const ProcessDetailControlView: React.FC<ProcessDetailControlViewProps> =
                   </div>
                 )}
 
-                {/* 2. SEGMENTO: CONOCIMIENTOS */}
-                <div className="p-3.5 rounded-xl border border-purple-200 dark:border-purple-900/40 bg-purple-50/40 dark:bg-purple-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0 border border-purple-300/60">
-                      <BookOpen className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-zinc-900 dark:text-white">Pruebas de Conocimiento</span>
-                        {candidateEvalsData.knowledge.length > 0 ? (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300/40">
-                            Completado ({candidateEvalsData.knowledge.length})
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
-                            Pendiente
-                          </span>
-                        )}
+                {/* 2. SEGMENTO: CONOCIMIENTOS CON REINICIO POR CUESTIONARIO */}
+                <div className="p-3.5 rounded-xl border border-purple-200 dark:border-purple-900/40 bg-purple-50/40 dark:bg-purple-950/20 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-200/60 dark:border-purple-900/30 pb-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-xl bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0 border border-purple-300/60">
+                        <BookOpen className="w-4 h-4" />
                       </div>
-                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
-                        {candidateEvalsData.configuredKnowledge.length > 0 ? (
-                          <span>Cuestionarios: <strong>{candidateEvalsData.configuredKnowledge.join(', ')}</strong></span>
-                        ) : (
-                          <span>Evaluaciones técnicas asignadas en el perfil</span>
-                        )}
-                      </p>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-zinc-900 dark:text-white">Pruebas de Conocimiento</span>
+                          {candidateEvalsData.knowledge.length > 0 ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300/40">
+                              {candidateEvalsData.knowledge.length} completado{candidateEvalsData.knowledge.length > 1 ? 's' : ''}
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                              Pendiente
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
+
+                    {candidateEvalsData.configuredKnowledge.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleResetSingleSegment('CONOCIMIENTOS')}
+                        disabled={resettingSegment !== null || isResettingExam}
+                        className="px-2.5 py-1 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-800 dark:bg-purple-900/50 dark:text-purple-200 font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-all disabled:opacity-50 shrink-0 self-end sm:self-center"
+                        title="Reiniciar todos los cuestionarios de conocimiento juntos"
+                      >
+                        <RotateCw className={`w-3 h-3 ${resettingSegment === 'CONOCIMIENTOS' ? 'animate-spin' : ''}`} />
+                        <span>{resettingSegment === 'CONOCIMIENTOS' ? 'Reiniciando todos...' : 'Reiniciar todos'}</span>
+                      </button>
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleResetSingleSegment('CONOCIMIENTOS')}
-                    disabled={resettingSegment !== null || isResettingExam}
-                    className="px-3.5 py-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all disabled:opacity-50 shrink-0 self-end sm:self-center"
-                    title="Reiniciar solamente las pruebas de conocimiento para este candidato"
-                  >
-                    <RotateCw className={`w-3.5 h-3.5 ${resettingSegment === 'CONOCIMIENTOS' ? 'animate-spin' : ''}`} />
-                    <span>{resettingSegment === 'CONOCIMIENTOS' ? 'Reiniciando...' : 'Reiniciar Conocimientos'}</span>
-                  </button>
+
+                  {/* Lista de cuestionarios configurados con reinicio individual */}
+                  <div className="space-y-1.5 pl-1">
+                    {candidateEvalsData.configuredKnowledge.length === 0 ? (
+                      <p className="text-[11px] text-zinc-500 italic">No hay cuestionarios configurados en este proceso</p>
+                    ) : (
+                      candidateEvalsData.configuredKnowledge.map((topicName, idx) => {
+                        const rawClean = topicName.trim().toLowerCase();
+                        const match = candidateEvalsData.knowledge.find(k => {
+                          const t = (k.tema || '').trim().toLowerCase();
+                          return t === rawClean || t.includes(rawClean) || rawClean.includes(t);
+                        });
+                        const isCompleted = Boolean(match);
+                        const pts = match ? Math.round(Number(match.puntaje ?? 0) * 10) / 10 : null;
+                        const maxPts = match ? Number(match.puntaje_maximo || 20) : 20;
+
+                        return (
+                          <div 
+                            key={idx}
+                            className="p-2.5 rounded-lg bg-white/80 dark:bg-[#182044]/80 border border-purple-100 dark:border-purple-900/30 flex items-center justify-between gap-2 shadow-2xs"
+                          >
+                            <div className="min-w-0 flex items-center gap-2">
+                              <BookOpen className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                              <div className="min-w-0">
+                                <span className="text-xs font-semibold text-zinc-900 dark:text-white truncate block">
+                                  {topicName}
+                                </span>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  {isCompleted ? (
+                                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
+                                      ✓ Completado ({pts}/{maxPts} pts)
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-zinc-400">
+                                      ○ Pendiente de rendir
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleResetSingleSegment(`KNOW:${topicName}`)}
+                              disabled={resettingSegment !== null || isResettingExam}
+                              className="px-2.5 py-1 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-bold text-[10px] flex items-center gap-1 shadow-2xs cursor-pointer transition-all disabled:opacity-50 shrink-0"
+                              title={`Reiniciar únicamente el cuestionario "${topicName}"`}
+                            >
+                              <RotateCw className={`w-3 h-3 ${resettingSegment === `KNOW:${topicName}` ? 'animate-spin' : ''}`} />
+                              <span>{resettingSegment === `KNOW:${topicName}` ? 'Reiniciando...' : 'Reiniciar'}</span>
+                            </button>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
 
-                {/* 3. SEGMENTO: COMPETENCIAS */}
-                <div className="p-3.5 rounded-xl border border-sky-200 dark:border-sky-900/40 bg-sky-50/40 dark:bg-sky-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-xl bg-sky-100 dark:bg-sky-900/50 text-sky-700 dark:text-sky-300 flex items-center justify-center shrink-0 border border-sky-300/60">
-                      <GraduationCap className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-zinc-900 dark:text-white">Competencias Laborales</span>
-                        {candidateEvalsData.competencies.length > 0 ? (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300/40">
-                            Completado ({candidateEvalsData.competencies.length})
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
-                            Pendiente
-                          </span>
-                        )}
+                {/* 3. SEGMENTO: COMPETENCIAS CON REINICIO POR COMPETENCIA INDIVIDUAL */}
+                <div className="p-3.5 rounded-xl border border-sky-200 dark:border-sky-900/40 bg-sky-50/40 dark:bg-sky-950/20 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-sky-200/60 dark:border-sky-900/30 pb-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-xl bg-sky-100 dark:bg-sky-900/50 text-sky-700 dark:text-sky-300 flex items-center justify-center shrink-0 border border-sky-300/60">
+                        <GraduationCap className="w-4 h-4" />
                       </div>
-                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
-                        {candidateEvalsData.configuredCompetencies.length > 0 ? (
-                          <span>{candidateEvalsData.configuredCompetencies.length} competencias: <strong>{candidateEvalsData.configuredCompetencies.slice(0, 3).join(', ')}{candidateEvalsData.configuredCompetencies.length > 3 ? '...' : ''}</strong></span>
-                        ) : (
-                          <span>Evaluación de competencias activas del perfil</span>
-                        )}
-                      </p>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-zinc-900 dark:text-white">Competencias Laborales</span>
+                          {candidateEvalsData.competencies.length > 0 ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300/40">
+                              {candidateEvalsData.competencies.length} completada{candidateEvalsData.competencies.length > 1 ? 's' : ''}
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                              Pendiente
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
+
+                    {candidateEvalsData.configuredCompetencies.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleResetSingleSegment('COMPETENCIAS')}
+                        disabled={resettingSegment !== null || isResettingExam}
+                        className="px-2.5 py-1 rounded-lg bg-sky-100 hover:bg-sky-200 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200 font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-all disabled:opacity-50 shrink-0 self-end sm:self-center"
+                        title="Reiniciar todas las competencias juntas"
+                      >
+                        <RotateCw className={`w-3 h-3 ${resettingSegment === 'COMPETENCIAS' ? 'animate-spin' : ''}`} />
+                        <span>{resettingSegment === 'COMPETENCIAS' ? 'Reiniciando todas...' : 'Reiniciar todas'}</span>
+                      </button>
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleResetSingleSegment('COMPETENCIAS')}
-                    disabled={resettingSegment !== null || isResettingExam}
-                    className="px-3.5 py-1.5 rounded-xl bg-sky-700 hover:bg-sky-800 text-white font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all disabled:opacity-50 shrink-0 self-end sm:self-center"
-                    title="Reiniciar solamente la evaluación de competencias para este candidato"
-                  >
-                    <RotateCw className={`w-3.5 h-3.5 ${resettingSegment === 'COMPETENCIAS' ? 'animate-spin' : ''}`} />
-                    <span>{resettingSegment === 'COMPETENCIAS' ? 'Reiniciando...' : 'Reiniciar Competencias'}</span>
-                  </button>
+
+                  {/* Lista de competencias configuradas con reinicio individual */}
+                  <div className="space-y-1.5 pl-1">
+                    {candidateEvalsData.configuredCompetencies.length === 0 ? (
+                      <p className="text-[11px] text-zinc-500 italic">No hay competencias configuradas en este proceso</p>
+                    ) : (
+                      candidateEvalsData.configuredCompetencies.map((compName, idx) => {
+                        const rawClean = compName.trim().toLowerCase();
+                        const match = candidateEvalsData.competencies.find(c => {
+                          const name = (c.competencia || '').trim().toLowerCase();
+                          return name === rawClean || name.includes(rawClean) || rawClean.includes(name);
+                        });
+                        const isCompleted = Boolean(match);
+                        const scoreVal = match ? Math.round(Number(match.puntaje ?? 0)) : null;
+                        const levelStr = match?.nivel || 'Apto';
+
+                        return (
+                          <div 
+                            key={idx}
+                            className="p-2.5 rounded-lg bg-white/80 dark:bg-[#182044]/80 border border-sky-100 dark:border-sky-900/30 flex items-center justify-between gap-2 shadow-2xs"
+                          >
+                            <div className="min-w-0 flex items-center gap-2">
+                              <GraduationCap className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                              <div className="min-w-0">
+                                <span className="text-xs font-semibold text-zinc-900 dark:text-white truncate block">
+                                  {compName}
+                                </span>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  {isCompleted ? (
+                                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
+                                      ✓ Completado ({scoreVal}% · {levelStr})
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-zinc-400">
+                                      ○ Pendiente de rendir
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleResetSingleSegment(`COMP:${compName}`)}
+                              disabled={resettingSegment !== null || isResettingExam}
+                              className="px-2.5 py-1 rounded-lg bg-sky-700 hover:bg-sky-800 text-white font-bold text-[10px] flex items-center gap-1 shadow-2xs cursor-pointer transition-all disabled:opacity-50 shrink-0"
+                              title={`Reiniciar únicamente la competencia "${compName}"`}
+                            >
+                              <RotateCw className={`w-3 h-3 ${resettingSegment === `COMP:${compName}` ? 'animate-spin' : ''}`} />
+                              <span>{resettingSegment === `COMP:${compName}` ? 'Reiniciando...' : 'Reiniciar'}</span>
+                            </button>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

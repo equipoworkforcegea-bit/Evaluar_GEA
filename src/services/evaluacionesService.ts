@@ -222,13 +222,13 @@ export const EvaluacionesService = {
   },
 
   /**
-   * Resuelve de forma asíncrona y sincronizada el timestamp de reinicio para un candidato y segmento.
+   * Resuelve de forma asíncrona y sincronizada el timestamp de reinicio para un candidato y segmento/sub-evaluación.
    * Consulta localStorage y notificaciones/candidatos en Supabase para sincronización multi-dispositivo.
    */
   async resolveActiveResetTimestamp(
     candidatoId?: string, 
     email?: string, 
-    segment?: 'DISC' | 'CONOCIMIENTOS' | 'COMPETENCIAS'
+    segment?: string
   ): Promise<number | null> {
     // 1. Verificación rápida local
     const localTs = this.getActiveResetTimestamp(candidatoId, email, segment);
@@ -243,12 +243,30 @@ export const EvaluacionesService = {
           .eq('candidato_id', candidatoId)
           .eq('tipo', 'SISTEMA')
           .order('creado_en', { ascending: false })
-          .limit(10);
+          .limit(15);
 
         if (notifs && notifs.length > 0) {
+          const segNorm = segment ? segment.toUpperCase() : '';
+          const segAlt = segment ? segment.replace(':', '_').toUpperCase() : '';
+
           for (const n of notifs) {
             const tit = String(n.titulo || '').toUpperCase();
-            if (tit === 'RESET_ALL' || (segment && tit === `RESET_${segment}`)) {
+            let isMatch = tit === 'RESET_ALL';
+
+            if (!isMatch && segment) {
+              if (tit === `RESET_${segNorm}` || tit === `RESET_${segAlt}`) {
+                isMatch = true;
+              } else if (n.mensaje) {
+                try {
+                  const parsed = JSON.parse(n.mensaje);
+                  if (parsed.segment && String(parsed.segment).toUpperCase() === segNorm) {
+                    isMatch = true;
+                  }
+                } catch {}
+              }
+            }
+
+            if (isMatch) {
               const ts = new Date(n.creado_en).getTime();
               this.recordActiveReset(candidatoId, email, segment || 'ALL', n.creado_en);
               return ts;
@@ -275,13 +293,13 @@ export const EvaluacionesService = {
   },
 
   /**
-   * Determina si existe una orden de reinicio activa para el candidato y segmento.
+   * Determina si existe una orden de reinicio activa para el candidato y segmento/sub-evaluación.
    * Retorna el timestamp (ms) del reinicio si existe, o null.
    */
   getActiveResetTimestamp(
     candidatoId?: string, 
     email?: string, 
-    segment?: 'DISC' | 'CONOCIMIENTOS' | 'COMPETENCIAS'
+    segment?: string
   ): number | null {
     if (typeof window === 'undefined') return null;
     try {
@@ -292,8 +310,17 @@ export const EvaluacionesService = {
       for (const k of keys) {
         const item = resets[k];
         if (item) {
-          if (segment && item[segment]) {
-            return new Date(item[segment]).getTime();
+          if (segment) {
+            if (item[segment]) {
+              return new Date(item[segment]).getTime();
+            }
+            // Búsqueda flexible para subevaluaciones tipo COMP: o KNOW:
+            const segClean = segment.trim().toLowerCase();
+            for (const key of Object.keys(item)) {
+              if (key.trim().toLowerCase() === segClean) {
+                return new Date(item[key]).getTime();
+              }
+            }
           }
           if (item.ALL) {
             return new Date(item.ALL).getTime();
@@ -364,17 +391,32 @@ export const EvaluacionesService = {
 
   /**
    * Obtiene los resultados de conocimientos completados por un candidato para la oportunidad actual.
-   * Si existe un reinicio activo, solo devuelve los rendidos después del reinicio.
+   * Si existe un reinicio activo global o de un cuestionario específico, solo devuelve los rendidos después del reinicio.
    */
   async obtenerResultadosConocimientos(candidatoId: string, procesoId?: string, email?: string): Promise<any[]> {
     const all = await this.obtenerHistorialConocimientos(candidatoId, procesoId, email);
-    const resetTs = await this.resolveActiveResetTimestamp(candidatoId, email, 'CONOCIMIENTOS');
-    if (!resetTs) return all;
+    const globalResetTs = await this.resolveActiveResetTimestamp(candidatoId, email, 'CONOCIMIENTOS');
 
     return all.filter((item: any) => {
       const cDate = item.completado_en || item.completadoEn;
       if (!cDate) return false;
-      return new Date(cDate).getTime() > resetTs;
+      const itemTs = new Date(cDate).getTime();
+
+      // 1. Verificar si hay reinicio general de conocimientos
+      if (globalResetTs && itemTs <= globalResetTs) {
+        return false;
+      }
+
+      // 2. Verificar si hay reinicio específico para este cuestionario/tema
+      const topicName = (item.tema || '').trim();
+      if (topicName) {
+        const specificResetTs = this.getActiveResetTimestamp(candidatoId, email, `KNOW:${topicName}`);
+        if (specificResetTs && itemTs <= specificResetTs) {
+          return false;
+        }
+      }
+
+      return true;
     });
   },
 
@@ -669,19 +711,34 @@ export const EvaluacionesService = {
 
   /**
    * Obtiene los resultados de competencias completadas por un candidato para la oportunidad actual.
-   * Si la prueba fue reiniciada, solo se consideran como completadas las rendidas con posterioridad
-   * a la fecha del reinicio; los intentos previos se mantienen archivados en el histórico.
+   * Si la prueba fue reiniciada globalmente o por competencia individual, solo se consideran como completadas
+   * las rendidas con posterioridad a la fecha del reinicio; los intentos previos se mantienen archivados en el histórico.
    */
   async obtenerResultadosCompetencias(candidatoId: string, procesoId?: string, email?: string): Promise<any[]> {
     const all = await this.obtenerHistorialCompetencias(candidatoId, procesoId, email);
-    const resetTs = await this.resolveActiveResetTimestamp(candidatoId, email, 'COMPETENCIAS');
+    const globalResetTs = await this.resolveActiveResetTimestamp(candidatoId, email, 'COMPETENCIAS');
 
-    // Filtrar: si hay reinicio activo, solo las completadas DESPUÉS del reinicio
+    // Filtrar: si hay reinicio activo global o individual, solo las completadas DESPUÉS del reinicio
     const activeList = all.filter((item: any) => {
-      if (!resetTs) return true;
       const cDate = item.completadoEn || item.completado_en;
       if (!cDate) return false;
-      return new Date(cDate).getTime() > resetTs;
+      const itemTs = new Date(cDate).getTime();
+
+      // 1. Verificar si hay reinicio general de competencias
+      if (globalResetTs && itemTs <= globalResetTs) {
+        return false;
+      }
+
+      // 2. Verificar si hay reinicio específico para esta competencia individual
+      const compName = (item.competencia || '').trim();
+      if (compName) {
+        const specificResetTs = this.getActiveResetTimestamp(candidatoId, email, `COMP:${compName}`);
+        if (specificResetTs && itemTs <= specificResetTs) {
+          return false;
+        }
+      }
+
+      return true;
     });
 
     // Mapear por nombre único de competencia para la oportunidad actual

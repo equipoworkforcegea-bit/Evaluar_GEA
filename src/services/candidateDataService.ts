@@ -418,43 +418,83 @@ export const CandidateDataService = {
         console.warn('[CandidateDataService] Advertencia al obtener notas_candidato:', errNotas);
       }
 
-      // Obtener evaluaciones de conocimientos para calcular puntajes y estado completado
+      // Obtener evaluaciones de conocimientos, competencias y DISC para calcular puntajes y estado completado
       try {
-        const { data: kList } = await supabase
-          .from('evaluaciones_conocimientos')
-          .select('candidato_id, puntaje, puntaje_maximo, completado_en');
+        const [kRes, cRes, dRes] = await Promise.all([
+          supabase.from('evaluaciones_conocimientos').select('candidato_id, puntaje, puntaje_maximo, completado_en'),
+          supabase.from('evaluaciones_competencias').select('candidato_id, puntaje, puntaje_maximo, completado_en'),
+          supabase.from('evaluaciones_disc').select('candidato_id, completado_en')
+        ]);
 
-        if (kList && kList.length > 0) {
-          const statsMap = new Map<string, { totalScore: number; totalMax: number; lastDate: string }>();
-          kList.forEach((k: any) => {
-            if (!k.candidato_id) return;
-            const sc = Number(k.puntaje || 0);
-            const mx = Number(k.puntaje_maximo || 20);
-            const cur = statsMap.get(k.candidato_id) || { totalScore: 0, totalMax: 0, lastDate: k.completado_en };
-            statsMap.set(k.candidato_id, {
-              totalScore: cur.totalScore + sc,
-              totalMax: cur.totalMax + mx,
-              lastDate: k.completado_en || cur.lastDate
-            });
-          });
+        const kList = kRes.data || [];
+        const cList = cRes.data || [];
+        const dList = dRes.data || [];
 
-          candidatesData = candidatesData.map((c: any) => {
-            const stats = statsMap.get(c.id);
-            if (stats && stats.totalMax > 0) {
-              const avgScore = Math.round((stats.totalScore / stats.totalMax) * 100);
-              const isEvaluated = String(c.estado || '').toUpperCase() === 'EVALUADO';
-              return {
-                ...c,
-                puntaje: avgScore,
-                estado: isEvaluated ? 'EVALUADO' : (c.estado || 'EN_CURSO'),
-                completado_en: isEvaluated ? (c.completado_en || stats.lastDate) : null
-              };
-            }
-            return c;
+        const kStatsMap = new Map<string, { totalScore: number; totalMax: number; lastDate: string }>();
+        kList.forEach((k: any) => {
+          if (!k.candidato_id) return;
+          const sc = Number(k.puntaje || 0);
+          const mx = Number(k.puntaje_maximo || 20);
+          const cur = kStatsMap.get(k.candidato_id) || { totalScore: 0, totalMax: 0, lastDate: k.completado_en };
+          kStatsMap.set(k.candidato_id, {
+            totalScore: cur.totalScore + sc,
+            totalMax: cur.totalMax + mx,
+            lastDate: k.completado_en || cur.lastDate
           });
-        }
-      } catch (errK) {
-        console.warn('[CandidateDataService] Error cargando evaluaciones_conocimientos:', errK);
+        });
+
+        const cStatsMap = new Map<string, { totalScore: number; count: number; lastDate: string }>();
+        cList.forEach((c: any) => {
+          if (!c.candidato_id) return;
+          const sc = Number(c.puntaje || 0);
+          const maxP = Number(c.puntaje_maximo || 100);
+          const percent = maxP === 20 ? Math.round((sc / 20) * 100) : sc;
+          const cur = cStatsMap.get(c.candidato_id) || { totalScore: 0, count: 0, lastDate: c.completado_en };
+          cStatsMap.set(c.candidato_id, {
+            totalScore: cur.totalScore + percent,
+            count: cur.count + 1,
+            lastDate: c.completado_en || cur.lastDate
+          });
+        });
+
+        const dMap = new Map<string, string>();
+        dList.forEach((d: any) => {
+          if (d.candidato_id) dMap.set(d.candidato_id, d.completado_en);
+        });
+
+        candidatesData = candidatesData.map((c: any) => {
+          const kStats = kStatsMap.get(c.id);
+          const cStats = cStatsMap.get(c.id);
+          const hasD = dMap.has(c.id);
+
+          const kAvg = kStats && kStats.totalMax > 0 ? Math.round((kStats.totalScore / kStats.totalMax) * 100) : null;
+          const cAvg = cStats && cStats.count > 0 ? Math.round(cStats.totalScore / cStats.count) : null;
+
+          let finalScore: number | null = null;
+          if (kAvg !== null && cAvg !== null) {
+            finalScore = Math.round((kAvg + cAvg) / 2);
+          } else if (cAvg !== null) {
+            finalScore = cAvg;
+          } else if (kAvg !== null) {
+            finalScore = kAvg;
+          }
+
+          const hasAnyActivity = Boolean(kStats || cStats || hasD || c.iniciado_en);
+          const isEvaluated = String(c.estado || '').toUpperCase() === 'EVALUADO';
+          const lastDate = kStats?.lastDate || cStats?.lastDate || dMap.get(c.id);
+
+          if (finalScore !== null || hasAnyActivity) {
+            return {
+              ...c,
+              puntaje: finalScore !== null ? finalScore : c.puntaje,
+              estado: isEvaluated ? 'EVALUADO' : (hasAnyActivity ? 'EN_CURSO' : (c.estado || 'INVITADO')),
+              completado_en: isEvaluated ? (c.completado_en || lastDate) : null
+            };
+          }
+          return c;
+        });
+      } catch (errEval) {
+        console.warn('[CandidateDataService] Error cargando evaluaciones para calcular puntajes:', errEval);
       }
 
       if (!candidatesData || candidatesData.length === 0) {
@@ -1020,12 +1060,12 @@ export const CandidateDataService = {
   },
 
   /**
-   * Reinicia un segmento específico de evaluación (DISC, CONOCIMIENTOS o COMPETENCIAS)
+   * Reinicia un segmento o subevaluación específica (DISC, CONOCIMIENTOS, COMPETENCIAS, KNOW:tema o COMP:competencia)
    * otorgando una NUEVA OPORTUNIDAD sin borrar información histórica de la base de datos.
    */
   async resetCandidateSegment(
     candidateId: string, 
-    segment: 'DISC' | 'CONOCIMIENTOS' | 'COMPETENCIAS',
+    segment: string,
     processId?: string,
     email?: string
   ): Promise<boolean> {
@@ -1083,9 +1123,10 @@ export const CandidateDataService = {
 
       // 4. Registrar evento de reset en la tabla notificaciones de Supabase para sincronización multi-dispositivo
       try {
+        const notifTitle = `RESET_${segment.replace(/[:\s]/g, '_')}`.slice(0, 100);
         await supabase.from('notificaciones').insert({
           tipo: 'SISTEMA',
-          titulo: `RESET_${segment}`,
+          titulo: notifTitle,
           mensaje: JSON.stringify({
             candidato_id: candidateId,
             email: email?.toLowerCase().trim(),
@@ -1102,12 +1143,12 @@ export const CandidateDataService = {
       }
 
       // 5. Reevaluar estado del candidato según las pruebas restantes
-      await EvaluacionesService.actualizarEstadoCandidatoTrasPrueba(candidateId, processId);
+      await EvaluacionesService.actualizarEstadoCandidatoTrasPrueba(candidateId, processId, email);
 
       await this.logAuditEvent(
         candidateId,
         'STAGE_FAIL' as AuditEventType,
-        `Administrador habilitó nueva oportunidad de evaluación para el segmento ${segment}. Histórico preservado.`,
+        `Administrador habilitó nueva oportunidad de evaluación para: ${segment}. Histórico preservado.`,
         'INFO'
       );
 

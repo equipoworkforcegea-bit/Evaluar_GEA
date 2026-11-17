@@ -216,18 +216,6 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
     .map(w => w[0].toUpperCase())
     .join('');
 
-  const avgCompetencyPercent = competencyResults.length > 0
-    ? Math.round(competencyResults.reduce((sum, item) => {
-        const sc = Number(item.puntaje ?? 0);
-        const percent = item.puntajeMaximo === 20 ? Math.round((sc / 20) * 100) : sc;
-        return sum + percent;
-      }, 0) / competencyResults.length)
-    : 0;
-
-  const scoreVal = (candidate.scores?.overall && candidate.scores.overall > 0) 
-    ? candidate.scores.overall 
-    : (hasKnowledge ? avgKnowledgePercent : (competencyResults.length > 0 ? avgCompetencyPercent : 0));
-
   // Diccionario exhaustivo de definiciones conductuales
   const COMPETENCY_DESCRIPTIONS: Record<string, string> = {
     'Orientación al Cliente': 'Actitud genuina de comprender y atender al cliente, priorizando sus necesidades y buscando generar una experiencia positiva y de confianza en cada interacción.',
@@ -276,6 +264,39 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
       };
     });
   }, [activeProfileCompetencies, competencyResults, minApprovalScore]);
+
+  // Total de competencias requeridas en el perfil
+  const totalChosenCompsCount = activeProfileCompetencies.length > 0
+    ? activeProfileCompetencies.length
+    : (activeCompetenciesData.length > 0 ? activeCompetenciesData.length : 1);
+
+  const completedComps = activeCompetenciesData.filter(c => c.isCompleted);
+  const hasCompetenciesEvaluated = completedComps.length > 0;
+
+  // Porcentaje total obtenido en competencias: promedio sobre la totalidad de competencias elegidas para evaluar
+  const sumCompetenciesScores = activeCompetenciesData.reduce((acc, c) => acc + (c.isCompleted ? c.score : 0), 0);
+  const totalCompetencyPercent = Math.round(sumCompetenciesScores / totalChosenCompsCount);
+
+  // Promedio sólo de las completadas
+  const avgCompletedCompPercent = completedComps.length > 0
+    ? Math.round(completedComps.reduce((acc, c) => acc + c.score, 0) / completedComps.length)
+    : 0;
+
+  // Estado de evaluaciones de conocimientos
+  const hasKnowledgeEvaluated = hasKnowledge && knowledgeResults.length > 0;
+  const hasEvaluatedTests = hasKnowledgeEvaluated || hasCompetenciesEvaluated || hasDisc;
+
+  // Resultado Final: porcentaje de todas las evaluaciones activas rendidas
+  let scoreVal = 0;
+  if (hasKnowledgeEvaluated && hasCompetenciesEvaluated) {
+    scoreVal = Math.round((avgKnowledgePercent + totalCompetencyPercent) / 2);
+  } else if (hasCompetenciesEvaluated) {
+    scoreVal = totalCompetencyPercent;
+  } else if (hasKnowledgeEvaluated) {
+    scoreVal = avgKnowledgePercent;
+  } else if (candidate.scores?.overall && candidate.scores.overall > 0) {
+    scoreVal = candidate.scores.overall;
+  }
 
 
   // Preguntas del acordeón de descripción (las 10 preguntas exactas de la captura de Evaluar)
@@ -1100,7 +1121,7 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
 
           {/* Gauge Circular de Adecuación - Puntaje Real */}
           <div className="flex flex-col items-center justify-center pt-3 space-y-4">
-            {(candidate.scores && candidate.scores.overall > 0) || hasKnowledge ? (
+            {hasEvaluatedTests || scoreVal > 0 ? (
               <div className="flex flex-col items-center gap-3 py-2 w-full">
                 {/* Círculo con puntaje porcentaje final */}
                 <div className="relative w-32 h-32 flex items-center justify-center">
@@ -1129,6 +1150,45 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                     <span className="text-[10px] text-[#6B7494] font-semibold mt-0.5">Puntaje Final</span>
                   </div>
                 </div>
+
+                {/* Desglose real por tipo de evaluación del proceso */}
+                <div className="w-full space-y-2 pt-1">
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-[#6B7494] dark:text-[#9AA5C4]">Conocimientos</span>
+                      <span className={`font-bold ${hasKnowledgeEvaluated ? 'text-[#161C3A] dark:text-white' : 'text-slate-400'}`}>
+                        {hasKnowledgeEvaluated ? `${avgKnowledgePercent}%` : 'Pendiente'}
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                      <div className="h-full bg-purple-500 rounded-full transition-all" style={{ width: `${avgKnowledgePercent}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-[#6B7494] dark:text-[#9AA5C4]">Competencias</span>
+                      <span className={`font-bold ${hasCompetenciesEvaluated ? 'text-[#161C3A] dark:text-white' : 'text-slate-400'}`}>
+                        {hasCompetenciesEvaluated ? `${totalCompetencyPercent}%` : 'Pendiente'}
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                      <div className="h-full bg-sky-500 rounded-full transition-all" style={{ width: `${totalCompetencyPercent}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-[#6B7494] dark:text-[#9AA5C4]">DISC</span>
+                      <span className={`font-bold ${discResult ? 'text-lime-600 dark:text-lime-400' : 'text-slate-400'}`}>
+                        {discResult?.perfil_dominante ? discResult.perfil_dominante.split('/')[0].trim() : (discResult ? 'Completado' : 'Pendiente')}
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                      <div className="h-full bg-lime-500 rounded-full transition-all" style={{ width: discResult ? '100%' : '0%' }} />
+                    </div>
+                  </div>
+                </div>
               </div>
             ) : (
               /* Sin puntaje - examen pendiente */
@@ -1149,18 +1209,26 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                   </div>
                 </div>
                 <div className="w-full space-y-2">
-                  {['Psicotécnica', 'Emocional', 'Casos Lab.'].map(label => (
-                    <div key={label} className="space-y-1">
-                      <div className="flex justify-between text-[11px]">
-                        <span className="text-[#6B7494] dark:text-[#9AA5C4]">{label}</span>
-                        <span className="text-slate-300 dark:text-slate-600 font-bold">—</span>
-                      </div>
-                      <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800" />
-                    </div>
-                  ))}
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-[#6B7494] dark:text-[#9AA5C4]">Conocimientos</span>
+                    <span className="text-slate-300 dark:text-slate-600 font-bold">—</span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800" />
+
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-[#6B7494] dark:text-[#9AA5C4]">Competencias</span>
+                    <span className="text-slate-300 dark:text-slate-600 font-bold">—</span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800" />
+
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-[#6B7494] dark:text-[#9AA5C4]">DISC</span>
+                    <span className="text-slate-300 dark:text-slate-600 font-bold">—</span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800" />
                 </div>
                 <p className="text-[10px] text-center text-slate-400 dark:text-slate-600 leading-relaxed px-2">
-                  El postulante aún no ha completado la evaluación
+                  El postulante aún no ha completado las evaluaciones
                 </p>
               </div>
             )}
@@ -1511,10 +1579,13 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                     Competencias requeridas por el perfil y resultados psicométricos del postulante
                   </p>
                 </div>
-                <div className="text-xs font-semibold text-[#6B7494] dark:text-[#9AA5C4] shrink-0">
-                  <span className="font-bold text-[#1F2A5E] dark:text-white">
-                    {activeCompetenciesData.filter(c => c.isCompleted).length}
-                  </span> de {activeCompetenciesData.length} evaluadas
+                <div className="flex items-center gap-2 text-xs font-semibold text-[#6B7494] dark:text-[#9AA5C4] shrink-0">
+                  <span className="px-2.5 py-1 rounded-xl bg-sky-50 dark:bg-sky-950/50 border border-sky-200 dark:border-sky-800 text-sky-800 dark:text-sky-300 font-extrabold">
+                    Total Competencias: {totalCompetencyPercent}%
+                  </span>
+                  <span>
+                    <strong className="text-[#1F2A5E] dark:text-white">{completedComps.length}</strong> de {activeCompetenciesData.length} evaluadas
+                  </span>
                 </div>
               </div>
 
@@ -1526,37 +1597,30 @@ export const CandidateFullReportView: React.FC<CandidateFullReportViewProps> = (
                   </div>
                   <div>
                     <span className="text-xs font-bold text-[#1F2A5E] dark:text-white block">
-                      Criterio del Perfil: Mínimo {minApprovalScore}% para Aprobación
+                      Criterio del Perfil: Mínimo {minApprovalScore}% para Aprobación · Obtenido: {totalCompetencyPercent}%
                     </span>
                     <span className="text-[11px] text-[#6B7494] dark:text-[#9AA5C4]">
-                      Porcentaje requerido configurado en los componentes de evaluación del perfil
+                      Porcentaje total de todas las competencias elegidas para evaluar en el perfil
                     </span>
                   </div>
                 </div>
 
                 <div className="shrink-0 self-end sm:self-center">
-                  {(() => {
-                    const completedComps = activeCompetenciesData.filter(c => c.isCompleted);
-                    if (completedComps.length === 0) {
-                      return (
-                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-                          Pendiente de evaluación
-                        </span>
-                      );
-                    }
-                    const allPassed = completedComps.every(c => c.score >= minApprovalScore);
-                    return allPassed ? (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800 shadow-2xs">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Alcanzó el porcentaje pedido</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-300 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800 shadow-2xs">
-                        <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
-                        <span>No alcanzó el porcentaje pedido</span>
-                      </span>
-                    );
-                  })()}
+                  {completedComps.length === 0 ? (
+                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                      Pendiente de evaluación
+                    </span>
+                  ) : totalCompetencyPercent >= minApprovalScore ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800 shadow-2xs">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Alcanzó el porcentaje pedido ({totalCompetencyPercent}% ≥ {minApprovalScore}%)</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-300 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800 shadow-2xs">
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                      <span>No alcanzó el porcentaje pedido ({totalCompetencyPercent}% &lt; {minApprovalScore}%)</span>
+                    </span>
+                  )}
                 </div>
               </div>
 
