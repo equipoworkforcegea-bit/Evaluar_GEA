@@ -234,20 +234,38 @@ export const EvaluacionesService = {
     const localTs = this.getActiveResetTimestamp(candidatoId, email, segment);
     if (localTs) return localTs;
 
-    // 2. Verificación en base de datos Supabase
+    // 2. Verificación en base de datos Supabase para sincronización multi-dispositivo y producción web
     try {
+      const candIds: string[] = [];
       if (candidatoId && !candidatoId.startsWith('cand_')) {
+        candIds.push(candidatoId);
+      }
+      if (email) {
+        try {
+          const { data: cList } = await supabase
+            .from('candidatos')
+            .select('id')
+            .ilike('correo', email);
+          if (cList) {
+            cList.forEach((c: any) => {
+              if (c.id && !candIds.includes(c.id)) candIds.push(c.id);
+            });
+          }
+        } catch {}
+      }
+
+      if (candIds.length > 0) {
         const { data: notifs } = await supabase
           .from('notificaciones')
-          .select('titulo, creado_en, mensaje')
-          .eq('candidato_id', candidatoId)
+          .select('titulo, creado_en, mensaje, candidato_id')
+          .in('candidato_id', candIds)
           .eq('tipo', 'SISTEMA')
           .order('creado_en', { ascending: false })
-          .limit(15);
+          .limit(30);
 
         if (notifs && notifs.length > 0) {
           const segNorm = segment ? segment.toUpperCase() : '';
-          const segAlt = segment ? segment.replace(':', '_').toUpperCase() : '';
+          const segAlt = segment ? segment.replace(/[:\s]/g, '_').toUpperCase() : '';
 
           for (const n of notifs) {
             const tit = String(n.titulo || '').toUpperCase();
@@ -259,8 +277,17 @@ export const EvaluacionesService = {
               } else if (n.mensaje) {
                 try {
                   const parsed = JSON.parse(n.mensaje);
-                  if (parsed.segment && String(parsed.segment).toUpperCase() === segNorm) {
-                    isMatch = true;
+                  if (parsed.segment) {
+                    const parsedSeg = String(parsed.segment).toUpperCase();
+                    if (
+                      parsedSeg === segNorm || 
+                      parsedSeg === segAlt ||
+                      parsedSeg === 'ALL' ||
+                      (segNorm.startsWith('KNOW') && parsedSeg === 'CONOCIMIENTOS') ||
+                      (segNorm.startsWith('COMP') && parsedSeg === 'COMPETENCIAS')
+                    ) {
+                      isMatch = true;
+                    }
                   }
                 } catch {}
               }
@@ -274,16 +301,16 @@ export const EvaluacionesService = {
           }
         }
 
-        // Consultar candidato: si está en INVITADO o EN_CURSO con actualizado_en reciente
-        const { data: cand } = await supabase
+        // Consultar candidato: si está en INVITADO con actualizado_en reciente
+        const { data: cands } = await supabase
           .from('candidatos')
           .select('estado, actualizado_en, completado_en')
-          .eq('id', candidatoId)
-          .maybeSingle();
+          .in('id', candIds);
 
-        if (cand?.estado === 'INVITADO' && cand.actualizado_en) {
-          const ts = new Date(cand.actualizado_en).getTime();
-          this.recordActiveReset(candidatoId, email, 'ALL', cand.actualizado_en);
+        const resetCand = (cands || []).find((c: any) => c.estado === 'INVITADO' && c.actualizado_en);
+        if (resetCand?.actualizado_en) {
+          const ts = new Date(resetCand.actualizado_en).getTime();
+          this.recordActiveReset(candidatoId, email, 'ALL', resetCand.actualizado_en);
           return ts;
         }
       }
@@ -392,22 +419,28 @@ export const EvaluacionesService = {
   /**
    * Obtiene los resultados de conocimientos completados por un candidato para la oportunidad actual.
    * Si existe un reinicio activo global o de un cuestionario específico, solo devuelve los rendidos después del reinicio.
+   * Mapea un único resultado activo por cada tema/cuestionario (el intento más reciente).
    */
   async obtenerResultadosConocimientos(candidatoId: string, procesoId?: string, email?: string): Promise<any[]> {
     const all = await this.obtenerHistorialConocimientos(candidatoId, procesoId, email);
-    const globalResetTs = await this.resolveActiveResetTimestamp(candidatoId, email, 'CONOCIMIENTOS');
+    const [globalResetTs, allResetTs] = await Promise.all([
+      this.resolveActiveResetTimestamp(candidatoId, email, 'CONOCIMIENTOS'),
+      this.resolveActiveResetTimestamp(candidatoId, email, 'ALL')
+    ]);
+    const effectiveGlobalReset = Math.max(globalResetTs || 0, allResetTs || 0);
 
-    return all.filter((item: any) => {
+    // 1. Filtrar los intentos rendidos antes de la marca de reinicio activa
+    const filtered = all.filter((item: any) => {
       const cDate = item.completado_en || item.completadoEn;
       if (!cDate) return false;
       const itemTs = new Date(cDate).getTime();
 
-      // 1. Verificar si hay reinicio general de conocimientos
-      if (globalResetTs && itemTs <= globalResetTs) {
+      // Verificar si hay reinicio general
+      if (effectiveGlobalReset > 0 && itemTs <= effectiveGlobalReset) {
         return false;
       }
 
-      // 2. Verificar si hay reinicio específico para este cuestionario/tema
+      // Verificar si hay reinicio específico para este cuestionario/tema
       const topicName = (item.tema || '').trim();
       if (topicName) {
         const specificResetTs = this.getActiveResetTimestamp(candidatoId, email, `KNOW:${topicName}`);
@@ -418,6 +451,17 @@ export const EvaluacionesService = {
 
       return true;
     });
+
+    // 2. Mapear por nombre único de tema/cuestionario para la oportunidad actual (último intento por tema)
+    const resultsMap = new Map<string, any>();
+    filtered.forEach((item: any) => {
+      const topicName = (item.tema || '').trim();
+      if (topicName && !resultsMap.has(topicName.toLowerCase())) {
+        resultsMap.set(topicName.toLowerCase(), item);
+      }
+    });
+
+    return Array.from(resultsMap.values());
   },
 
   /**
@@ -478,7 +522,11 @@ export const EvaluacionesService = {
     if (!list || list.length === 0) return null;
 
     const latest = list[0];
-    const resetTs = await this.resolveActiveResetTimestamp(candidatoId, email, 'DISC');
+    const [discResetTs, allResetTs] = await Promise.all([
+      this.resolveActiveResetTimestamp(candidatoId, email, 'DISC'),
+      this.resolveActiveResetTimestamp(candidatoId, email, 'ALL')
+    ]);
+    const resetTs = Math.max(discResetTs || 0, allResetTs || 0);
     if (!resetTs) return latest;
 
     const cDate = latest.completado_en || latest.completadoEn;
@@ -716,7 +764,11 @@ export const EvaluacionesService = {
    */
   async obtenerResultadosCompetencias(candidatoId: string, procesoId?: string, email?: string): Promise<any[]> {
     const all = await this.obtenerHistorialCompetencias(candidatoId, procesoId, email);
-    const globalResetTs = await this.resolveActiveResetTimestamp(candidatoId, email, 'COMPETENCIAS');
+    const [globalResetTs, allResetTs] = await Promise.all([
+      this.resolveActiveResetTimestamp(candidatoId, email, 'COMPETENCIAS'),
+      this.resolveActiveResetTimestamp(candidatoId, email, 'ALL')
+    ]);
+    const effectiveGlobalReset = Math.max(globalResetTs || 0, allResetTs || 0);
 
     // Filtrar: si hay reinicio activo global o individual, solo las completadas DESPUÉS del reinicio
     const activeList = all.filter((item: any) => {
@@ -724,8 +776,8 @@ export const EvaluacionesService = {
       if (!cDate) return false;
       const itemTs = new Date(cDate).getTime();
 
-      // 1. Verificar si hay reinicio general de competencias
-      if (globalResetTs && itemTs <= globalResetTs) {
+      // 1. Verificar si hay reinicio general de competencias o reset total
+      if (effectiveGlobalReset > 0 && itemTs <= effectiveGlobalReset) {
         return false;
       }
 
