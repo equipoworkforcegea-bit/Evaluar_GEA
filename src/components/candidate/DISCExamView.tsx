@@ -59,6 +59,7 @@ interface DISCExamViewProps {
   processName?: string;
   candidateId?: string;
   processId?: string;
+  email?: string;
   onComplete: (answers: DISCAnswers) => void;
   onExit?: () => void;
 }
@@ -67,6 +68,7 @@ export const DISCExamView: React.FC<DISCExamViewProps> = ({
   processName,
   candidateId,
   processId,
+  email,
   onComplete,
   onExit,
 }) => {
@@ -150,6 +152,7 @@ export const DISCExamView: React.FC<DISCExamViewProps> = ({
       await EvaluacionesService.guardarResultadoDISC({
         candidatoId: candidateId || 'cand_invitado',
         procesoId: processId || 'proc_invitado',
+        email,
         respuestas: answers,
         conteoD,
         conteoI,

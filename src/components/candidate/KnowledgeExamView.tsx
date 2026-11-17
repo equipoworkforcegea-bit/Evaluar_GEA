@@ -23,6 +23,7 @@ interface KnowledgeExamViewProps {
   questionsHigh?: number;
   candidateId?: string;
   processId?: string;
+  email?: string;
   onComplete: (score: number, maxScore: number, correctCount: number) => void;
 }
 
@@ -35,6 +36,7 @@ export const KnowledgeExamView: React.FC<KnowledgeExamViewProps> = ({
   questionsHigh,
   candidateId = 'cand_invitado',
   processId = 'proc_invitado',
+  email,
   onComplete
 }) => {
   // 1. Obtener las preguntas del tema configurado respetando el desglose por nivel de dificultad
@@ -164,6 +166,7 @@ export const KnowledgeExamView: React.FC<KnowledgeExamViewProps> = ({
       await EvaluacionesService.guardarResultadoConocimientos({
         candidatoId: candidateId || 'cand_oficial',
         procesoId: processId || 'proc_oficial',
+        email,
         tema: topicName || 'General',
         dificultad: difficulty || 'Media',
         puntaje: score,

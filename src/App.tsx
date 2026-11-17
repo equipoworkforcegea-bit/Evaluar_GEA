@@ -291,6 +291,7 @@ function ProcesosInvitadosViewWrapper({
         processName={candidate.position || 'Evaluación DISC'}
         candidateId={activeExam.candidateId || candidate.id}
         processId={activeExam.testId}
+        email={candidate.email}
         onComplete={(_answers) => {
           setRefreshKey(k => k + 1);
           setActiveExam(null);
@@ -313,6 +314,7 @@ function ProcesosInvitadosViewWrapper({
         questionsHigh={activeExam.questionsHigh}
         candidateId={activeExam.candidateId || candidate.id}
         processId={activeExam.testId}
+        email={candidate.email}
         onComplete={(_score, _max, _correct) => {
           setRefreshKey(k => k + 1);
           setActiveExam(null);

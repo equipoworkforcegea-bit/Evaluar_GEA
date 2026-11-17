@@ -464,17 +464,35 @@ export const ProcesosInvitadosView: React.FC<ProcesosInvitadosViewProps> = ({
     });
   };
 
-  const handleConfirmStartExam = () => {
+  const handleConfirmStartExam = async () => {
     if (!warningModalTarget) return;
     const { payload, testTitle, processTitle } = warningModalTarget;
+
+    const candId = payload.candidateId || candidate.id;
+    const procId = payload.testId;
+
+    if (candId && !candId.startsWith('cand_')) {
+      try {
+        await supabase
+          .from('candidatos')
+          .update({
+            estado: 'EN_CURSO',
+            iniciado_en: new Date().toISOString(),
+            actualizado_en: new Date().toISOString()
+          })
+          .eq('id', candId);
+      } catch (err) {
+        console.warn('[ProcesosInvitadosView] Error actualizando estado en curso del candidato:', err);
+      }
+    }
 
     // Disparar notificación oficial: postulante inició la prueba
     NotificacionesService.crearNotificacion({
       tipo: 'CANDIDATO_INGRESO',
       titulo: 'Postulante inició evaluación',
       mensaje: `${realName || candidate.fullName || candidate.email} inició "${testTitle}" en el proceso "${processTitle}".`,
-      candidato_id: payload.candidateId || candidate.id,
-      proceso_id: payload.testId
+      candidato_id: candId,
+      proceso_id: procId
     });
 
     setWarningModalTarget(null);

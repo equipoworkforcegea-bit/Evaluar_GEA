@@ -3,6 +3,7 @@ import { supabase } from './supabaseClient';
 export interface ConocimientoResultadoPayload {
   candidatoId: string;
   procesoId: string;
+  email?: string;
   tema: string;
   dificultad: string;
   puntaje: number;
@@ -23,6 +24,7 @@ export interface ConocimientoResultadoPayload {
 export interface DISCResultadoPayload {
   candidatoId: string;
   procesoId: string;
+  email?: string;
   respuestas: Record<string, string[]>;
   conteoD: number;
   conteoI: number;
@@ -51,14 +53,17 @@ const LOCAL_STORAGE_KEY_COMPETENCIAS = 'gea_evaluaciones_competencias';
 export const EvaluacionesService = {
   /**
    * Guarda el resultado y las respuestas de un cuestionario de conocimientos en Supabase y LocalStorage
+   * Vinculado estrictamente al proceso correspondiente.
    */
   async guardarResultadoConocimientos(payload: ConocimientoResultadoPayload): Promise<boolean> {
+    const nowIso = new Date().toISOString();
+
     // 1. Guardar siempre en LocalStorage como respaldo infalible
     try {
       const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY_CONOCIMIENTOS) || '[]');
       stored.push({
         ...payload,
-        completadoEn: new Date().toISOString()
+        completadoEn: nowIso
       });
       localStorage.setItem(LOCAL_STORAGE_KEY_CONOCIMIENTOS, JSON.stringify(stored));
     } catch (e) {
@@ -67,8 +72,25 @@ export const EvaluacionesService = {
 
     // 2. Guardar en Supabase tabla `evaluaciones_conocimientos`
     try {
-      const safeCandId = payload.candidatoId || 'cand_oficial';
+      let safeCandId = payload.candidatoId || 'cand_oficial';
       const safeProcId = payload.procesoId || 'proc_oficial';
+
+      // Resolver candidate_id específico para este proceso si tenemos email o procesoId
+      if (safeProcId && /^[0-9a-f-]{36}$/i.test(safeProcId)) {
+        try {
+          const { data: candMatch } = await supabase
+            .from('candidatos')
+            .select('id')
+            .eq('proceso_id', safeProcId)
+            .or(`id.eq.${safeCandId}${payload.email ? `,correo.ilike.${payload.email.trim().toLowerCase()}` : ''}`)
+            .limit(1)
+            .maybeSingle();
+
+          if (candMatch?.id) {
+            safeCandId = candMatch.id;
+          }
+        } catch {}
+      }
 
       const { error } = await supabase
         .from('evaluaciones_conocimientos')
@@ -84,18 +106,18 @@ export const EvaluacionesService = {
           errores: payload.errores ?? 0,
           respuestas: payload.respuestas || [],
           tiempo_empleado_segundos: payload.tiempoSegundos || 0,
-          completado_en: new Date().toISOString()
+          completado_en: nowIso
         });
 
       if (error) {
         console.warn('[EvaluacionesService] Error guardando en Supabase evaluaciones_conocimientos:', error.message);
         return false;
       }
-      console.log('✓ [EvaluacionesService] Respuestas de Conocimientos guardadas con éxito en Supabase:', payload.tema);
+      console.log('✓ [EvaluacionesService] Respuestas de Conocimientos guardadas con éxito en Supabase:', payload.tema, 'para proceso:', safeProcId);
 
-      // Actualizar estado del candidato: EVALUADO si completó todas las pruebas, o EN_CURSO si le quedan pendientes
+      // Actualizar estado del candidato en el proceso correspondiente
       if (safeCandId && !safeCandId.startsWith('cand_')) {
-        await this.actualizarEstadoCandidatoTrasPrueba(safeCandId, safeProcId);
+        await this.actualizarEstadoCandidatoTrasPrueba(safeCandId, safeProcId, payload.email);
       }
 
       return true;
@@ -107,14 +129,17 @@ export const EvaluacionesService = {
 
   /**
    * Guarda el resultado y las respuestas de la prueba DISC en Supabase y LocalStorage
+   * Vinculado estrictamente al proceso correspondiente.
    */
   async guardarResultadoDISC(payload: DISCResultadoPayload): Promise<boolean> {
+    const nowIso = new Date().toISOString();
+
     // 1. Guardar siempre en LocalStorage como respaldo infalible
     try {
       const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY_DISC) || '[]');
       stored.push({
         ...payload,
-        completadoEn: new Date().toISOString()
+        completadoEn: nowIso
       });
       localStorage.setItem(LOCAL_STORAGE_KEY_DISC, JSON.stringify(stored));
     } catch (e) {
@@ -123,29 +148,49 @@ export const EvaluacionesService = {
 
     // 2. Guardar en Supabase tabla `evaluaciones_disc`
     try {
+      let safeCandId = payload.candidatoId || 'cand_invitado';
+      const safeProcId = payload.procesoId || 'proc_invitado';
+
+      // Resolver candidate_id específico para este proceso si tenemos email o procesoId
+      if (safeProcId && /^[0-9a-f-]{36}$/i.test(safeProcId)) {
+        try {
+          const { data: candMatch } = await supabase
+            .from('candidatos')
+            .select('id')
+            .eq('proceso_id', safeProcId)
+            .or(`id.eq.${safeCandId}${payload.email ? `,correo.ilike.${payload.email.trim().toLowerCase()}` : ''}`)
+            .limit(1)
+            .maybeSingle();
+
+          if (candMatch?.id) {
+            safeCandId = candMatch.id;
+          }
+        } catch {}
+      }
+
       const { error } = await supabase
         .from('evaluaciones_disc')
         .insert({
-          candidato_id: payload.candidatoId,
-          proceso_id: payload.procesoId,
+          candidato_id: safeCandId,
+          proceso_id: safeProcId,
           respuestas: payload.respuestas,
           conteo_d: payload.conteoD,
           conteo_i: payload.conteoI,
           conteo_s: payload.conteoS,
           conteo_c: payload.conteoC,
           perfil_dominante: payload.perfilDominante,
-          completado_en: new Date().toISOString()
+          completado_en: nowIso
         });
 
       if (error) {
         console.warn('[EvaluacionesService] Error guardando en Supabase evaluaciones_disc:', error.message);
         return false;
       }
-      console.log('✓ [EvaluacionesService] Respuestas de DISC guardadas con éxito en Supabase');
+      console.log('✓ [EvaluacionesService] Respuestas de DISC guardadas con éxito en Supabase para proceso:', safeProcId);
 
-      // Actualizar estado del candidato: EVALUADO si completó todas las pruebas, o EN_CURSO si le quedan pendientes
-      if (payload.candidatoId && !payload.candidatoId.startsWith('cand_')) {
-        await this.actualizarEstadoCandidatoTrasPrueba(payload.candidatoId, payload.procesoId);
+      // Actualizar estado del candidato en el proceso correspondiente
+      if (safeCandId && !safeCandId.startsWith('cand_')) {
+        await this.actualizarEstadoCandidatoTrasPrueba(safeCandId, safeProcId, payload.email);
       }
 
       return true;
@@ -264,43 +309,35 @@ export const EvaluacionesService = {
 
   /**
    * Obtiene el historial completo de todas las pruebas de conocimientos rendidas por un candidato (incluyendo intentos previos)
+   * Filtrado estrictamente por proceso cuando se proporciona procesoId.
    */
   async obtenerHistorialConocimientos(candidatoId: string, procesoId?: string, email?: string): Promise<any[]> {
     let supabaseReachable = false;
     try {
-      // 1. Intentar por candidato_id exacto
-      if (candidatoId) {
-        let query = supabase.from('evaluaciones_conocimientos').select('*').eq('candidato_id', candidatoId);
-        if (procesoId) query = query.eq('proceso_id', procesoId);
+      // 1. Si tenemos procesoId, aislar estrictamente por proceso
+      if (procesoId) {
+        let query = supabase.from('evaluaciones_conocimientos').select('*').eq('proceso_id', procesoId);
+        if (candidatoId && !candidatoId.startsWith('cand_')) {
+          query = query.eq('candidato_id', candidatoId);
+        } else if (email) {
+          const { data: candInProc } = await supabase.from('candidatos').select('id').eq('proceso_id', procesoId).ilike('correo', email);
+          const pIds = (candInProc || []).map((c: any) => c.id);
+          if (pIds.length > 0) {
+            query = query.in('candidato_id', pIds);
+          } else {
+            return [];
+          }
+        }
         const { data, error } = await query.order('completado_en', { ascending: false });
         if (!error) {
           supabaseReachable = true;
           const filtered = (data || []).filter((r: any) => !String(r.tema || '').match(/^COMPETENCIA:/i));
-          if (filtered.length > 0) return filtered;
+          return filtered;
         }
-      }
-
-      // 2. Si no hubo resultados y tenemos email, buscar todos los candidato_id asociados a ese email
-      if (email) {
-        const { data: candList } = await supabase.from('candidatos').select('id').eq('correo', email);
-        if (candList && candList.length > 0) {
-          const ids = candList.map((c: any) => c.id);
-          const { data: dataByEmail, error: errByEmail } = await supabase
-            .from('evaluaciones_conocimientos')
-            .select('*')
-            .in('candidato_id', ids)
-            .order('completado_en', { ascending: false });
-          if (!errByEmail) {
-            supabaseReachable = true;
-            const filtered = (dataByEmail || []).filter((r: any) => !String(r.tema || '').match(/^COMPETENCIA:/i));
-            if (filtered.length > 0) return filtered;
-          }
-        }
-      }
-
-      // 3. Si no hay candidatoId pero hay procesoId
-      if (procesoId && !candidatoId) {
-        const { data, error } = await supabase.from('evaluaciones_conocimientos').select('*').eq('proceso_id', procesoId).order('completado_en', { ascending: false });
+      } else if (candidatoId) {
+        // Fallback cuando no hay procesoId
+        let query = supabase.from('evaluaciones_conocimientos').select('*').eq('candidato_id', candidatoId);
+        const { data, error } = await query.order('completado_en', { ascending: false });
         if (!error) {
           supabaseReachable = true;
           const filtered = (data || []).filter((r: any) => !String(r.tema || '').match(/^COMPETENCIA:/i));
@@ -315,11 +352,11 @@ export const EvaluacionesService = {
 
     try {
       const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY_CONOCIMIENTOS) || '[]');
-      return stored.filter((item: any) => 
-        (candidatoId && item.candidatoId === candidatoId) ||
-        (procesoId && item.procesoId === procesoId) ||
-        (email && item.email === email)
-      );
+      return stored.filter((item: any) => {
+        if (procesoId && item.procesoId !== procesoId) return false;
+        return (candidatoId && item.candidatoId === candidatoId) ||
+               (email && item.email && item.email.toLowerCase() === email.toLowerCase());
+      });
     } catch {
       return [];
     }
@@ -343,42 +380,34 @@ export const EvaluacionesService = {
 
   /**
    * Obtiene el historial completo de DISC (incluyendo intentos previos)
+   * Filtrado estrictamente por proceso cuando se proporciona procesoId.
    */
   async obtenerHistorialDISC(candidatoId: string, procesoId?: string, email?: string): Promise<any[]> {
     let supabaseReachable = false;
     try {
-      if (candidatoId) {
-        let query = supabase.from('evaluaciones_disc').select('*').eq('candidato_id', candidatoId);
-        if (procesoId) query = query.eq('proceso_id', procesoId);
-        const { data, error } = await query.order('completado_en', { ascending: false });
-        if (!error) {
-          supabaseReachable = true;
-          if (data && data.length > 0) return data;
-        }
-      }
-
-      if (email) {
-        const { data: candList } = await supabase.from('candidatos').select('id').eq('correo', email);
-        if (candList && candList.length > 0) {
-          const ids = candList.map((c: any) => c.id);
-          const { data: dataByEmail, error: errByEmail } = await supabase
-            .from('evaluaciones_disc')
-            .select('*')
-            .in('candidato_id', ids)
-            .order('completado_en', { ascending: false });
-          if (!errByEmail) {
-            supabaseReachable = true;
-            if (dataByEmail && dataByEmail.length > 0) return dataByEmail;
+      // 1. Si tenemos procesoId, aislar estrictamente por proceso
+      if (procesoId) {
+        let query = supabase.from('evaluaciones_disc').select('*').eq('proceso_id', procesoId);
+        if (candidatoId && !candidatoId.startsWith('cand_')) {
+          query = query.eq('candidato_id', candidatoId);
+        } else if (email) {
+          const { data: candInProc } = await supabase.from('candidatos').select('id').eq('proceso_id', procesoId).ilike('correo', email);
+          const pIds = (candInProc || []).map((c: any) => c.id);
+          if (pIds.length > 0) {
+            query = query.in('candidato_id', pIds);
+          } else {
+            return [];
           }
         }
-      }
-
-      if (procesoId && !candidatoId) {
-        const { data, error } = await supabase.from('evaluaciones_disc').select('*').eq('proceso_id', procesoId).order('completado_en', { ascending: false });
-        if (!error) {
-          supabaseReachable = true;
-          if (data && data.length > 0) return data;
+        const { data, error } = await query.order('completado_en', { ascending: false });
+        if (!error && data) {
+          return data;
         }
+      } else if (candidatoId) {
+        // Fallback cuando no hay procesoId
+        let query = supabase.from('evaluaciones_disc').select('*').eq('candidato_id', candidatoId);
+        const { data, error } = await query.order('completado_en', { ascending: false });
+        if (!error && data && data.length > 0) return data;
       }
     } catch (err) {
       console.warn('[EvaluacionesService] Error consultando DISC en Supabase:', err);
@@ -388,11 +417,11 @@ export const EvaluacionesService = {
 
     try {
       const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY_DISC) || '[]');
-      return stored.filter((item: any) => 
-        (candidatoId && item.candidatoId === candidatoId) ||
-        (procesoId && item.procesoId === procesoId) ||
-        (email && item.email === email)
-      );
+      return stored.filter((item: any) => {
+        if (procesoId && item.procesoId !== procesoId) return false;
+        return (candidatoId && item.candidatoId === candidatoId) ||
+               (email && item.email && item.email.toLowerCase() === email.toLowerCase());
+      });
     } catch {
       return [];
     }
@@ -437,8 +466,25 @@ export const EvaluacionesService = {
 
     // 2. Guardar en Supabase en la tabla oficial: `evaluaciones_competencias`
     try {
-      const safeCandId = payload.candidatoId || 'cand_oficial';
+      let safeCandId = payload.candidatoId || 'cand_oficial';
       const safeProcId = payload.procesoId || 'proc_oficial';
+
+      if (safeProcId && /^[0-9a-f-]{36}$/i.test(safeProcId)) {
+        try {
+          const { data: candMatch } = await supabase
+            .from('candidatos')
+            .select('id')
+            .eq('proceso_id', safeProcId)
+            .or(`id.eq.${safeCandId}${payload.email ? `,correo.ilike.${payload.email.trim().toLowerCase()}` : ''}`)
+            .limit(1)
+            .maybeSingle();
+
+          if (candMatch?.id) {
+            safeCandId = candMatch.id;
+          }
+        } catch {}
+      }
+
       const cleanCompName = payload.competencia.trim();
       const maxPts = payload.puntajeMaximo || 20;
       const pts = payload.puntaje ?? 0;
@@ -461,7 +507,7 @@ export const EvaluacionesService = {
         });
 
       if (!compError) {
-        console.log('✓ [EvaluacionesService] Guardado exitoso en tabla oficial evaluaciones_competencias:', cleanCompName);
+        console.log('✓ [EvaluacionesService] Guardado exitoso en tabla oficial evaluaciones_competencias:', cleanCompName, 'para proceso:', safeProcId);
       } else {
         console.warn('[EvaluacionesService] Error en evaluaciones_competencias (fallback a conocimientos):', compError.message);
         try {
@@ -485,9 +531,9 @@ export const EvaluacionesService = {
         } catch {}
       }
 
-      // Actualizar estado del candidato: EVALUADO si completó todas las pruebas, o EN_CURSO si le quedan pendientes
+      // Actualizar estado del candidato en el proceso correspondiente
       if (safeCandId && !safeCandId.startsWith('cand_') && safeCandId !== 'cand-fallback') {
-        await this.actualizarEstadoCandidatoTrasPrueba(safeCandId, safeProcId);
+        await this.actualizarEstadoCandidatoTrasPrueba(safeCandId, safeProcId, payload.email);
       }
 
       return true;
@@ -499,6 +545,7 @@ export const EvaluacionesService = {
 
   /**
    * Obtiene el historial completo de todas las pruebas de competencias rendidas (incluyendo intentos previos)
+   * Filtrado estrictamente por proceso cuando se proporciona procesoId.
    */
   async obtenerHistorialCompetencias(candidatoId: string, procesoId?: string, email?: string): Promise<any[]> {
     const allList: any[] = [];
@@ -510,11 +557,19 @@ export const EvaluacionesService = {
         .from('evaluaciones_competencias')
         .select('*');
 
-      if (candidatoId) {
-        query = query.eq('candidato_id', candidatoId);
-      }
       if (procesoId) {
         query = query.eq('proceso_id', procesoId);
+      }
+      if (candidatoId && !candidatoId.startsWith('cand_')) {
+        query = query.eq('candidato_id', candidatoId);
+      } else if (email && procesoId) {
+        const { data: candInProc } = await supabase.from('candidatos').select('id').eq('proceso_id', procesoId).ilike('correo', email);
+        const pIds = (candInProc || []).map((c: any) => c.id);
+        if (pIds.length > 0) {
+          query = query.in('candidato_id', pIds);
+        } else {
+          return [];
+        }
       }
 
       const { data, error } = await query.order('completado_en', { ascending: false });
@@ -541,18 +596,18 @@ export const EvaluacionesService = {
       console.warn('[EvaluacionesService] Error consultando evaluaciones_competencias en Supabase:', err);
     }
 
-    // 2. Fallback a evaluaciones_conocimientos para compatibilidad histórica
+    // 2. Fallback a evaluaciones_conocimientos para compatibilidad histórica (estrictamente por procesoId)
     try {
       let query = supabase
         .from('evaluaciones_conocimientos')
         .select('*')
         .ilike('tema', 'COMPETENCIA:%');
 
-      if (candidatoId) {
-        query = query.eq('candidato_id', candidatoId);
-      }
       if (procesoId) {
         query = query.eq('proceso_id', procesoId);
+      }
+      if (candidatoId && !candidatoId.startsWith('cand_')) {
+        query = query.eq('candidato_id', candidatoId);
       }
 
       const { data, error } = await query.order('completado_en', { ascending: false });
@@ -561,7 +616,7 @@ export const EvaluacionesService = {
         if (data && data.length > 0) {
           data.forEach((item: any) => {
             const rawName = item.tema.replace(/^COMPETENCIA:\s*/i, '').trim();
-            if (rawName) {
+            if (rawName && !allList.some(a => a.competencia.toLowerCase() === rawName.toLowerCase())) {
               allList.push({
                 id: item.id,
                 competencia: rawName,
@@ -584,11 +639,11 @@ export const EvaluacionesService = {
       try {
         const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY_COMPETENCIAS) || '[]');
         stored.forEach((item: any) => {
+          if (procesoId && item.procesoId !== procesoId) return;
           const matchCand = !candidatoId || item.candidatoId === candidatoId;
-          const matchProc = !procesoId || item.procesoId === procesoId;
-          const matchMail = !email || item.email === email;
+          const matchMail = !email || (item.email && item.email.toLowerCase() === email.toLowerCase());
 
-          if (matchCand && matchProc && matchMail && item.competencia) {
+          if ((matchCand || matchMail) && item.competencia) {
             allList.push({
               competencia: item.competencia,
               puntaje: item.puntaje,
@@ -646,24 +701,28 @@ export const EvaluacionesService = {
    * Si las completó todas: marca el estado como 'EVALUADO' y completado_en = now().
    * Si solo resolvió una o tiene pendientes: marca el estado como 'EN_CURSO' y completado_en = null.
    */
-  async actualizarEstadoCandidatoTrasPrueba(candidatoId: string, procesoId?: string): Promise<'EVALUADO' | 'EN_CURSO'> {
+  async actualizarEstadoCandidatoTrasPrueba(candidatoId: string, procesoId?: string, email?: string): Promise<'EVALUADO' | 'EN_CURSO'> {
     if (!candidatoId || candidatoId.startsWith('cand_') || candidatoId === 'cand-fallback') {
       return 'EN_CURSO';
     }
 
     try {
-      // 1. Obtener fila del candidato para saber su proceso si no se envió
+      // 1. Obtener fila del candidato para saber su proceso y correo si no se enviaron
       let procId = procesoId;
-      if (!procId || procId === 'proc_default') {
+      let candEmail = email;
+      if (!procId || procId === 'proc_default' || !candEmail) {
         const { data: candRow } = await supabase
           .from('candidatos')
-          .select('proceso_id')
+          .select('proceso_id, correo')
           .eq('id', candidatoId)
           .maybeSingle();
         procId = candRow?.proceso_id || procId;
+        candEmail = candEmail || candRow?.correo;
       }
 
-      if (!procId || procId === 'proc_default') {
+      const safeProcId = procId;
+
+      if (!safeProcId || safeProcId === 'proc_default') {
         await supabase
           .from('candidatos')
           .update({
@@ -680,7 +739,7 @@ export const EvaluacionesService = {
       const { data: proc } = await supabase
         .from('procesos_evaluacion')
         .select('*, perfiles_puesto(*)')
-        .eq('id', procId)
+        .eq('id', safeProcId)
         .maybeSingle();
 
       const perfil = proc?.perfiles_puesto;
@@ -720,9 +779,9 @@ export const EvaluacionesService = {
 
       // 3. Consultar pruebas activas del candidato pertenecientes a la oportunidad actual (filtrando históricos)
       const [discRes, activeKnowList, activeCompList] = await Promise.all([
-        this.obtenerResultadoDISC(candidatoId, safeProcId),
-        this.obtenerResultadosConocimientos(candidatoId, safeProcId),
-        this.obtenerResultadosCompetencias(candidatoId, safeProcId)
+        this.obtenerResultadoDISC(candidatoId, safeProcId, candEmail),
+        this.obtenerResultadosConocimientos(candidatoId, safeProcId, candEmail),
+        this.obtenerResultadosCompetencias(candidatoId, safeProcId, candEmail)
       ]);
 
       const discDone = !hasDisc || Boolean(discRes);

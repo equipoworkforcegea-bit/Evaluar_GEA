@@ -418,12 +418,6 @@ export const EvaluarOfficialPdfReport: React.FC<EvaluarOfficialPdfReportProps> =
               <div className="inline-flex items-center px-4 py-2 rounded-full bg-white/15 backdrop-blur-md text-xs font-semibold text-purple-100 border border-white/10">
                 Finalizado: {evaluationDate}
               </div>
-              <div 
-                className="inline-flex items-center px-4 py-2 rounded-full bg-white text-xs font-extrabold shadow-md"
-                style={{ color: adecuacionColor }}
-              >
-                Adecuación: {overallScore}%
-              </div>
             </div>
           </div>
 
