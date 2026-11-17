@@ -31,42 +31,142 @@ export const InformesView: React.FC<InformesViewProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('TODOS');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [candidateScores, setCandidateScores] = useState<Record<string, number>>({});
+  const [liveCandidates, setLiveCandidates] = useState<Candidate[]>([]);
 
   useEffect(() => {
     let isMounted = true;
-    const loadScores = async () => {
+    const loadLiveData = async () => {
       try {
-        const { data } = await supabase.from('evaluaciones_conocimientos').select('candidato_id, puntaje, puntaje_maximo');
-        if (data && data.length > 0 && isMounted) {
-          const statsMap: Record<string, { totalScore: number; totalMax: number }> = {};
-          data.forEach(item => {
-            if (!item.candidato_id) return;
-            const sc = Number(item.puntaje || 0);
-            const mx = Number(item.puntaje_maximo || 20);
-            const cur = statsMap[item.candidato_id] || { totalScore: 0, totalMax: 0 };
-            statsMap[item.candidato_id] = {
-              totalScore: cur.totalScore + sc,
-              totalMax: cur.totalMax + mx
-            };
-          });
-          const map: Record<string, number> = {};
-          Object.keys(statsMap).forEach(candId => {
-            const st = statsMap[candId];
-            map[candId] = st.totalMax > 0 ? Math.round((st.totalScore / st.totalMax) * 100) : 0;
-          });
-          setCandidateScores(map);
+        const [cRes, kRes, compRes, notifRes] = await Promise.all([
+          supabase
+            .from('candidatos')
+            .select('*, procesos_evaluacion(titulo, puesto_objetivo)')
+            .order('invitado_en', { ascending: false }),
+          supabase
+            .from('evaluaciones_conocimientos')
+            .select('candidato_id, puntaje, puntaje_maximo, completado_en, tema'),
+          supabase
+            .from('evaluaciones_competencias')
+            .select('candidato_id, puntaje, puntaje_maximo, completado_en, competencia'),
+          supabase
+            .from('notificaciones')
+            .select('candidato_id, titulo, creado_en')
+            .eq('tipo', 'SISTEMA')
+            .ilike('titulo', 'RESET%')
+            .order('creado_en', { ascending: false })
+        ]);
+
+        if (!cRes.data || !isMounted) return;
+
+        const notifs = notifRes.data || [];
+        const getResetTs = (candId: string) => {
+          const list = notifs.filter((n: any) => n.candidato_id === candId);
+          if (!list.length) return 0;
+          return Math.max(...list.map((n: any) => new Date(n.creado_en).getTime()));
+        };
+
+        const kMap = new Map<string, { score: number; max: number }>();
+        (kRes.data || []).forEach((k: any) => {
+          if (!k.candidato_id || !k.completado_en) return;
+          const rTs = getResetTs(k.candidato_id);
+          if (rTs && new Date(k.completado_en).getTime() <= rTs) return;
+          const sc = Number(k.puntaje || 0);
+          const mx = Number(k.puntaje_maximo || 20);
+          const cur = kMap.get(k.candidato_id) || { score: 0, max: 0 };
+          kMap.set(k.candidato_id, { score: cur.score + sc, max: cur.max + mx });
+        });
+
+        const compMap = new Map<string, { score: number; count: number }>();
+        (compRes.data || []).forEach((c: any) => {
+          if (!c.candidato_id || !c.completado_en) return;
+          const rTs = getResetTs(c.candidato_id);
+          if (rTs && new Date(c.completado_en).getTime() <= rTs) return;
+          const sc = Number(c.puntaje || 0);
+          const maxP = Number(c.puntaje_maximo || 100);
+          const pct = maxP === 20 ? Math.round((sc / 20) * 100) : sc;
+          const cur = compMap.get(c.candidato_id) || { score: 0, count: 0 };
+          compMap.set(c.candidato_id, { score: cur.score + pct, count: cur.count + 1 });
+        });
+
+        const scoresMap: Record<string, number> = {};
+        const builtCandidates: Candidate[] = cRes.data.map((row: any) => {
+          const kInfo = kMap.get(row.id);
+          const cInfo = compMap.get(row.id);
+
+          const kAvg = kInfo && kInfo.max > 0 ? Math.round((kInfo.score / kInfo.max) * 100) : null;
+          const cAvg = cInfo && cInfo.count > 0 ? Math.round(cInfo.score / cInfo.count) : null;
+
+          let finalPct: number | null = null;
+          if (kAvg !== null && cAvg !== null) finalPct = Math.round((kAvg + cAvg) / 2);
+          else if (cAvg !== null) finalPct = cAvg;
+          else if (kAvg !== null) finalPct = kAvg;
+
+          if (finalPct !== null) {
+            scoresMap[row.id] = finalPct;
+          }
+
+          const rawFullName = row.nombre_completo || row.full_name || 'Postulante';
+          const nameParts = rawFullName.trim().split(/\s+/);
+          const fName = nameParts[0] || 'Postulante';
+          const lName = nameParts.slice(1).join(' ') || '';
+          const dniVal = row.dni || '';
+
+          const rawStatus = String(row.estado || '').toUpperCase();
+          const isEvaluated = rawStatus === 'EVALUADO' || Boolean(row.completado_en);
+          const isInProgress = !isEvaluated && finalPct !== null;
+          const computedStatus = isEvaluated ? 'SCORED' : (isInProgress ? 'IN_PROGRESS' : 'INVITED');
+
+          return {
+            id: row.id,
+            fullName: rawFullName,
+            firstName: fName,
+            lastName: lName,
+            dni: dniVal,
+            documentId: dniVal,
+            email: row.correo || '',
+            phone: row.telefono || '',
+            position: row.procesos_evaluacion?.puesto_objetivo || 'Asesor',
+            testId: row.proceso_id || '',
+            invitationCode: row.codigo_invitacion || `GEA-${dniVal}`,
+            invitedAt: row.invitado_en || new Date().toISOString(),
+            status: computedStatus as any,
+            startedAt: row.iniciado_en,
+            completedAt: row.completado_en,
+            scores: finalPct !== null ? {
+              overall: finalPct,
+              stage1Psycho: finalPct,
+              stage2Emotional: finalPct,
+              stage3WorkCases: finalPct,
+              percentile: Math.min(99, Math.max(1, finalPct + 2))
+            } : undefined,
+            puntaje: finalPct,
+            isConsentSigned: Boolean(row.consentimiento_firmado)
+          } as Candidate;
+        });
+
+        if (isMounted) {
+          setCandidateScores(scoresMap);
+          setLiveCandidates(builtCandidates);
         }
       } catch (err) {
-        console.warn('[InformesView] Error cargando puntajes:', err);
+        console.warn('[InformesView] Error cargando datos en vivo:', err);
       }
     };
-    loadScores();
-    return () => { isMounted = false; };
+
+    loadLiveData();
+    const interval = setInterval(loadLiveData, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
+
+  // Candidatos fuente (priorizar los datos en vivo)
+  const sourceCandidates = liveCandidates.length > 0 ? liveCandidates : candidates;
 
   // Filtrado de candidatos
   const filteredCandidates = useMemo(() => {
-    return candidates.filter(c => {
+    return sourceCandidates.filter(c => {
       if (selectedTestId !== 'TODOS') {
         const matchesTest = c.testId === selectedTestId || 
           (c.testId && tests.some(t => t.id === selectedTestId && (t.code === c.testId || t.title.toLowerCase().includes(c.testId.toLowerCase()))));
@@ -86,34 +186,34 @@ export const InformesView: React.FC<InformesViewProps> = ({
 
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase();
-        const matchName = `${c.firstName} ${c.lastName}`.toLowerCase().includes(q);
-        const matchDni = (c.documentId || '').toLowerCase().includes(q);
+        const matchName = (c.fullName || `${c.firstName || ''} ${c.lastName || ''}`).toLowerCase().includes(q);
+        const matchDni = (c.dni || (c as any).documentId || '').toLowerCase().includes(q);
         const matchEmail = (c.email || '').toLowerCase().includes(q);
         if (!matchName && !matchDni && !matchEmail) return false;
       }
 
       return true;
     });
-  }, [candidates, tests, selectedTestId, statusFilter, searchTerm]);
+  }, [sourceCandidates, tests, selectedTestId, statusFilter, searchTerm]);
 
-  // Exportar a Excel (solo datos y resultados de pruebas activas)
+  // Exportar a Excel (con datos activos y resultados reales)
   const handleExportExcel = () => {
     const dataToExport = filteredCandidates.map((c, idx) => {
       const rawStatus = String(c.status || '').toUpperCase();
-      const isInvited = rawStatus === 'INVITADO' || rawStatus === 'INVITED' || rawStatus === 'SIN_INICIAR';
-      const isEvaluated = !isInvited && (rawStatus === 'SCORED' || rawStatus === 'EVALUADO' || rawStatus === 'FINALIST' || rawStatus === 'FINALISTA');
-      const resolvedScore = !isInvited ? (c.scores?.overall || (c as any).puntaje || null) : null;
+      const score = c.scores?.overall ?? (c as any).puntaje ?? candidateScores[c.id];
+      const isEvaluated = rawStatus === 'SCORED' || rawStatus === 'EVALUADO' || rawStatus === 'FINALIST' || rawStatus === 'FINALISTA';
+      const isInProgress = !isEvaluated && score != null;
+      const displayStatus = isEvaluated ? 'EVALUADO' : (isInProgress ? 'EN_CURSO' : 'INVITADO');
 
       return {
         'N°': idx + 1,
-        'Nombres': c.firstName,
-        'Apellidos': c.lastName,
-        'DNI / Documento': c.documentId || 'S/D',
+        'Postulante': c.fullName || `${c.firstName || ''} ${c.lastName || ''}`.trim() || 'Postulante',
+        'DNI / Documento': c.dni || (c as any).documentId || 'S/D',
         'Email': c.email,
         'Teléfono': c.phone || 'S/T',
         'Campaña / Proceso': tests.find(t => t.id === c.testId)?.title || c.testId || 'Proceso General',
-        'Estado': isInvited ? 'INVITADO' : (isEvaluated ? 'EVALUADO' : 'EN_PROCESO'),
-        'Puntaje General': (resolvedScore && resolvedScore > 0) ? `${resolvedScore}%` : 'Pendiente',
+        'Estado': displayStatus,
+        'Puntaje General': score != null ? `${score}%` : 'Pendiente',
         'Consentimiento Datos (Ley 29733)': c.isConsentSigned ? 'Aceptado' : 'Pendiente',
         'Fecha Invitación': c.invitedAt ? new Date(c.invitedAt).toLocaleDateString() : 'N/A',
         'Fecha Finalización': isEvaluated && c.completedAt ? new Date(c.completedAt).toLocaleDateString() : 'N/A'
@@ -222,26 +322,24 @@ export const InformesView: React.FC<InformesViewProps> = ({
                     <tr key={c.id} className="hover:bg-[#F8FAFC]/80 dark:hover:bg-white/5 transition-colors">
                       <td className="p-3.5 pl-5">
                         <div className="font-bold text-[#161C3A] dark:text-white">
-                          {c.firstName} {c.lastName}
+                          {c.fullName || `${c.firstName || ''} ${c.lastName || ''}`.trim() || 'Postulante'}
                         </div>
                         <div className="text-[11px] text-[#6B7494]">{c.email}</div>
                       </td>
                       <td className="p-3.5 font-mono text-[#161C3A] dark:text-white">
-                        {c.documentId || 'S/D'}
+                        {c.dni || (c as any).documentId || 'S/D'}
                       </td>
                       <td className="p-3.5 text-[#6B7494] dark:text-[#9AA5C4]">
                         {testTitle}
                       </td>
                       <td className="p-3.5 text-center font-bold">
                         {(() => {
-                          const rawStatus = String(c.status || '').toUpperCase();
-                          const isInvited = rawStatus === 'INVITADO' || rawStatus === 'INVITED' || rawStatus === 'SIN_INICIAR';
-                          const resolvedScore = !isInvited ? (c.scores?.overall || (c as any).puntaje || null) : null;
-                          return (resolvedScore && resolvedScore > 0) ? (
+                          const score = c.scores?.overall ?? (c as any).puntaje ?? candidateScores[c.id];
+                          return (score != null && score > 0) ? (
                             <span className={`px-2 py-0.5 rounded-md ${
-                              resolvedScore >= 80 ? 'bg-[#2FA58B]/10 text-[#2FA58B]' : 'bg-[#F28C28]/10 text-[#F28C28]'
+                              score >= 80 ? 'bg-[#2FA58B]/10 text-[#2FA58B]' : score >= 60 ? 'bg-amber-500/10 text-amber-600' : 'bg-rose-500/10 text-rose-600'
                             }`}>
-                              {resolvedScore}%
+                              {score}%
                             </span>
                           ) : (
                             <span className="text-[#6B7494]">—</span>
@@ -251,9 +349,9 @@ export const InformesView: React.FC<InformesViewProps> = ({
                       <td className="p-3.5 text-center">
                         {(() => {
                           const rawStatus = String(c.status || '').toUpperCase();
-                          const isInvited = rawStatus === 'INVITADO' || rawStatus === 'INVITED' || rawStatus === 'SIN_INICIAR';
-                          const isEvaluated = !isInvited && (rawStatus === 'SCORED' || rawStatus === 'EVALUADO' || rawStatus === 'FINALIST' || rawStatus === 'FINALISTA');
-                          const isInProgress = !isInvited && !isEvaluated && (rawStatus === 'IN_PROGRESS' || rawStatus === 'EN_CURSO' || rawStatus === 'EN_PROCESO');
+                          const hasScore = (c.scores?.overall ?? (c as any).puntaje ?? candidateScores[c.id]) != null;
+                          const isEvaluated = rawStatus === 'SCORED' || rawStatus === 'EVALUADO' || rawStatus === 'FINALIST' || rawStatus === 'FINALISTA';
+                          const isInProgress = !isEvaluated && (hasScore || rawStatus === 'IN_PROGRESS' || rawStatus === 'EN_CURSO');
                           
                           const effectiveStatus = isEvaluated ? 'EVALUADO' : (isInProgress ? 'EN_CURSO' : 'INVITADO');
                           return (

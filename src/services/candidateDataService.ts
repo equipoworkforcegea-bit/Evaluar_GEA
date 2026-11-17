@@ -342,17 +342,38 @@ function mapSupabaseToCandidate(row: any): Candidate {
     }
   }
 
+  const fullName = row.nombre_completo || row.full_name || 'Postulante GEA';
+  const nameParts = fullName.trim().split(/\s+/);
+  const firstName = row.firstName || row.nombres || nameParts[0] || 'Postulante';
+  const lastName = row.lastName || row.apellidos || nameParts.slice(1).join(' ') || '';
+  const dni = row.dni || row.documentId || '';
+  const resolvedPuntaje = (row.puntaje != null ? Number(row.puntaje) : (scores?.overall ?? null));
+
+  if (!scores && resolvedPuntaje != null && resolvedPuntaje > 0) {
+    scores = {
+      overall: resolvedPuntaje,
+      stage1Psycho: resolvedPuntaje,
+      stage2Emotional: resolvedPuntaje,
+      stage3WorkCases: resolvedPuntaje,
+      percentile: Math.min(99, Math.max(1, resolvedPuntaje + 2))
+    };
+  }
+
   return {
     id: row.id,
-    fullName: row.nombre_completo || row.full_name || 'Postulante GEA',
+    fullName,
+    firstName: firstName as any,
+    lastName: lastName as any,
     email: row.correo || row.email || '',
     password: row.password || 'Gea2026!',
     phone: row.telefono || row.phone || row.numero || '',
     whatsappUser: row.whatsapp_user || row.telefono || row.phone || '',
-    dni: row.dni || '',
+    dni,
+    documentId: dni as any,
+    puntaje: resolvedPuntaje as any,
     position: positionName,
     testId: row.proceso_id || row.testId || DEFAULT_PROCESS_UUID,
-    invitationCode: row.codigo_invitacion || row.invitation_code || `GEA-${row.dni}`,
+    invitationCode: row.codigo_invitacion || row.invitation_code || `GEA-${dni}`,
     invitedAt: row.invitado_en || row.invited_at || new Date().toISOString(),
     status,
     currentStage,
